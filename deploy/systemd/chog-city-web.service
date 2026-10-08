@@ -1,0 +1,21 @@
+[Unit]
+Description=Chog City web app
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=chogcity
+Group=chogcity
+WorkingDirectory=/opt/chog-city/current/apps/web/.next/standalone/apps/web
+EnvironmentFile=/etc/chog-city/db.env
+Environment=NODE_ENV=production PORT=3000 HOSTNAME=127.0.0.1 NEXT_TELEMETRY_DISABLED=1
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

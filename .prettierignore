@@ -1,0 +1,4 @@
+packages/data/src/generated/
+docs/
+**/.next/
+package-lock.json

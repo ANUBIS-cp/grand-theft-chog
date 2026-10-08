@@ -1,0 +1,16 @@
+node_modules/
+.next/
+dist/
+out/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+/tools/images/cache/
+/contracts/out/
+/contracts/cache/
+/contracts/broadcast/
+playwright-report/
+test-results/
