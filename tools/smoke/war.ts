@@ -30,7 +30,8 @@ const message = createSiweMessage({
   version: '1',
   statement: 'Log in to Chog City. This costs nothing and does not move any tokens.',
 });
-if (!(await call('/api/auth/verify', { message, signature: await account.signMessage({ message }) })).ok) throw new Error('login failed');
+if (!(await call('/api/auth/verify', { message, signature: await account.signMessage({ message }) })).ok)
+  throw new Error('login failed');
 let me = await call('/api/war/me');
 const chog = me.chogs[0];
 if (!chog) throw new Error('this wallet has no Chogs here');
@@ -41,8 +42,24 @@ if (!chog.gang) {
 }
 console.log('playing', chog.name, 'for', me.chogs[0].gang, 'powers', chog.powers.join(','));
 const start = await call('/api/heist/start', { chogId: chog.id, target });
-console.log('start', start.ok ? { vault: start.run.vault, tier: start.run.tier, revenge: start.run.revenge, guards: start.run.guards.length } : start);
+console.log(
+  'start',
+  start.ok
+    ? {
+        vault: start.run.vault,
+        tier: start.run.tier,
+        revenge: start.run.revenge,
+        guards: start.run.guards.length,
+      }
+    : start,
+);
 if (start.ok) console.log('finish', await call('/api/heist/finish', { runId: start.run.id, inputs }));
 const board = await call('/api/war');
-console.log('top vaults', board.board.slice(0, 4).map((v: { gang: string; cash: number }) => `${v.gang} ${v.cash}`).join(' | '));
+console.log(
+  'top vaults',
+  board.board
+    .slice(0, 4)
+    .map((v: { gang: string; cash: number }) => `${v.gang} ${v.cash}`)
+    .join(' | '),
+);
 console.log('latest hit', board.hits[0]);

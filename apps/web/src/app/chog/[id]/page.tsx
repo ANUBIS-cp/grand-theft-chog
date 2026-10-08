@@ -176,7 +176,15 @@ export default async function ChogPage({ params }: Props) {
                         <>Got caught in {GANGS[h.target].name}’s vault</>
                       )}
                     </span>
-                    <span className="shrink-0 text-[12px] text-white/50">{ago(h.at, now)}</span>
+                    <span className="shrink-0 text-right text-[12px] text-white/50">
+                      {ago(h.at, now)}
+                      <Link
+                        href={`/replay/${h.id}`}
+                        className="block font-semibold text-white/80 hover:text-white"
+                      >
+                        Watch
+                      </Link>
+                    </span>
                   </li>
                 ))}
               </ul>

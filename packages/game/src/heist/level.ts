@@ -31,7 +31,8 @@ export interface GuardDef {
 
 /** How well a vault is defended, from its stash: richer vaults get more guards, cameras and lasers. */
 export const TIER_CASH = [0, 6_000, 14_000, 25_000] as const;
-export const tierFor = (cash: number): number => TIER_CASH.reduce<number>((t, min, i) => (cash >= min ? i : t), 0);
+export const tierFor = (cash: number): number =>
+  TIER_CASH.reduce<number>((t, min, i) => (cash >= min ? i : t), 0);
 
 export interface CameraDef {
   /** The wall tile it hangs on. */
@@ -136,7 +137,8 @@ export function buildLevel(def: VaultDef, tier = 3): Level {
     });
   });
   if (!start || !exit) throw new Error(`${def.id}: needs a start (@) and an exit (E)`);
-  if (laserTiles.length !== def.lasers.length) throw new Error(`${def.id}: ${laserTiles.length} L tiles, ${def.lasers.length} laser settings`);
+  if (laserTiles.length !== def.lasers.length)
+    throw new Error(`${def.id}: ${laserTiles.length} L tiles, ${def.lasers.length} laser settings`);
   const level: Level = {
     id: def.id,
     rooms: def.rooms,
@@ -155,22 +157,24 @@ export function buildLevel(def: VaultDef, tier = 3): Level {
     }),
     ticks: def.seconds * TPS,
   };
-  level.guards = def.guards.filter((g) => (g.tier ?? 0) <= tier).map((g) => {
-    const path: [number, number][] = [];
-    const stops = new Map<number, number>();
-    if (g.route.length === 1) {
-      path.push(g.route[0]!);
-      stops.set(0, g.wait);
-    } else
-      g.route.forEach((from, i) => {
-        const to = g.route[(i + 1) % g.route.length]!;
-        stops.set(path.length, g.wait);
-        const leg = bfsPath(level, from, to);
-        if (!leg) throw new Error(`${def.id}: guard can't walk ${from} -> ${to}`);
-        path.push(...leg.slice(0, -1));
-      });
-    return { path, stops };
-  });
+  level.guards = def.guards
+    .filter((g) => (g.tier ?? 0) <= tier)
+    .map((g) => {
+      const path: [number, number][] = [];
+      const stops = new Map<number, number>();
+      if (g.route.length === 1) {
+        path.push(g.route[0]!);
+        stops.set(0, g.wait);
+      } else
+        g.route.forEach((from, i) => {
+          const to = g.route[(i + 1) % g.route.length]!;
+          stops.set(path.length, g.wait);
+          const leg = bfsPath(level, from, to);
+          if (!leg) throw new Error(`${def.id}: guard can't walk ${from} -> ${to}`);
+          path.push(...leg.slice(0, -1));
+        });
+      return { path, stops };
+    });
   return level;
 }
 

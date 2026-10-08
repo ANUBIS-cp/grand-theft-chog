@@ -3,6 +3,7 @@ import { HOUR, dayStart } from '@chog-city/game';
 import { START_CASH, encodeInputs, type Input } from '@chog-city/game/heist';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  defend,
   finishRun,
   heistRecord,
   recentHits,
@@ -95,5 +96,25 @@ describe('the gang war', () => {
     const board = await warBoard(db);
     expect(board).toHaveLength(16);
     expect(board.find((r) => r.gang === 'mcga')!.guards[0]).toBe(mcgaChog);
+  });
+
+  it('lets a member pay out of the vault for more defence, for a day, and the next robbery faces it', async () => {
+    expect(await refused(defend(db, { address: B, chogId: lazoorChog, level: 3, now: NOW }))).toBe(
+      'not-yours',
+    );
+    const before = (await warBoard(db, NOW)).find((v) => v.gang === 'lazoor')!;
+    expect(await refused(defend(db, { address: A, chogId: lazoorChog, level: before.tier, now: NOW }))).toBe(
+      'already',
+    );
+    const r = await defend(db, { address: A, chogId: lazoorChog, level: 3, now: NOW });
+    expect(r.cash).toBe(START_CASH - 4000);
+    const after = (await warBoard(db, NOW)).find((v) => v.gang === 'lazoor')!;
+    expect(after.tier).toBe(3);
+    expect(after.boughtUntil).toBe(NOW + 24 * HOUR);
+    expect(
+      (await startRun(db, { address: B, chogId: mcgaChog, target: 'lazoor', now: NOW + HOUR })).tier,
+    ).toBe(3);
+    // A day later it's back to what the cash gives.
+    expect((await warBoard(db, NOW + 25 * HOUR)).find((v) => v.gang === 'lazoor')!.tier).toBe(before.tier);
   });
 });

@@ -37,14 +37,53 @@ export const FIRST_VAULT: VaultDef = {
   ],
   guards: [
     // Lobby: walks the top of the room, in front of the three doors.
-    { route: [[2, 13], [10, 13]], wait: 40 },
+    {
+      route: [
+        [2, 13],
+        [10, 13],
+      ],
+      wait: 40,
+    },
     // The ring around the offices.
-    { route: [[1, 11], [11, 11], [11, 5], [1, 5]], wait: 20 },
+    {
+      route: [
+        [1, 11],
+        [11, 11],
+        [11, 5],
+        [1, 5],
+      ],
+      wait: 20,
+    },
     // Inside the vault, around the safe.
-    { route: [[4, 1], [8, 1], [8, 3], [4, 3]], wait: 25, tier: 1 },
+    {
+      route: [
+        [4, 1],
+        [8, 1],
+        [8, 3],
+        [4, 3],
+      ],
+      wait: 25,
+      tier: 1,
+    },
     // Richer vaults: a second lobby guard on the bottom row, then a third on the ring the other way.
-    { route: [[1, 15], [11, 15]], wait: 30, tier: 2 },
-    { route: [[11, 5], [1, 5], [1, 11], [11, 11]], wait: 20, tier: 3 },
+    {
+      route: [
+        [1, 15],
+        [11, 15],
+      ],
+      wait: 30,
+      tier: 2,
+    },
+    {
+      route: [
+        [11, 5],
+        [1, 5],
+        [1, 11],
+        [11, 11],
+      ],
+      wait: 20,
+      tier: 3,
+    },
   ],
   // On the wall above the middle corridor, watching the vault door; then one over the lobby.
   cameras: [
@@ -88,14 +127,49 @@ export const CASINO: VaultDef = {
   ],
   guards: [
     // Around the edge of the casino floor.
-    { route: [[1, 4], [11, 4], [11, 10], [1, 10]], wait: 25 },
+    {
+      route: [
+        [1, 4],
+        [11, 4],
+        [11, 10],
+        [1, 10],
+      ],
+      wait: 25,
+    },
     // Up and down the middle aisle.
-    { route: [[6, 4], [6, 10]], wait: 35 },
+    {
+      route: [
+        [6, 4],
+        [6, 10],
+      ],
+      wait: 35,
+    },
     // The top room, wall to wall.
-    { route: [[1, 2], [11, 2]], wait: 30, tier: 1 },
+    {
+      route: [
+        [1, 2],
+        [11, 2],
+      ],
+      wait: 30,
+      tier: 1,
+    },
     // The entrance hall.
-    { route: [[1, 14], [11, 14]], wait: 40, tier: 2 },
-    { route: [[1, 12], [11, 12]], wait: 30, tier: 3 },
+    {
+      route: [
+        [1, 14],
+        [11, 14],
+      ],
+      wait: 40,
+      tier: 2,
+    },
+    {
+      route: [
+        [1, 12],
+        [11, 12],
+      ],
+      wait: 30,
+      tier: 3,
+    },
   ],
   cameras: [
     { x: 3, y: 11, from: 8, to: 24, tier: 1 },

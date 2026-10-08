@@ -72,7 +72,8 @@ describe('loot and getting out', () => {
 
   it('picks up what it walks over and escapes with it, with a bonus for never being seen', () => {
     const s = startHeist(l, []);
-    for (const i of [...go(UP, 8), ...go(LEFT, 8), ...go(DOWN, 8), ...go(RIGHT, 8), ...go(DOWN, 8)]) step(s, l, i);
+    for (const i of [...go(UP, 8), ...go(LEFT, 8), ...go(DOWN, 8), ...go(RIGHT, 8), ...go(DOWN, 8)])
+      step(s, l, i);
     expect(s.carried).toBe(30);
     expect(s.phase).toBe('escaped');
     expect(s.score).toBe(45);
@@ -165,7 +166,10 @@ describe('replays', () => {
     const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
     const inputs: Input[] = [];
     for (let i = 0; i < 1800; i++)
-      inputs.push({ d: rand() < 0.15 ? -1 : (Math.floor(rand() * 4) as Dir), p: rand() < 0.01 ? Math.floor(rand() * 2) : -1 });
+      inputs.push({
+        d: rand() < 0.15 ? -1 : (Math.floor(rand() * 4) as Dir),
+        p: rand() < 0.01 ? Math.floor(rand() * 2) : -1,
+      });
     const powers = powersFor(['laser', 'stealth']);
     const a = replay(l, powers, inputs);
     const b = replay(l, powers, inputs);

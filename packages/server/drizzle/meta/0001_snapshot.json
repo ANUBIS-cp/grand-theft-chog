@@ -353,10 +353,7 @@
       "compositePrimaryKeys": {
         "delegations_owner_player_pk": {
           "name": "delegations_owner_player_pk",
-          "columns": [
-            "owner",
-            "player"
-          ]
+          "columns": ["owner", "player"]
         }
       },
       "uniqueConstraints": {},

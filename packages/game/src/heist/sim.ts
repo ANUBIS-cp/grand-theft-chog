@@ -176,11 +176,7 @@ function dirBetween(a: [number, number], b: [number, number]): Dir | -1 {
 }
 
 /** Advance a body up to `speed` units along its direction, stopping at tile centres to let `choose` turn it. */
-function travel(
-  b: { x: number; y: number; dir: Dir | -1 },
-  speed: number,
-  choose: () => void,
-) {
+function travel(b: { x: number; y: number; dir: Dir | -1 }, speed: number, choose: () => void) {
   let left = speed;
   let guard = 8;
   while (left > 0 && guard-- > 0) {
@@ -200,7 +196,15 @@ function travel(
 }
 
 /** Is the point (px, py) inside a light at (ox, oy) facing angle a, and not behind a wall? */
-export function inLight(level: Level, ox: number, oy: number, a: number, px: number, py: number, range: number) {
+export function inLight(
+  level: Level,
+  ox: number,
+  oy: number,
+  a: number,
+  px: number,
+  py: number,
+  range: number,
+) {
   const vx = px - ox;
   const vy = py - oy;
   if (vx * vx + vy * vy > range * range) return false;
@@ -423,7 +427,12 @@ function moveGuards(s: HeistState, level: Level, ptx: number, pty: number) {
         let best = toPlayer[ty * level.w + tx]!;
         for (let d = 0 as Dir; d < 4; d++) {
           const n = toPlayer[(ty + DY[d]) * level.w + tx + DX[d]];
-          if (n !== undefined && n >= 0 && walkable(level, tx + DX[d], ty + DY[d]) && (best < 0 || n < best)) {
+          if (
+            n !== undefined &&
+            n >= 0 &&
+            walkable(level, tx + DX[d], ty + DY[d]) &&
+            (best < 0 || n < best)
+          ) {
             best = n;
             g.dir = d as Dir;
           }
@@ -580,7 +589,14 @@ function usePower(s: HeistState, level: Level, slot: number, ev: HeistEvent[]) {
       if (cam < 0) return;
       s.cameras[cam]!.stun = lasts;
       ev.push({ t: 'stun', who: 'camera', i: cam });
-      ev.push({ t: 'zap', x: tx, y: ty, tx: level.cameras[cam]!.x, ty: level.cameras[cam]!.y, hit: 'camera' });
+      ev.push({
+        t: 'zap',
+        x: tx,
+        y: ty,
+        tx: level.cameras[cam]!.x,
+        ty: level.cameras[cam]!.y,
+        hit: 'camera',
+      });
       break;
     }
     case 'blink': {

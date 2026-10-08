@@ -1,6 +1,6 @@
 import { GANG_IDS, GANGS, displayName, getChog, type GangId } from '@chog-city/data';
-import { tierFor, vaultFor } from '@chog-city/game/heist';
-import { gangMembers, recentHits, vaultCash } from '@chog-city/server';
+import { tierNow, vaultFor } from '@chog-city/game/heist';
+import { gangMembers, recentHits, vaults } from '@chog-city/server';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -26,15 +26,12 @@ export default async function GangPage({ params }: Props) {
   const gang = (await params).gang as GangId;
   if (!GANG_IDS.includes(gang)) notFound();
   const d = await db();
-  const [cash, members, hits] = await Promise.all([
-    vaultCash(d),
-    gangMembers(d, gang),
-    recentHits(d, 30, gang),
-  ]);
+  const [vs, members, hits] = await Promise.all([vaults(d), gangMembers(d, gang), recentHits(d, 30, gang)]);
   const ranked = [...GANG_IDS].sort((a, b) => cash[b] - cash[a]);
   const rank = ranked.indexOf(gang) + 1;
-  const tier = tierFor(cash[gang]);
   const now = Date.now();
+  const cash = Object.fromEntries(GANG_IDS.map((g) => [g, vs[g].cash])) as Record<GangId, number>;
+  const tier = tierNow(vs[gang].cash, vs[gang], now);
   const traits = GANGS[gang].from.map(([, v]) => v);
 
   return (

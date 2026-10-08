@@ -15,6 +15,13 @@
       "when": 1791475584152,
       "tag": "0001_heists",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791490363663,
+      "tag": "0002_defences",
+      "breakpoints": true
     }
   ]
 }

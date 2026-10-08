@@ -139,6 +139,10 @@ export const chainCursors = pgTable('chain_cursors', {
 export const gangVaults = pgTable('gang_vaults', {
   gang: text('gang').$type<GangId>().primaryKey(),
   cash: integer('cash').notNull(),
+  /** Extra defence a member paid for out of the vault, and until when it holds. */
+  guardLevel: integer('guard_level').notNull().default(0),
+  guardUntil: timestamp('guard_until', { withTimezone: true }),
+  guardBy: integer('guard_by'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

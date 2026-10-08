@@ -3,7 +3,9 @@ import type { SkillId } from '@chog-city/data';
 import {
   POWERS,
   TPS,
+  IDLE,
   buildLevel,
+  decodeInputs,
   encodeInputs,
   startHeist,
   step,
@@ -47,9 +49,17 @@ export interface HeistGameProps {
   guards: HeistChog[];
   owner: { name: string; color: string; ink: string };
   /** A real hit: the inputs go to the server when it ends, and the card offers a way back. */
-  real?: { myGang: string; finish: (inputs: string) => Promise<RealResult>; onLeave: () => void };
+  real?: {
+    myGang: string;
+    finish: (inputs: string) => Promise<RealResult>;
+    onLeave: () => void;
+    /** Where this run can be watched again once it's saved. */
+    replayHref?: string;
+  };
   /** Practice from the city: a way back out. */
   onLeave?: () => void;
+  /** Watching a run that already happened: its key presses, and what it moved. */
+  replay?: { inputs: string; moved: number; robbers: string };
 }
 
 const ICON: Record<PowerId, SkillId> = {
@@ -99,7 +109,10 @@ const clock = (ticks: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeave }: HeistGameProps) {
+export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeave, replay }: HeistGameProps) {
+  const script = useMemo(() => (replay ? (decodeInputs(replay.inputs) ?? []) : null), [replay]);
+  const scriptRef = useRef(script);
+  scriptRef.current = script;
   const level = useMemo(() => buildLevel(vault, tier), [vault, tier]);
   const [saved, setSaved] = useState<{ result?: RealResult; error?: string } | null>(null);
   const sentRef = useRef(false);
@@ -131,7 +144,7 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeav
       s,
       prev: snapshot(s),
       fx: new Fx(),
-      started: false,
+      started: !!scriptRef.current,
       held: [],
       queued: null,
       press: -1,
@@ -257,6 +270,13 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeav
     };
 
     const readInput = (st: NonNullable<typeof game.current>): Input => {
+      const script = scriptRef.current;
+      if (script) {
+        // A replay: the recorded key presses, one per tick. If they stop early, the robber walked out.
+        const next = script[st.inputs.length];
+        if (!next) st.s.phase = 'busted';
+        return next ?? IDLE;
+      }
       let d: Dir | -1 = st.held.at(-1) ?? -1;
       if (d === -1 && st.queued) {
         d = st.queued.d;
@@ -375,7 +395,7 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeav
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       const g = game.current;
-      if (!g || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!g || e.metaKey || e.ctrlKey || e.altKey || scriptRef.current) return;
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       const d = KEYS[e.code];
       const pw = POWER_KEYS[e.code];
@@ -423,8 +443,8 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeav
   } | null>(null);
   const onPointerDown = (e: React.PointerEvent) => {
     const g = game.current;
-    if (!g || g.s.phase === 'escaped' || g.s.phase === 'busted') return;
     sound.current?.unlock();
+    if (!g || g.s.phase === 'escaped' || g.s.phase === 'busted' || scriptRef.current) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
     drag.current = {
@@ -476,7 +496,7 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeav
     const g = game.current;
     if (!g) return;
     sound.current?.unlock();
-    if (!g.started) return;
+    if (!g.started || scriptRef.current) return;
     g.press = i;
   };
 
@@ -518,6 +538,11 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeav
               {owner.name}
             </span>
           </div>
+          {replay && (
+            <span className="hidden shrink-0 rounded-[4px] bg-white px-1.5 pb-0.5 pt-1 font-display text-[14px] uppercase leading-none text-ink sm:inline">
+              Replay
+            </span>
+          )}
         </div>
         <div
           className={cn(
@@ -582,6 +607,7 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeav
             onAgain={restart}
             onLeave={onLeave}
             real={real ? { ...real, saved } : undefined}
+            replay={replay}
           />
         )}
       </div>
@@ -699,6 +725,7 @@ function EndCard({
   caughtBy,
   onAgain,
   onLeave,
+  replay,
   real,
 }: {
   escaped: boolean;
@@ -709,10 +736,16 @@ function EndCard({
   caughtBy: HeistChog | null | undefined;
   onAgain: () => void;
   onLeave?: () => void;
-  real?: { myGang: string; onLeave: () => void; saved: { result?: RealResult; error?: string } | null };
+  replay?: { moved: number; robbers: string };
+  real?: {
+    myGang: string;
+    onLeave: () => void;
+    replayHref?: string;
+    saved: { result?: RealResult; error?: string } | null;
+  };
 }) {
   const [shown, setShown] = useState(0);
-  const target = real ? (real.saved?.result?.moved ?? 0) : score;
+  const target = real ? (real.saved?.result?.moved ?? 0) : replay ? replay.moved : score;
   useEffect(() => {
     if (!escaped) return;
     let raf = 0;
@@ -745,7 +778,11 @@ function EndCard({
           <>
             <div className="mt-4 font-display text-[56px] leading-none tabular-nums">{money(shown)}</div>
             <p className="mt-1 text-[14px] text-ink-soft">
-              {real ? `moved from ${owner} to ${real.myGang}` : 'Practice run: no real cash moves.'}
+              {real
+                ? `moved from ${owner} to ${real.myGang}`
+                : replay
+                  ? `taken from ${owner} by ${replay.robbers}`
+                  : 'Practice run: no real cash moves.'}
             </p>
             <ul className="mx-auto mt-4 max-w-[240px] space-y-1 text-[14px]">
               <li className="flex justify-between">
@@ -775,11 +812,13 @@ function EndCard({
                 />
                 <p className="text-left text-[15px] leading-snug">
                   <strong className="block">{caughtBy.name}</strong>
-                  caught you
+                  {replay ? 'caught them' : 'caught you'}
                 </p>
               </div>
             ) : (
-              <p className="mt-4 text-[15px]">The doors locked before you got out.</p>
+              <p className="mt-4 text-[15px]">
+                {replay ? 'They didn’t get out.' : 'The doors locked before you got out.'}
+              </p>
             )}
             {real ? (
               <p className="mt-3 text-[14px] leading-snug">
@@ -788,6 +827,8 @@ function EndCard({
                   ? ` ${real.myGang} paid ${owner} a ${money(real.saved.result.moved)} fine.`
                   : ''}
               </p>
+            ) : replay ? (
+              <p className="mt-3 text-[14px] text-ink-soft">Off to jail for 30 minutes.</p>
             ) : (
               <p className="mt-3 text-[14px] text-ink-soft">You dropped {money(carried)}.</p>
             )}
@@ -801,14 +842,25 @@ function EndCard({
           >
             <span className="pt-1">Back to the city</span>
           </button>
-        ) : (
+        ) : null}
+        {real?.saved?.result && real.replayHref && (
+          <a
+            href={real.replayHref}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-block text-[14px] font-semibold underline underline-offset-2"
+          >
+            Watch the replay and share it
+          </a>
+        )}
+        {real ? null : (
           <>
             <button
               onClick={onAgain}
               className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[8px] border-2 border-ink bg-pink font-display text-[22px] uppercase leading-none text-ink shadow-[3px_3px_0_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
             >
               <ArrowClockwise size={20} weight="bold" />
-              <span className="pt-1">Again</span>
+              <span className="pt-1">{replay ? 'Watch again' : 'Again'}</span>
             </button>
             {onLeave ? (
               <button

@@ -1,7 +1,8 @@
 import { GANG_IDS } from '@chog-city/data';
 import { describe, expect, it } from 'vitest';
 import { IDLE, type Input } from './sim.ts';
-import { decodeInputs, encodeInputs, levelFor, settle, vaultFor } from './war.ts';
+import { tierFor } from './level.ts';
+import { decodeInputs, encodeInputs, levelFor, settle, tierNow, vaultFor } from './war.ts';
 
 describe('war rules', () => {
   it('round-trips inputs through text', () => {
@@ -14,11 +15,19 @@ describe('war rules', () => {
 
   it('gives every gang a vault and more defences to richer vaults', () => {
     for (const g of GANG_IDS) expect(vaultFor(g)).toBeTruthy();
-    expect(levelFor('mcga', 3_000).level.guards.length).toBeLessThan(levelFor('mcga', 40_000).level.guards.length);
+    expect(levelFor('mcga', tierFor(3_000)).level.guards.length).toBeLessThan(
+      levelFor('mcga', tierFor(40_000)).level.guards.length,
+    );
+  });
+
+  it('bought defence counts until it runs out, and never lowers what the cash gives', () => {
+    expect(tierNow(10_000, { level: 3, until: 2_000 }, 1_000)).toBe(3);
+    expect(tierNow(10_000, { level: 3, until: 2_000 }, 3_000)).toBe(tierFor(10_000));
+    expect(tierNow(30_000, { level: 1, until: 2_000 }, 1_000)).toBe(tierFor(30_000));
   });
 
   it('a grab-and-go moves cash from the vault, capped by what is in it, with a revenge bonus', () => {
-    const { level } = levelFor('mcga', 10_000);
+    const { level } = levelFor('mcga', tierFor(10_000));
     const go = (d: 0 | 2, n: number): Input[] => Array.from({ length: n }, () => ({ d, p: -1 }));
     const run = [...go(0, 16), ...go(2, 16), ...go(2, 8)];
     const plain = settle(level, [], run, 10_000, 10_000, false);
@@ -29,7 +38,7 @@ describe('war rules', () => {
   });
 
   it('standing still until the doors lock is a bust with nothing carried, so no fine', () => {
-    const { level } = levelFor('mcga', 10_000);
+    const { level } = levelFor('mcga', tierFor(10_000));
     const s = settle(level, [], [], 10_000, 10_000, false);
     expect(s.state.phase).toBe('busted');
     expect(s.moved).toBe(0);

@@ -3,9 +3,7 @@ import { chogInfo } from '@chog-city/game';
 import { POWERS, powersFor } from '@chog-city/game/heist';
 import { heistRecord, isChogId } from '@chog-city/server';
 import { ImageResponse } from 'next/og';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import sharp from 'sharp';
+import { T, chogPng, ogFonts } from '@/lib/og';
 import { GANG_COLOR } from '@/lib/theme';
 import { db } from '@/server/db';
 
@@ -14,46 +12,9 @@ export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 export const dynamic = 'force-dynamic';
 
-async function chogPng(id: number): Promise<string> {
-  const dir = process.env.IMAGES_DIR;
-  const webp = dir
-    ? await readFile(`${dir}/640/${id}.webp`)
-    : Buffer.from(
-        await (await fetch(`https://chogcity.35-212-31-75.sslip.io/img/640/${id}.webp`)).arrayBuffer(),
-      );
-  const png = await sharp(webp).resize(470, 470).png().toBuffer();
-  return `data:image/png;base64,${png.toString('base64')}`;
-}
-
-/** Koulen's "1" looks like "I", so digits are drawn in Anton and everything else in Koulen. */
-function T({ text, style }: { text: string; style: React.CSSProperties }) {
-  const runs = text.match(/\d+|\D+/g) ?? [];
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', ...style }}>
-      {runs.map((r, i) => (
-        <span
-          key={i}
-          style={
-            /\d/.test(r)
-              ? { fontFamily: 'Anton', fontSize: '0.88em', whiteSpace: 'pre' }
-              : { fontFamily: 'Koulen', whiteSpace: 'pre' }
-          }
-        >
-          {r}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 export default async function Image({ params }: { params: Promise<{ id: string }> }) {
   const id = Number((await params).id);
   if (!isChogId(id) || !getChog(id)) return new Response('Not found', { status: 404 });
-  // public/ sits next to the server in dev and in the standalone build. Koulen and Anton: SIL Open Font License.
-  const [koulen, anton] = await Promise.all([
-    readFile(join(process.cwd(), 'public/fonts/koulen.woff')),
-    readFile(join(process.cwd(), 'public/fonts/anton.woff')),
-  ]);
   const r = await heistRecord(await db(), id);
   const name = displayName(getChog(id)!);
   const art = await chogPng(id);
@@ -127,10 +88,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
     </div>,
     {
       ...size,
-      fonts: [
-        { name: 'Koulen', data: koulen, weight: 400, style: 'normal' },
-        { name: 'Anton', data: anton, weight: 400, style: 'normal' },
-      ],
+      fonts: await ogFonts(),
     },
   );
 }

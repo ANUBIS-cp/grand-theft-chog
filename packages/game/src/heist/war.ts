@@ -20,9 +20,17 @@ export function vaultFor(gang: GangId): VaultDef {
   return VAULTS[GANG_IDS.indexOf(gang) % VAULTS.length]!;
 }
 
-export function levelFor(gang: GangId, cash: number): { def: VaultDef; tier: number; level: Level } {
+/** What it costs, out of the gang's own vault, to raise its defence to each level for a day. */
+export const GUARD_PRICE = [0, 800, 2000, 4000] as const;
+export const GUARD_MS = 24 * 3_600_000;
+
+/** A vault's defence right now: what its cash buys on its own, or what its members paid for, if higher. */
+export function tierNow(cash: number, bought: { level: number; until: number | null }, now: number): number {
+  return Math.max(tierFor(cash), bought.until !== null && bought.until > now ? bought.level : 0);
+}
+
+export function levelFor(gang: GangId, tier: number): { def: VaultDef; tier: number; level: Level } {
   const def = vaultFor(gang);
-  const tier = tierFor(cash);
   return { def, tier, level: buildLevel(def, tier) };
 }
 

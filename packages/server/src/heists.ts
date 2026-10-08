@@ -12,6 +12,9 @@ import {
   powersFor,
   settle,
   tierFor,
+  tierNow,
+  GUARD_MS,
+  GUARD_PRICE,
   vaultDef,
   vaultFor,
   type PowerId,
@@ -34,7 +37,10 @@ export type HeistError =
   | 'no-run'
   | 'finished'
   | 'too-late'
-  | 'bad-inputs';
+  | 'bad-inputs'
+  | 'bad-level'
+  | 'already'
+  | 'too-poor';
 
 /** How long a building's alarm stays on without the robbery finishing. */
 const ALARM_MS = 3 * 60_000;
@@ -53,9 +59,27 @@ export async function ensureVaults(db: Db): Promise<void> {
 }
 
 export async function vaultCash(db: Db): Promise<Record<GangId, number>> {
+  const v = await vaults(db);
+  return Object.fromEntries(GANG_IDS.map((g) => [g, v[g].cash])) as Record<GangId, number>;
+}
+
+export interface VaultState {
+  cash: number;
+  /** Defence bought by members, and until when. */
+  level: number;
+  until: number | null;
+  by: number | null;
+}
+
+export async function vaults(db: Db): Promise<Record<GangId, VaultState>> {
   await ensureVaults(db);
   const rows = await db.select().from(gangVaults);
-  return Object.fromEntries(rows.map((r) => [r.gang, r.cash])) as Record<GangId, number>;
+  return Object.fromEntries(
+    rows.map((r) => [
+      r.gang,
+      { cash: r.cash, level: r.guardLevel, until: r.guardUntil?.getTime() ?? null, by: r.guardBy },
+    ]),
+  ) as Record<GangId, VaultState>;
 }
 
 /** A gang's guards: its members who catch the most robbers, topped up with Chogs born into the gang. */
@@ -139,8 +163,8 @@ export async function startRun(
   if (me.jailedUntil && me.jailedUntil.getTime() > now) throw new HeistRefused('jailed');
   if (target === me.gang || !GANG_IDS.includes(target)) throw new HeistRefused('own-gang');
   if ((await hitToday(db, [chogId], now)).get(chogId)?.includes(target)) throw new HeistRefused('done-today');
-  const cash = (await vaultCash(db))[target];
-  const { level, tier } = levelFor(target, cash);
+  const v = (await vaults(db))[target];
+  const { level, tier } = levelFor(target, tierNow(v.cash, v, now));
   const run: StartedRun = {
     id: randomBytes(12).toString('base64url'),
     vault: vaultFor(target).id,
@@ -347,13 +371,15 @@ export interface VaultRow {
   gang: GangId;
   cash: number;
   tier: number;
+  /** Set while members have paid for more defence than the cash gives. */
+  boughtUntil: number | null;
   vault: string;
   members: number;
   guards: number[];
 }
 
-export async function warBoard(db: Db): Promise<VaultRow[]> {
-  const cash = await vaultCash(db);
+export async function warBoard(db: Db, now = Date.now()): Promise<VaultRow[]> {
+  const v = await vaults(db);
   const counts = await db
     .select({ gang: heistChogs.gang, n: sql<number>`count(*)::int` })
     .from(heistChogs)
@@ -363,8 +389,12 @@ export async function warBoard(db: Db): Promise<VaultRow[]> {
   const rows = await Promise.all(
     GANG_IDS.map(async (gang) => ({
       gang,
-      cash: cash[gang],
-      tier: tierFor(cash[gang]),
+      cash: v[gang].cash,
+      tier: tierNow(v[gang].cash, v[gang], now),
+      boughtUntil:
+        v[gang].until !== null && v[gang].until! > now && v[gang].level > tierFor(v[gang].cash)
+          ? v[gang].until
+          : null,
       vault: vaultFor(gang).id,
       members: members[gang] ?? 0,
       guards: await guardsFor(db, gang, 3),
@@ -418,4 +448,68 @@ export async function jailed(db: Db, now: number, limit = 40) {
     .orderBy(heistChogs.jailedUntil)
     .limit(limit);
   return rows.map((r) => ({ id: r.id, gang: r.gang as GangId, until: r.until!.getTime() }));
+}
+
+/**
+ * A member pays out of the gang's vault to raise its defence for a day. Any Chog in the gang can do it, so
+ * the gang decides together when to lock down (before a revenge hit, say) and when to keep the cash.
+ */
+export async function defend(
+  db: Db,
+  { address, chogId, level, now }: { address: string; chogId: number; level: number; now: number },
+): Promise<{ gang: GangId; level: number; until: number; cash: number }> {
+  if (!(await canControl(db, address, chogId))) throw new HeistRefused('not-yours');
+  const me = await heistRecord(db, chogId);
+  if (!me?.gang) throw new HeistRefused('no-gang');
+  if (me.jailedUntil && me.jailedUntil.getTime() > now) throw new HeistRefused('jailed');
+  if (!Number.isInteger(level) || level < 1 || level > 3) throw new HeistRefused('bad-level');
+  const gang = me.gang as GangId;
+  await ensureVaults(db);
+  return db.transaction(async (tx) => {
+    const [v] = await tx.select().from(gangVaults).where(eq(gangVaults.gang, gang)).for('update');
+    const state = { level: v!.guardLevel, until: v!.guardUntil?.getTime() ?? null };
+    if (level <= tierNow(v!.cash, state, now)) throw new HeistRefused('already');
+    const price = GUARD_PRICE[level as 1 | 2 | 3];
+    if (v!.cash < price) throw new HeistRefused('too-poor');
+    const until = now + GUARD_MS;
+    await tx
+      .update(gangVaults)
+      .set({
+        cash: v!.cash - price,
+        guardLevel: level,
+        guardUntil: new Date(until),
+        guardBy: chogId,
+        updatedAt: new Date(now),
+      })
+      .where(eq(gangVaults.gang, gang));
+    await tx
+      .execute(sql`select pg_notify('city', ${JSON.stringify({ defend: gang, level, chog: chogId })})`)
+      .catch(() => undefined);
+    return { gang, level, until, cash: v!.cash - price };
+  });
+}
+
+/** A finished run, with everything needed to play it back. */
+export async function runForReplay(db: Db, id: string) {
+  if (!/^[A-Za-z0-9_-]{8,40}$/.test(id)) return null;
+  const [r] = await db
+    .select()
+    .from(heistRuns)
+    .where(and(eq(heistRuns.id, id), isNotNull(heistRuns.finishedAt)));
+  if (!r || r.inputs === null) return null;
+  return {
+    id: r.id,
+    chogId: r.chogId,
+    gang: r.gang as GangId,
+    target: r.target as GangId,
+    vault: r.vault,
+    tier: r.tier,
+    powers: r.powers as PowerId[],
+    guards: r.guards as number[],
+    inputs: r.inputs,
+    result: r.result!,
+    moved: r.moved ?? 0,
+    revenge: r.revenge,
+    at: r.finishedAt!.getTime(),
+  };
 }

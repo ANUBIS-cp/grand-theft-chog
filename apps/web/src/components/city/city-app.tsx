@@ -1,13 +1,14 @@
 'use client';
 import { GANGS, type GangId } from '@chog-city/data';
 import type { Place } from '@chog-city/game/city';
-import { FIRST_VAULT, POWERS, vaultDef, type PowerId } from '@chog-city/game/heist';
+import { FIRST_VAULT, GUARD_PRICE, POWERS, vaultDef, type PowerId } from '@chog-city/game/heist';
 import {
   ArrowBendUpLeft,
   ArrowSquareOut,
   CurrencyDollarSimple,
   HandWaving,
   Lock,
+  Play,
   ShieldCheck,
   SignOut,
   SmileyAngry,
@@ -35,6 +36,7 @@ interface VaultRow {
   gang: GangId;
   cash: number;
   tier: number;
+  boughtUntil: number | null;
   vault: string;
   members: number;
   guards: number[];
@@ -106,6 +108,8 @@ const START_ERRORS: Record<string, string> = {
   'no-gang': 'Pick a gang first.',
   'not-yours': 'That Chog isn’t in your wallet any more.',
   'slow-down': 'Too fast. Wait a few seconds.',
+  already: 'Your vault already has that much defence.',
+  'too-poor': 'Not enough cash in your vault for that.',
 };
 
 const DEFENCE = ['Light', 'Guarded', 'Heavy', 'Fortress'];
@@ -298,6 +302,20 @@ export function CityApp() {
     }
   }
 
+  async function defendVault(level: number) {
+    if (!chog) return;
+    setBusy('defend');
+    setNotice(null);
+    try {
+      await post('/api/war/defend', { chogId: chog.id, level });
+      await loadBoard();
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function rob(target: GangId) {
     if (!chog) return;
     setBusy(target);
@@ -341,6 +359,7 @@ export function CityApp() {
           }}
           real={{
             myGang: chog.gang ? GANGS[chog.gang].name : 'your gang',
+            replayHref: `/replay/${run.id}`,
             finish: async (inputs) =>
               (await post<{ result: RealResult }>('/api/heist/finish', { runId: run.id, inputs })).result,
             onLeave: () => {
@@ -552,6 +571,7 @@ export function CityApp() {
             onRob={(g) => void rob(g)}
             onPractice={() => setPractice(true)}
             onConnect={() => setSheet('connect')}
+            onDefend={(l) => void defendVault(l)}
             info={gangInfo && gangInfo.gang === door.gang ? gangInfo.data : undefined}
             robbing={door.gang ? alarms[door.gang] : undefined}
           />
@@ -730,16 +750,23 @@ export function CityApp() {
           )}
           <ul className="mt-2 divide-y divide-white/10">
             {(board?.hits ?? []).slice(0, 15).map((h) => (
-              <li key={h.id} className="flex items-center gap-3 py-2 text-[14px]">
-                <img
-                  src={chogImage(h.chogId, 96)}
-                  alt=""
-                  className="h-8 w-8 shrink-0 rounded-full border-2 border-ink"
-                />
-                <p className="min-w-0 flex-1 leading-snug">
-                  <HitLine h={h} />
-                </p>
-                <span className="shrink-0 text-[12px] text-white/50">{ago(h.at, now)}</span>
+              <li key={h.id}>
+                <Link href={`/replay/${h.id}`} className="group flex items-center gap-3 py-2 text-[14px]">
+                  <img
+                    src={chogImage(h.chogId, 96)}
+                    alt=""
+                    className="h-8 w-8 shrink-0 rounded-full border-2 border-ink"
+                  />
+                  <p className="min-w-0 flex-1 leading-snug">
+                    <HitLine h={h} />
+                  </p>
+                  <span className="shrink-0 text-right text-[12px] text-white/50">
+                    {ago(h.at, now)}
+                    <span className="flex items-center justify-end gap-0.5 font-semibold text-white/80 group-hover:text-white">
+                      <Play size={11} weight="fill" /> Watch
+                    </span>
+                  </span>
+                </Link>
               </li>
             ))}
           </ul>
@@ -809,7 +836,7 @@ function Emotes({ onEmote }: { onEmote: (k: Emote) => void }) {
 function Card({ children, onClose }: { children: React.ReactNode; onClose?: () => void }) {
   return (
     <div className="absolute inset-x-0 bottom-0 z-30 p-3 sm:bottom-3 sm:left-3 sm:right-auto sm:w-[400px] sm:p-0">
-      <div className="relative rounded-[16px] border-2 border-ink bg-[#151229]/95 p-4 shadow-[4px_4px_0_0_#000] backdrop-blur">
+      <div className="relative max-h-[72dvh] overflow-y-auto rounded-[16px] border-2 border-ink bg-[#151229]/95 p-4 shadow-[4px_4px_0_0_#000] backdrop-blur">
         {onClose && (
           <button
             onClick={onClose}
@@ -931,6 +958,7 @@ function DoorCard(props: {
   onRob: (g: GangId) => void;
   onPractice: () => void;
   onConnect: () => void;
+  onDefend: (level: number) => void;
   info?: GangInfo;
   robbing?: Robbing;
 }) {
@@ -1029,7 +1057,16 @@ function DoorCard(props: {
         </p>
       )}
       {mine ? (
-        <HomeInfo gang={gang} info={props.info} now={props.now} />
+        <>
+          <Defend
+            row={row}
+            jailed={props.jailedNow}
+            busy={props.busy}
+            now={props.now}
+            onDefend={props.onDefend}
+          />
+          <HomeInfo gang={gang} info={props.info} now={props.now} />
+        </>
       ) : block === 'connect' ? (
         <button onClick={props.onConnect} className={cn(btn, 'mt-4 w-full bg-[#ffd666] text-ink')}>
           <span className="pt-0.5">Connect wallet to rob it</span>
@@ -1057,6 +1094,53 @@ function DoorCard(props: {
         </>
       )}
     </>
+  );
+}
+
+/** Spend vault cash on more guards, cameras and lasers for a day. */
+function Defend(props: {
+  row?: VaultRow;
+  jailed: boolean;
+  busy: string | null;
+  now: number;
+  onDefend: (l: number) => void;
+}) {
+  const { row } = props;
+  if (!row) return null;
+  const options = [1, 2, 3].filter((l) => l > row.tier);
+  return (
+    <div className="mt-3 rounded-[10px] border-2 border-white/10 p-2.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-[12px] uppercase tracking-wide text-white/50">Add defence for 24 hours</div>
+        {row.boughtUntil && (
+          <div className="text-[12px] text-white/60">{formatLeft(row.boughtUntil - props.now)} left</div>
+        )}
+      </div>
+      {options.length === 0 ? (
+        <p className="mt-1 text-[13px] text-white/75">Your vault is at Fortress, the most there is.</p>
+      ) : (
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
+          {options.map((l) => {
+            const price = GUARD_PRICE[l as 1 | 2 | 3];
+            const poor = row.cash < price;
+            return (
+              <button
+                key={l}
+                disabled={poor || props.jailed || props.busy !== null}
+                onClick={() => props.onDefend(l)}
+                className="rounded-[8px] border-2 border-ink bg-[#2a2545] px-2 pb-1.5 pt-2 text-left shadow-[2px_2px_0_0_#000] hover:bg-[#342d55] disabled:opacity-40 disabled:shadow-none"
+              >
+                <span className="block font-display text-[16px] uppercase leading-none">{DEFENCE[l]}</span>
+                <span className="mt-0.5 block text-[12px] text-[#ffd666]">{money(price)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <p className="mt-1.5 text-[12px] leading-snug text-white/55">
+        Paid from your vault. More guards, cameras and lasers for anyone who tries to rob it.
+      </p>
+    </div>
   );
 }
 
@@ -1088,16 +1172,19 @@ function HomeInfo({ gang, info, now }: { gang: GangId; info?: GangInfo; now: num
         ) : (
           <ul className="mt-1 space-y-1">
             {robbed.map((h) => (
-              <li key={h.id} className="flex items-center gap-2">
-                <img
-                  src={chogImage(h.chogId, 96)}
-                  alt=""
-                  className="h-6 w-6 rounded-full border border-ink"
-                />
-                <span className="flex-1 truncate">
-                  {GANGS[h.gang].name} took <strong className="text-[#ffd666]">{money(h.moved)}</strong>
-                </span>
-                <span className="text-white/50">{ago(h.at, now)}</span>
+              <li key={h.id}>
+                <Link href={`/replay/${h.id}`} className="flex items-center gap-2 hover:underline">
+                  <img
+                    src={chogImage(h.chogId, 96)}
+                    alt=""
+                    className="h-6 w-6 rounded-full border border-ink"
+                  />
+                  <span className="flex-1 truncate">
+                    {GANGS[h.gang].name} took <strong className="text-[#ffd666]">{money(h.moved)}</strong>
+                  </span>
+                  <Play size={11} weight="fill" className="text-white/70" />
+                  <span className="text-white/50">{ago(h.at, now)}</span>
+                </Link>
               </li>
             ))}
           </ul>
