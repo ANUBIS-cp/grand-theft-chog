@@ -4,6 +4,7 @@ import { START_CASH, encodeInputs, type Input } from '@chog-city/game/heist';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   defend,
+  startBreakout,
   finishRun,
   heistRecord,
   recentHits,
@@ -116,5 +117,40 @@ describe('the gang war', () => {
     ).toBe(3);
     // A day later it's back to what the cash gives.
     expect((await warBoard(db, NOW + 25 * HOUR)).find((v) => v.gang === 'lazoor')!.tier).toBe(before.tier);
+  });
+
+  it('frees a jailed gang-mate on a clean break-out, moves no cash, and allows one try a day', async () => {
+    // B's MCGA Chog gets caught in Lazoor's vault.
+    const r = await startRun(db, { address: B, chogId: mcgaChog, target: 'lazoor', now: NOW });
+    await finishRun(db, { address: B, runId: r.id, inputs: '', now: NOW + 1000 });
+    expect((await heistRecord(db, mcgaChog))!.jailedUntil!.getTime()).toBeGreaterThan(NOW);
+    // Only a gang-mate can try.
+    expect(
+      await refused(
+        startBreakout(db, { address: A, chogId: lazoorChog, prisoner: mcgaChog, now: NOW + 2000 }),
+      ),
+    ).toBe('not-in-jail');
+    const mate = born('mcga')[1]!.id;
+    await setOwners(db, [{ tokenId: mate, owner: B, block: 2 }]);
+    await setGang(db, B, mate, 'mcga');
+    const before = await vaultCash(db);
+    const run = await startBreakout(db, { address: B, chogId: mate, prisoner: mcgaChog, now: NOW + 3000 });
+    expect(run.vault).toBe('jail');
+    // Straight up to the cell, crack it, straight back down and out.
+    const route = encodeInputs([
+      ...go(0, 13 * 8),
+      ...Array.from({ length: 60 }, () => ({ d: 0 as const, p: -1 })),
+      ...go(2, 14 * 8),
+    ]);
+    const done = await finishRun(db, { address: B, runId: run.id, inputs: route, now: NOW + 60_000 });
+    expect(await vaultCash(db)).toEqual(before);
+    if (done.result === 'escaped') {
+      expect((await heistRecord(db, mcgaChog))!.jailedUntil!.getTime()).toBeLessThanOrEqual(NOW + 60_000);
+    } else {
+      expect((await heistRecord(db, mate))!.jailedUntil!.getTime()).toBeGreaterThan(NOW + 60_000);
+    }
+    expect(
+      await refused(startBreakout(db, { address: B, chogId: mate, prisoner: mcgaChog, now: NOW + 70_000 })),
+    ).not.toBe('ok');
   });
 });

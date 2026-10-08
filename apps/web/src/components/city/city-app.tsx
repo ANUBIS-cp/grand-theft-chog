@@ -50,6 +50,7 @@ interface Hit {
   moved: number;
   caughtBy: number | null;
   revenge: boolean;
+  prisoner: number | null;
   at: number;
 }
 interface MyChog {
@@ -64,6 +65,8 @@ interface MyChog {
 }
 interface Run {
   id: string;
+  /** Set on a break-out. */
+  prisoner?: number;
   vault: string;
   tier: number;
   target: GangId;
@@ -103,13 +106,14 @@ const POWER_ICON: Record<PowerId, Parameters<typeof SkillIcon>[0]['skill']> = {
 
 const START_ERRORS: Record<string, string> = {
   jailed: 'This Chog is in jail.',
-  'done-today': 'This Chog already hit that vault today.',
+  'done-today': 'This Chog already did that today. Try again tomorrow.',
   'own-gang': 'That’s your own gang’s vault.',
   'no-gang': 'Pick a gang first.',
   'not-yours': 'That Chog isn’t in your wallet any more.',
   'slow-down': 'Too fast. Wait a few seconds.',
   already: 'Your vault already has that much defence.',
   'too-poor': 'Not enough cash in your vault for that.',
+  'not-in-jail': 'They’re not in jail any more.',
 };
 
 const DEFENCE = ['Light', 'Guarded', 'Heavy', 'Fortress'];
@@ -316,6 +320,20 @@ export function CityApp() {
     }
   }
 
+  async function breakOut(prisoner: number) {
+    if (!chog) return;
+    setBusy(`free${prisoner}`);
+    setNotice(null);
+    try {
+      const d = await post<{ run: Run }>('/api/heist/breakout', { chogId: chog.id, prisoner });
+      setRun(d.run);
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function rob(target: GangId) {
     if (!chog) return;
     setBusy(target);
@@ -352,18 +370,30 @@ export function CityApp() {
             powers: run.powers,
           }}
           guards={run.guards}
-          owner={{
-            name: GANGS[run.target].name,
-            color: GANG_COLOR[run.target].bg,
-            ink: GANG_COLOR[run.target].fg,
-          }}
+          owner={
+            run.prisoner
+              ? { name: 'The jail', color: '#ff5a4f', ink: '#111111' }
+              : {
+                  name: GANGS[run.target].name,
+                  color: GANG_COLOR[run.target].bg,
+                  ink: GANG_COLOR[run.target].fg,
+                }
+          }
+          rescue={
+            run.prisoner
+              ? {
+                  id: run.prisoner,
+                  name: city?.jailed.find((j) => j.id === run.prisoner)?.name ?? 'your gang-mate',
+                }
+              : undefined
+          }
           real={{
             myGang: chog.gang ? GANGS[chog.gang].name : 'your gang',
             replayHref: `/replay/${run.id}`,
             finish: async (inputs) =>
               (await post<{ result: RealResult }>('/api/heist/finish', { runId: run.id, inputs })).result,
             onLeave: () => {
-              backTo(run.target);
+              backTo(run.prisoner ? 'jail' : run.target);
               void loadMe();
               void loadBoard();
               void loadCity();
@@ -572,6 +602,7 @@ export function CityApp() {
             onPractice={() => setPractice(true)}
             onConnect={() => setSheet('connect')}
             onDefend={(l) => void defendVault(l)}
+            onBreakOut={(id) => void breakOut(id)}
             info={gangInfo && gangInfo.gang === door.gang ? gangInfo.data : undefined}
             robbing={door.gang ? alarms[door.gang] : undefined}
           />
@@ -785,6 +816,12 @@ function HitLine({ h }: { h: Hit }) {
       {GANGS[g].name}
     </span>
   );
+  if (h.prisoner !== null)
+    return h.result === 'escaped' ? (
+      <>{gang(h.gang)} broke a gang-mate out of jail</>
+    ) : (
+      <>{gang(h.gang)} got caught breaking into the jail</>
+    );
   return h.result === 'escaped' ? (
     <>
       {gang(h.gang)} robbed {gang(h.target)} of <strong className="text-[#ffd666]">{money(h.moved)}</strong>
@@ -959,6 +996,7 @@ function DoorCard(props: {
   onPractice: () => void;
   onConnect: () => void;
   onDefend: (level: number) => void;
+  onBreakOut: (prisoner: number) => void;
   info?: GangInfo;
   robbing?: Robbing;
 }) {
@@ -980,7 +1018,10 @@ function DoorCard(props: {
     return (
       <>
         <h2 className="font-display text-[28px] uppercase leading-none text-[#ff5a4f]">Jail</h2>
-        <p className="mt-1.5 text-[14px] text-white/70">Chogs caught robbing sit here for 30 minutes.</p>
+        <p className="mt-1.5 text-[14px] text-white/70">
+          Chogs caught robbing sit here for 30 minutes. Sneak in and open a gang-mate’s cell to get them out
+          early.
+        </p>
         {inside.length === 0 ? (
           <p className="mt-3 text-[15px]">Nobody inside right now.</p>
         ) : (
@@ -989,7 +1030,16 @@ function DoorCard(props: {
               <li key={j.id} className="flex items-center gap-2 text-[14px]">
                 <img src={chogImage(j.id, 96)} alt="" className="h-7 w-7 rounded-full border-2 border-ink" />
                 <span className="flex-1 truncate">{j.name}</span>
-                <span className="text-white/60">out in {formatLeft(j.until - props.now)}</span>
+                <span className="text-white/60">{formatLeft(j.until - props.now)}</span>
+                {chog?.gang === j.gang && chog.id !== j.id && !props.jailedNow && (
+                  <button
+                    disabled={props.busy !== null}
+                    onClick={() => props.onBreakOut(j.id)}
+                    className="rounded-[6px] border-2 border-ink bg-pink px-2 pb-0.5 pt-1 font-display text-[14px] uppercase leading-none text-ink shadow-[2px_2px_0_0_#000] disabled:opacity-50"
+                  >
+                    {props.busy === `free${j.id}` ? '…' : 'Break out'}
+                  </button>
+                )}
               </li>
             ))}
           </ul>

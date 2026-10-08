@@ -187,6 +187,8 @@ export const heistRuns = pgTable(
     /** Cash that moved: to the robber's gang on an escape, to the vault's gang (a fine) on a bust. */
     moved: integer('moved'),
     caughtBy: integer('caught_by'),
+    /** Set on a break-out: the jailed gang-mate this run tried to free. */
+    prisoner: integer('prisoner'),
     inputs: text('inputs'),
   },
   (t) => [

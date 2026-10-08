@@ -47,14 +47,25 @@ export default async function Image({ params }: { params: Promise<{ id: string }
         style={{ border: '6px solid #111', borderRadius: 18, boxShadow: '10px 10px 0 #111' }}
       />
       <div style={{ display: 'flex', flexDirection: 'column', marginLeft: 56, flex: 1 }}>
-        <div style={{ fontSize: 34, letterSpacing: 2, color: '#a59fc9' }}>WATCH THE ROBBERY</div>
+        <div style={{ fontSize: 34, letterSpacing: 2, color: '#a59fc9' }}>
+          {run.prisoner ? 'WATCH THE JAIL BREAK' : 'WATCH THE ROBBERY'}
+        </div>
         <T text={name.toUpperCase()} style={{ fontSize: 96, lineHeight: 0.9, marginTop: 8 }} />
         <div style={{ display: 'flex', marginTop: 18, gap: 14, alignItems: 'center', fontSize: 34 }}>
           <div style={chip(robber.bg, robber.fg)}>{GANGS[run.gang].name.toUpperCase()}</div>
-          <div style={{ display: 'flex', color: '#a59fc9', paddingTop: 6 }}>{escaped ? 'ROBBED' : 'VS'}</div>
-          <div style={chip(target.bg, target.fg)}>{GANGS[run.target].name.toUpperCase()}</div>
+          <div style={{ display: 'flex', color: '#a59fc9', paddingTop: 6 }}>
+            {run.prisoner ? 'JAIL BREAK' : escaped ? 'ROBBED' : 'VS'}
+          </div>
+          {!run.prisoner && (
+            <div style={chip(target.bg, target.fg)}>{GANGS[run.target].name.toUpperCase()}</div>
+          )}
         </div>
-        {escaped ? (
+        {escaped && run.prisoner ? (
+          <T
+            text={`FREED ${displayName(getChog(run.prisoner)!).toUpperCase()}`}
+            style={{ marginTop: 'auto', fontSize: 64, color: '#7dffa8' }}
+          />
+        ) : escaped ? (
           <T
             text={`GOT AWAY WITH $${run.moved.toLocaleString('en-US')}`}
             style={{ marginTop: 'auto', fontSize: 64, color: '#ffd666' }}

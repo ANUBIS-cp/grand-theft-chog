@@ -1,0 +1,1 @@
+ALTER TABLE "heist_runs" ADD COLUMN "prisoner" integer;

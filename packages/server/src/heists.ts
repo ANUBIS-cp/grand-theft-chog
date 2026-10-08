@@ -1,7 +1,9 @@
 import { CHOGS, GANG_IDS, canJoinGang, gangOptions, getChog, type GangId } from '@chog-city/data';
 import { chogInfo, dayOf } from '@chog-city/game';
 import {
+  JAIL,
   JAIL_MS,
+  JAIL_TIER,
   REVENGE_MS,
   RUN_MAX_MS,
   START_CASH,
@@ -40,7 +42,8 @@ export type HeistError =
   | 'bad-inputs'
   | 'bad-level'
   | 'already'
-  | 'too-poor';
+  | 'too-poor'
+  | 'not-in-jail';
 
 /** How long a building's alarm stays on without the robbery finishing. */
 const ALARM_MS = 3 * 60_000;
@@ -125,6 +128,7 @@ export async function revengeTargets(db: Db, gang: GangId, now: number): Promise
       and(
         eq(heistRuns.target, gang),
         eq(heistRuns.result, 'escaped'),
+        isNull(heistRuns.prisoner),
         gt(heistRuns.finishedAt, new Date(now - REVENGE_MS)),
       ),
     );
@@ -138,7 +142,9 @@ export async function hitToday(db: Db, chogIds: number[], now: number): Promise<
   const rows = await db
     .select({ chogId: heistRuns.chogId, target: heistRuns.target })
     .from(heistRuns)
-    .where(and(inArray(heistRuns.chogId, chogIds), eq(heistRuns.day, dayOf(now))));
+    .where(
+      and(inArray(heistRuns.chogId, chogIds), eq(heistRuns.day, dayOf(now)), isNull(heistRuns.prisoner)),
+    );
   for (const r of rows) out.set(r.chogId, [...(out.get(r.chogId) ?? []), r.target]);
   return out;
 }
@@ -210,7 +216,13 @@ export async function robbing(
       at: heistRuns.startedAt,
     })
     .from(heistRuns)
-    .where(and(isNull(heistRuns.finishedAt), gt(heistRuns.startedAt, new Date(now - ALARM_MS))));
+    .where(
+      and(
+        isNull(heistRuns.finishedAt),
+        isNull(heistRuns.prisoner),
+        gt(heistRuns.startedAt, new Date(now - ALARM_MS)),
+      ),
+    );
   return rows.map((r) => ({
     target: r.target as GangId,
     gang: r.gang as GangId,
@@ -254,12 +266,14 @@ export async function finishRun(
     if (!def) throw new HeistRefused('no-run');
     const built = buildLevel(def, run.tier);
     if (inputs.length > maxTicks(built)) throw new HeistRefused('bad-inputs');
+    // A break-out moves no cash: it's settled as if both vaults were empty.
+    const breakout = run.prisoner !== null;
     const { state, moved } = settle(
       built,
       run.powers as PowerId[],
       inputs,
-      cash[run.target] ?? 0,
-      cash[run.gang] ?? 0,
+      breakout ? 0 : (cash[run.target] ?? 0),
+      breakout ? 0 : (cash[run.gang] ?? 0),
       run.revenge,
     );
     const escaped = state.phase === 'escaped';
@@ -275,6 +289,11 @@ export async function finishRun(
         .where(eq(gangVaults.gang, to));
     }
     const caughtBy = !escaped && state.caughtBy !== null ? (run.guards[state.caughtBy] ?? null) : null;
+    if (breakout && escaped)
+      await tx
+        .update(heistChogs)
+        .set({ jailedUntil: new Date(now) })
+        .where(and(eq(heistChogs.id, run.prisoner!), gt(heistChogs.jailedUntil, new Date(now))));
     const jailedUntil = escaped ? null : now + JAIL_MS;
     await tx
       .update(heistChogs)
@@ -293,7 +312,7 @@ export async function finishRun(
             },
       )
       .where(eq(heistChogs.id, run.chogId));
-    if (caughtBy !== null)
+    if (caughtBy !== null && !breakout)
       await tx
         .insert(heistChogs)
         .values({ id: caughtBy, gang: run.target, catches: 1 })
@@ -337,6 +356,8 @@ export interface WarHit {
   moved: number;
   caughtBy: number | null;
   revenge: boolean;
+  /** Set on a break-out: who they tried to free. */
+  prisoner: number | null;
   at: number;
 }
 
@@ -363,6 +384,7 @@ export async function recentHits(db: Db, limit = 30, gang?: GangId): Promise<War
     moved: r.moved ?? 0,
     caughtBy: r.caughtBy,
     revenge: r.revenge,
+    prisoner: r.prisoner,
     at: r.finishedAt!.getTime(),
   }));
 }
@@ -425,6 +447,7 @@ export async function chogHits(db: Db, chogId: number, limit = 20): Promise<WarH
     moved: r.moved ?? 0,
     caughtBy: r.caughtBy,
     revenge: r.revenge,
+    prisoner: r.prisoner,
     at: r.finishedAt!.getTime(),
   }));
 }
@@ -510,6 +533,74 @@ export async function runForReplay(db: Db, id: string) {
     result: r.result!,
     moved: r.moved ?? 0,
     revenge: r.revenge,
+    prisoner: r.prisoner,
     at: r.finishedAt!.getTime(),
   };
+}
+
+/** The jail is guarded by the city's best catchers, topped up with Jailbirds. */
+async function jailGuards(db: Db, n: number): Promise<number[]> {
+  const best = await db
+    .select({ id: heistChogs.id })
+    .from(heistChogs)
+    .where(gt(heistChogs.catches, 0))
+    .orderBy(desc(heistChogs.catches), heistChogs.id)
+    .limit(n);
+  const out = best.map((b) => b.id);
+  const birds = CHOGS.filter((c) => gangOptions(c).born.includes('jailbirds'));
+  for (let i = 0; out.length < n && i < birds.length; i += 7)
+    if (!out.includes(birds[i]!.id)) out.push(birds[i]!.id);
+  return out;
+}
+
+/** Starts a break-out: sneak into the jail and free a gang-mate. Each Chog gets one try a day. */
+export async function startBreakout(
+  db: Db,
+  { address, chogId, prisoner, now }: { address: string; chogId: number; prisoner: number; now: number },
+): Promise<StartedRun & { prisoner: number }> {
+  if (!(await canControl(db, address, chogId))) throw new HeistRefused('not-yours');
+  const me = await heistRecord(db, chogId);
+  if (!me?.gang) throw new HeistRefused('no-gang');
+  if (me.jailedUntil && me.jailedUntil.getTime() > now) throw new HeistRefused('jailed');
+  const them = await heistRecord(db, prisoner);
+  if (!them || them.gang !== me.gang || !them.jailedUntil || them.jailedUntil.getTime() <= now)
+    throw new HeistRefused('not-in-jail');
+  const [tried] = await db
+    .select({ id: heistRuns.id })
+    .from(heistRuns)
+    .where(and(eq(heistRuns.chogId, chogId), eq(heistRuns.day, dayOf(now)), isNotNull(heistRuns.prisoner)))
+    .limit(1);
+  if (tried) throw new HeistRefused('done-today');
+  const level = buildLevel(JAIL, JAIL_TIER);
+  const run = {
+    id: randomBytes(12).toString('base64url'),
+    vault: JAIL.id,
+    tier: JAIL_TIER,
+    target: me.gang as GangId,
+    revenge: false,
+    powers: powersFor(chogInfo(chogId).skills),
+    guards: await jailGuards(db, level.guards.length),
+    prisoner,
+  };
+  await db.insert(heistRuns).values({
+    id: run.id,
+    chogId,
+    player: address.toLowerCase(),
+    gang: me.gang,
+    target: run.target,
+    day: dayOf(now),
+    vault: run.vault,
+    tier: run.tier,
+    revenge: false,
+    powers: run.powers,
+    guards: run.guards,
+    prisoner,
+    startedAt: new Date(now),
+  });
+  await db
+    .execute(
+      sql`select pg_notify('city', ${JSON.stringify({ breakout: prisoner, gang: me.gang, chog: chogId })})`,
+    )
+    .catch(() => undefined);
+  return run;
 }

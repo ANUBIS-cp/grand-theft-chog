@@ -60,6 +60,8 @@ export interface HeistGameProps {
   onLeave?: () => void;
   /** Watching a run that already happened: its key presses, and what it moved. */
   replay?: { inputs: string; moved: number; robbers: string };
+  /** A break-out: the gang-mate in the locked cell. */
+  rescue?: HeistChog;
 }
 
 const ICON: Record<PowerId, SkillId> = {
@@ -109,7 +111,17 @@ const clock = (ticks: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeave, replay }: HeistGameProps) {
+export function HeistGame({
+  vault,
+  tier = 1,
+  player,
+  guards,
+  owner,
+  real,
+  onLeave,
+  replay,
+  rescue,
+}: HeistGameProps) {
   const script = useMemo(() => (replay ? (decodeInputs(replay.inputs) ?? []) : null), [replay]);
   const scriptRef = useRef(script);
   scriptRef.current = script;
@@ -556,9 +568,25 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeav
             : clock(hud ? hud.seconds * TPS : level.ticks)}
         </div>
         <div className="flex items-center gap-1 justify-self-end">
-          <div className="rounded-[6px] border-2 border-ink bg-[#ffd666] px-2 pb-0.5 pt-1 font-display text-[22px] leading-none text-ink tabular-nums shadow-[2px_2px_0_0_#000]">
-            {money(hud?.carried ?? 0)}
-          </div>
+          {rescue ? (
+            <div
+              className={cn(
+                'flex items-center gap-1.5 rounded-[6px] border-2 border-ink py-0.5 pl-0.5 pr-2 font-display text-[16px] uppercase leading-none text-ink shadow-[2px_2px_0_0_#000]',
+                hud?.carried ? 'bg-[#7dffa8]' : 'bg-paper-raised',
+              )}
+            >
+              <img
+                src={chogImage(rescue.id, 96)}
+                alt=""
+                className="h-7 w-7 rounded-full border-2 border-ink"
+              />
+              <span className="pt-0.5">{hud?.carried ? 'Got them' : 'Locked up'}</span>
+            </div>
+          ) : (
+            <div className="rounded-[6px] border-2 border-ink bg-[#ffd666] px-2 pb-0.5 pt-1 font-display text-[22px] leading-none text-ink tabular-nums shadow-[2px_2px_0_0_#000]">
+              {money(hud?.carried ?? 0)}
+            </div>
+          )}
           <button
             onClick={toggleMute}
             className="grid h-9 w-9 place-items-center rounded-full text-white/60 hover:text-white"
@@ -595,7 +623,7 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeav
             />
           </div>
         )}
-        {hud && !hud.started && !over && <StartHint player={player} />}
+        {hud && !hud.started && !over && <StartHint player={player} rescue={rescue} />}
         {over && showEnd && hud && (
           <EndCard
             escaped={phase === 'escaped'}
@@ -608,6 +636,7 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeav
             onLeave={onLeave}
             real={real ? { ...real, saved } : undefined}
             replay={replay}
+            rescue={rescue}
           />
         )}
       </div>
@@ -700,7 +729,7 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeav
   );
 }
 
-function StartHint({ player }: { player: HeistGameProps['player'] }) {
+function StartHint({ player, rescue }: { player: HeistGameProps['player']; rescue?: HeistChog }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
       <div className="flex items-center gap-3 rounded-[10px] border-2 border-ink bg-paper-raised px-3 py-2 text-ink shadow-[3px_3px_0_0_#000]">
@@ -709,7 +738,9 @@ function StartHint({ player }: { player: HeistGameProps['player'] }) {
           <strong className="block font-display text-[18px] uppercase leading-none">Move to start</strong>
           <span className="hidden sm:inline">Arrow keys or WASD. </span>
           <span className="sm:hidden">Drag anywhere. </span>
-          Grab cash, stay out of the flashlights, walk out the green EXIT.
+          {rescue
+            ? `Open the cell at the top to free ${rescue.name}, stay out of the flashlights, walk out the green EXIT.`
+            : 'Grab cash, stay out of the flashlights, walk out the green EXIT.'}
         </div>
       </div>
     </div>
@@ -726,6 +757,7 @@ function EndCard({
   onAgain,
   onLeave,
   replay,
+  rescue,
   real,
 }: {
   escaped: boolean;
@@ -737,6 +769,7 @@ function EndCard({
   onAgain: () => void;
   onLeave?: () => void;
   replay?: { moved: number; robbers: string };
+  rescue?: HeistChog;
   real?: {
     myGang: string;
     onLeave: () => void;
@@ -768,12 +801,26 @@ function EndCard({
             escaped ? 'border-cash text-cash' : 'border-jail text-jail',
           )}
         >
-          {escaped ? 'Escaped' : 'Busted'}
+          {escaped ? (rescue ? 'Freed' : 'Escaped') : 'Busted'}
         </div>
         {real && !real.saved ? (
-          <p className="mt-5 animate-pulse text-[15px] text-ink-soft">Counting the cash…</p>
+          <p className="mt-5 animate-pulse text-[15px] text-ink-soft">
+            {rescue ? 'Unlocking…' : 'Counting the cash…'}
+          </p>
         ) : real?.saved?.error ? (
           <p className="mt-5 text-[15px] text-jail">{real.saved.error}</p>
+        ) : escaped && rescue ? (
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <img
+              src={chogImage(rescue.id, 96)}
+              alt=""
+              className="h-14 w-14 rounded-full border-2 border-ink"
+            />
+            <p className="text-left text-[15px] leading-snug">
+              <strong className="block">{rescue.name}</strong>
+              {replay ? 'got broken out of jail' : 'is out of jail'}
+            </p>
+          </div>
         ) : escaped ? (
           <>
             <div className="mt-4 font-display text-[56px] leading-none tabular-nums">{money(shown)}</div>

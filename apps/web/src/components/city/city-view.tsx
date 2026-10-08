@@ -292,11 +292,14 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
 
       const net = s.net;
       net?.move(s.x, s.y, s.face, s.moving, now);
+      // A stroller who's in jail stands in the jail yard instead.
+      const locked = new Set(p.jailed.filter((j) => j.until > Date.now()).map((j) => j.id));
       const people: (Person & { tap?: Tapped })[] = [];
       if (net && net.status === 'live') {
         // Everyone else, from the live server.
         for (const o of net.people.values()) {
           if (o.id === net.you || Number.isNaN(o.nx) || now - o.seen > 3000) continue;
+          if (o.npc && o.chog !== null && locked.has(o.chog)) continue;
           const at = net.at(o, now);
           const c = color(o.gang);
           people.push({
@@ -317,6 +320,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       } else {
         // Offline: today's strollers, walked here.
         for (const c of p.strollers) {
+          if (locked.has(c.id)) continue;
           let w = s.walkers.get(c.id);
           if (!w) {
             w = newWalker(s.rand);

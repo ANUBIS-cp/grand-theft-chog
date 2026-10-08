@@ -14,6 +14,8 @@ export const REVENGE_PERCENT = 25;
 export const REVENGE_MS = 24 * 3_600_000;
 /** A run must be finished within this long of starting. */
 export const RUN_MAX_MS = 15 * 60_000;
+/** The jail's defence level for break-outs. */
+export const JAIL_TIER = 1;
 
 /** Which layout a gang's vault uses. Fixed per gang so each vault has its own character. */
 export function vaultFor(gang: GangId): VaultDef {

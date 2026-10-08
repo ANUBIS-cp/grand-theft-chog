@@ -18,8 +18,9 @@ const name = (id: number) => displayName(getChog(id)!);
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const run = await runForReplay(await db(), (await params).id);
   if (!run) return { title: 'Replay not found · Chog City' };
-  const what =
-    run.result === 'escaped'
+  const what = run.prisoner
+    ? `${name(run.chogId)} ${run.result === 'escaped' ? 'broke' : 'tried to break'} ${name(run.prisoner)} out of jail`
+    : run.result === 'escaped'
       ? `${name(run.chogId)} robbed ${GANGS[run.target].name} of ${money(run.moved)}`
       : `${name(run.chogId)} got caught robbing ${GANGS[run.target].name}`;
   return { title: `${what} · Chog City`, description: 'Watch the robbery, move by move.' };
@@ -50,11 +51,16 @@ export default async function ReplayPage({ params }: Props) {
           tier={run.tier}
           player={{ id: run.chogId, name: name(run.chogId), gang: GANGS[run.gang].name, powers: run.powers }}
           guards={run.guards.map((id) => ({ id, name: name(id) }))}
-          owner={{
-            name: GANGS[run.target].name,
-            color: GANG_COLOR[run.target].bg,
-            ink: GANG_COLOR[run.target].fg,
-          }}
+          owner={
+            run.prisoner
+              ? { name: 'The jail', color: '#ff5a4f', ink: '#111111' }
+              : {
+                  name: GANGS[run.target].name,
+                  color: GANG_COLOR[run.target].bg,
+                  ink: GANG_COLOR[run.target].fg,
+                }
+          }
+          rescue={run.prisoner ? { id: run.prisoner, name: name(run.prisoner) } : undefined}
           replay={{ inputs: run.inputs, moved: run.moved, robbers: GANGS[run.gang].name }}
         />
       </div>
