@@ -1,6 +1,6 @@
 import { CHOGS, gangOptions, type GangId } from '@chog-city/data';
 import { dayOf } from '../time.ts';
-import { CITY, Ground, groundAt, route, smooth, type City } from './map.ts';
+import { CITY, Ground, groundAt, route, smooth, standable, type City } from './map.ts';
 
 // Chogs nobody is playing right now, strolling between spots so the city never looks empty.
 
@@ -37,7 +37,7 @@ function strollSpots(c: City) {
   for (let y = 0; y < c.h; y++)
     for (let x = 0; x < c.w; x++) {
       const g = groundAt(x, y, c);
-      if (g === Ground.Walk || g === Ground.Plaza || g === Ground.Yard)
+      if ((g === Ground.Walk || g === Ground.Plaza || g === Ground.Yard) && standable(x + 0.5, y + 0.5, c))
         spots.push({ x: x + 0.5, y: y + 0.5 });
     }
   return spots;

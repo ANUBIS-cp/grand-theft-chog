@@ -49,6 +49,16 @@ export interface City {
   spawn: { x: number; y: number };
 }
 
+/** How big each prop is to bump into, as a circle (radius in tiles). Benches and the screen you walk past. */
+export const PROP_RADIUS: Record<Prop['kind'], number> = {
+  tree: 0.28,
+  fountain: 1.05,
+  lamp: 0.08,
+  hydrant: 0.12,
+  bench: 0,
+  screen: 0,
+};
+
 export const COLS = 5;
 export const ROWS = 4;
 /** A block with its ring of pavement. */
@@ -191,12 +201,11 @@ function build(): City {
       if ((r + c) % 2 === 0 && c !== 2) props.push({ kind: 'hydrant', x: o.x + 3.5, y: o.y + BH - 0.5 });
     }
 
-  // Props you can't walk through.
-  for (const p of props)
-    if (p.kind !== 'screen') {
-      if (p.kind === 'fountain') fill(Math.floor(p.x) - 1, Math.floor(p.y) - 1, 2, 2, Ground.Prop);
-      else set(Math.floor(p.x), Math.floor(p.y), Ground.Prop);
-    }
+  // Routes go round trees and the fountain. (Walking itself bumps into props as circles: see PROP_RADIUS.)
+  for (const p of props) {
+    if (p.kind === 'fountain') fill(Math.floor(p.x) - 1, Math.floor(p.y) - 1, 2, 2, Ground.Prop);
+    else if (PROP_RADIUS[p.kind] > 0) set(Math.floor(p.x), Math.floor(p.y), Ground.Prop);
+  }
 
   return { w, h, ground, places, props, spawn: { x: cx, y: cy + 3 } };
 }
@@ -211,14 +220,58 @@ export const canWalk = (g: Ground) => g !== Ground.Block && g !== Ground.Prop &&
 /** How wide a Chog is, as a radius in tiles. */
 export const BODY = 0.3;
 
-const free = (x: number, y: number, c: City) => canWalk(groundAt(Math.floor(x), Math.floor(y), c));
-const clear = (x: number, y: number, c: City) =>
-  free(x - BODY, y - BODY, c) &&
-  free(x + BODY, y - BODY, c) &&
-  free(x - BODY, y + BODY, c) &&
-  free(x + BODY, y + BODY, c);
+/** Tiles you can never stand on: buildings, the jail yard and the edge of the map. Props are circles. */
+const solid = (x: number, y: number, c: City) => {
+  const g = groundAt(x, y, c);
+  return g === Ground.Block || g === Ground.Pen;
+};
 
-/** Moves (x, y) by (dx, dy) and slides along walls, one axis at a time. */
+/** True when a Chog standing at (x, y) touches nothing solid. */
+function clear(x: number, y: number, c: City): boolean {
+  for (let ty = Math.floor(y - BODY); ty <= Math.floor(y + BODY); ty++)
+    for (let tx = Math.floor(x - BODY); tx <= Math.floor(x + BODY); tx++) {
+      if (!solid(tx, ty, c)) continue;
+      const nx = Math.max(tx, Math.min(x, tx + 1));
+      const ny = Math.max(ty, Math.min(y, ty + 1));
+      if ((x - nx) ** 2 + (y - ny) ** 2 < BODY * BODY - 1e-6) return false;
+    }
+  for (const p of c.props) {
+    const r = PROP_RADIUS[p.kind];
+    if (r && (x - p.x) ** 2 + (y - p.y) ** 2 < (r + BODY) ** 2 - 1e-6) return false;
+  }
+  return true;
+}
+
+/** Pushes a circle at (x, y) out of anything it overlaps, so walking glides round corners and props. */
+function pushOut(x: number, y: number, c: City): { x: number; y: number } {
+  for (let pass = 0; pass < 4; pass++) {
+    let moved = false;
+    for (let ty = Math.floor(y - BODY); ty <= Math.floor(y + BODY); ty++)
+      for (let tx = Math.floor(x - BODY); tx <= Math.floor(x + BODY); tx++) {
+        if (!solid(tx, ty, c)) continue;
+        const nx = Math.max(tx, Math.min(x, tx + 1));
+        const ny = Math.max(ty, Math.min(y, ty + 1));
+        const d = Math.hypot(x - nx, y - ny);
+        if (d >= BODY || d === 0) continue;
+        x = nx + ((x - nx) / d) * BODY;
+        y = ny + ((y - ny) / d) * BODY;
+        moved = true;
+      }
+    for (const p of c.props) {
+      const r = PROP_RADIUS[p.kind] + BODY;
+      if (r === BODY) continue;
+      const d = Math.hypot(x - p.x, y - p.y);
+      if (d >= r || d === 0) continue;
+      x = p.x + ((x - p.x) / d) * r;
+      y = p.y + ((y - p.y) / d) * r;
+      moved = true;
+    }
+    if (!moved) break;
+  }
+  return { x, y };
+}
+
+/** Moves (x, y) by (dx, dy), gliding along walls and round props instead of stopping dead. */
 export function slide(
   x: number,
   y: number,
@@ -226,6 +279,9 @@ export function slide(
   dy: number,
   c: City = CITY,
 ): { x: number; y: number } {
+  const p = pushOut(x + dx, y + dy, c);
+  if (clear(p.x, p.y, c)) return p;
+  // Wedged in a corner: fall back to one axis at a time.
   let nx = x;
   let ny = y;
   if (dx && clear(x + dx, y, c)) nx = x + dx;
@@ -266,7 +322,15 @@ export function route(
       const nx = x + ddx;
       const ny = y + ddy;
       const n = ny * c.w + nx;
-      if (nx < 0 || ny < 0 || nx >= c.w || ny >= c.h || from[n] !== -1 || !canWalk(c.ground[n] as Ground))
+      if (
+        nx < 0 ||
+        ny < 0 ||
+        nx >= c.w ||
+        ny >= c.h ||
+        from[n] !== -1 ||
+        !canWalk(c.ground[n] as Ground) ||
+        !clear(nx + 0.5, ny + 0.5, c)
+      )
         continue;
       from[n] = cur;
       queue.push(n);
@@ -296,7 +360,7 @@ export function smooth(from: { x: number; y: number }, path: { x: number; y: num
 
 function straight(a: { x: number; y: number }, b: { x: number; y: number }, c: City) {
   const d = Math.hypot(b.x - a.x, b.y - a.y);
-  const n = Math.ceil(d / 0.25);
+  const n = Math.ceil(d / 0.08);
   for (let k = 1; k <= n; k++) {
     const t = k / n;
     if (!clear(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, c)) return false;

@@ -1,6 +1,6 @@
 import { GANG_IDS } from '@chog-city/data';
 import { describe, expect, it } from 'vitest';
-import { CITY, Ground, doorAt, groundAt, placeOf, route, slide, standable } from './map.ts';
+import { CITY, Ground, PROP_RADIUS, doorAt, groundAt, placeOf, route, slide, standable } from './map.ts';
 import { newWalker, rng, stepWalker } from './walkers.ts';
 
 describe('city map', () => {
@@ -38,5 +38,13 @@ describe('city map', () => {
         stepWalker(w, 0.1, rand);
         expect(standable(w.x, w.y)).toBe(true);
       }
+  });
+
+  it('glides round a tree instead of stopping dead on it', () => {
+    const tree = CITY.props.find((p) => p.kind === 'tree' && standable(p.x - 1.2, p.y + 0.1))!;
+    // Walk straight at it, slightly off centre.
+    let at = { x: tree.x - 1.2, y: tree.y + 0.1 };
+    for (let i = 0; i < 40; i++) at = slide(at.x, at.y, 0.08, 0);
+    expect(at.x).toBeGreaterThan(tree.x + PROP_RADIUS.tree);
   });
 });

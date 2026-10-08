@@ -150,8 +150,17 @@ export function HeistGame({
   const [showEnd, setShowEnd] = useState(false);
   const [joy, setJoy] = useState<{ x: number; y: number; dx: number; dy: number } | null>(null);
 
+  // The page around the game may redraw every second with new (but equal) objects. Key everything on the
+  // values, so a redraw never restarts the run.
+  const powersKey = player.powers.join(',');
+  const guardsKey = guards.map((g) => g.id).join(',');
+  const powersRef = useRef(player.powers);
+  powersRef.current = player.powers;
+  const guardsRef = useRef(guards);
+  guardsRef.current = guards;
+
   const fresh = useCallback(() => {
-    const s = startHeist(level, player.powers);
+    const s = startHeist(level, powersRef.current);
     return {
       s,
       prev: snapshot(s),
@@ -163,7 +172,7 @@ export function HeistGame({
       inputs: [],
       endAt: 0,
     };
-  }, [level, player.powers]);
+  }, [level, powersKey]);
 
   const restart = useCallback(() => {
     const g = game.current;
@@ -192,7 +201,7 @@ export function HeistGame({
     };
     const images = {
       player: load(chogImage(player.id, 256)),
-      guards: guards.map((c) => load(chogImage(c.id, 96))),
+      guards: guardsRef.current.map((c) => load(chogImage(c.id, 96))),
     };
     const r = new VaultRenderer(cv, level, images, { color: owner.color });
     r.font =
@@ -401,7 +410,7 @@ export function HeistGame({
       ro.disconnect();
       sound.current?.alarmOff();
     };
-  }, [level, player.id, guards, owner.color, fresh]);
+  }, [level, player.id, guardsKey, owner.color, fresh]);
 
   // Keyboard.
   useEffect(() => {
