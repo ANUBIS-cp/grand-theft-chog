@@ -20,26 +20,36 @@ const SECOND = 'https://gateway.pinata.cloud/ipfs/';
 const SIZES = [96, 256, 640];
 for (const d of ['orig', ...SIZES.map(String)]) mkdirSync(join(out, d), { recursive: true });
 
-async function fetchFrom(gateway: string, metadataId: number): Promise<Buffer> {
-  const res = await fetch(`${gateway}${cid}${metadataId}.webp`, { signal: AbortSignal.timeout(40_000) });
+async function fetchFrom(gateway: string, metadataId: number, signal?: AbortSignal): Promise<Buffer> {
+  const res = await fetch(`${gateway}${cid}${metadataId}.webp`, {
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(90_000)]) : AbortSignal.timeout(90_000),
+  });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return Buffer.from(await res.arrayBuffer());
+  const buf = Buffer.from(await res.arrayBuffer());
+  const meta = await sharp(buf).metadata();
+  if (meta.format !== 'webp' || meta.width !== 1000 || meta.height !== 1000)
+    throw new Error('not a 1000x1000 webp');
+  return buf;
 }
 
+// Filebase is fast for files it has cached and returns 504 or takes 30-40 s for the rest. Pinata works but
+// rate-limits when hit hard. So: ask Filebase first, and only ask Pinata if Filebase fails or is slow (8 s).
 async function fetchImage(metadataId: number): Promise<Buffer> {
-  for (let attempt = 0; attempt < 8; attempt++) {
-    const gw = attempt % 4 === 3 ? SECOND : PRIMARY;
-    try {
-      const buf = await fetchFrom(gw, metadataId);
-      const meta = await sharp(buf).metadata();
-      if (meta.format !== 'webp' || meta.width !== 1000 || meta.height !== 1000)
-        throw new Error('not a 1000x1000 webp');
-      return buf;
-    } catch {
-      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
-    }
+  const ctl = new AbortController();
+  const primary = fetchFrom(PRIMARY, metadataId, ctl.signal);
+  const hedge = new Promise<Buffer>((resolve, reject) => {
+    const start = () => fetchFrom(SECOND, metadataId, ctl.signal).then(resolve, reject);
+    const timer = setTimeout(start, 8000);
+    primary.catch(() => {
+      clearTimeout(timer);
+      start();
+    });
+  });
+  try {
+    return await Promise.any([primary, hedge]);
+  } finally {
+    ctl.abort();
   }
-  throw new Error(`could not fetch metadata image ${metadataId}`);
 }
 
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
@@ -50,22 +60,37 @@ const manifest: Record<number, string> = existsSync(join(out, 'manifest.json'))
 const queue = data.chogs.filter((c) => !manifest[c.id]);
 console.log(`${queue.length} to do, ${data.chogs.length - queue.length} already done`);
 let done = 0;
+const tries = new Map<number, number>();
+const failed: number[] = [];
 async function worker() {
   for (let c = queue.shift(); c; c = queue.shift()) {
-    const buf = await fetchImage(c.metadataId);
+    let buf: Buffer;
+    try {
+      buf = await fetchImage(c.metadataId);
+    } catch {
+      const n = (tries.get(c.id) ?? 0) + 1;
+      tries.set(c.id, n);
+      if (n < 6) {
+        queue.push(c); // try again later
+        await new Promise((r) => setTimeout(r, 2000 * n));
+      } else failed.push(c.id);
+      continue;
+    }
     writeFileSync(join(out, 'orig', `${c.id}.webp`), buf);
     for (const s of SIZES) {
       const img = sharp(buf).resize(s, s, { kernel: 'lanczos3' });
       writeFileSync(join(out, String(s), `${c.id}.webp`), await img.webp({ quality: 82 }).toBuffer());
     }
     manifest[c.id] = sha(buf);
-    if (++done % 100 === 0) {
+    if (++done % 50 === 0) {
       writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest));
       console.log(`${done} done`);
     }
   }
 }
-await Promise.all(Array.from({ length: 3 }, worker));
+// Mostly waiting on the network, so many workers; resizing itself is quick.
+await Promise.all(Array.from({ length: 12 }, worker));
+if (failed.length) console.log(`FAILED after retries (re-run to try again): tokens ${failed.join(', ')}`);
 writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest));
 
 // Cross-check a sample against a second gateway: the bytes must be identical.

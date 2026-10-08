@@ -1,0 +1,13 @@
+{
+  "name": "@chog-city/game",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@chog-city/data": "*",
+    "@noble/hashes": "^2.4.0"
+  }
+}
