@@ -1,5 +1,5 @@
 // Chog City worker: keeps owners in sync with the chain and opens each game day on time.
-import { ensureDay, seedStates } from '@chog-city/server';
+import { ensureDay, monad, seedStates } from '@chog-city/server';
 import { connect } from '@chog-city/server/db';
 import { dayOf } from '@chog-city/game';
 import { createPublicClient, http } from 'viem';

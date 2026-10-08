@@ -1,12 +1,7 @@
-import { createPublicClient, defineChain, http } from 'viem';
+import { monad } from '@chog-city/server';
+import { createPublicClient, http } from 'viem';
 
-export const monad = defineChain({
-  id: 143,
-  name: 'Monad',
-  nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
-  rpcUrls: { default: { http: ['https://rpc.monad.xyz'] } },
-  blockExplorers: { default: { name: 'Monadscan', url: 'https://monadscan.com' } },
-});
+export { monad };
 
 let client: ReturnType<typeof createPublicClient> | null = null;
 
