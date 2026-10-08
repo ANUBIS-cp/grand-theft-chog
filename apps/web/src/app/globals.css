@@ -37,9 +37,11 @@
 }
 
 @layer base {
+  /* Every page is dark, so the area past the page edges (scroll bounce on a Mac or phone) is too. */
   html {
-    background: var(--color-paper);
+    background: #0b0918;
     color: var(--color-ink);
+    overscroll-behavior-y: none;
     -webkit-text-size-adjust: 100%;
   }
   body {

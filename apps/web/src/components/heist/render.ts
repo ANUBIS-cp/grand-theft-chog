@@ -96,15 +96,15 @@ export class VaultRenderer {
   }
 
   /**
-   * Fill a box (CSS pixels). The whole vault shows when tiles can be at least MIN_TILE wide; on a small screen
-   * the tiles stay that big and the camera follows your Chog instead, so faces stay readable.
+   * Fill a box (CSS pixels). Tiles stay big so faces are readable, and the camera follows your Chog.
    */
   resize(boxW: number, boxH: number) {
-    // Phones: keep tiles big and scroll. Wider screens: show the whole vault.
-    const MIN_TILE = boxW >= 560 ? 24 : 34;
+    // Big tiles everywhere: about 11 tiles across the short side of the screen, and the camera follows your
+    // Chog. A small vault that fits at that size just shows whole.
     const { w, h } = this.level;
     const fit = Math.floor(Math.min(boxW / w, boxH / (h + 0.35)));
-    this.t = Math.min(60, Math.max(MIN_TILE, fit));
+    const close = Math.floor(Math.min(boxW, boxH) / 11);
+    this.t = Math.min(84, Math.max(34, close, fit));
     this.lift = Math.round(this.t * 0.34);
     this.dpr = Math.min(3, window.devicePixelRatio || 1);
     this.view = { w: Math.round(boxW), h: Math.round(boxH) };
@@ -622,7 +622,7 @@ export class VaultRenderer {
     const face = (img: HTMLImageElement, ring: string, cap: boolean): Face | undefined => {
       if (!img.complete || !img.naturalWidth) return undefined;
       // Your Chog is drawn a little bigger than a tile so its face reads on a phone.
-      const d = Math.round(t * (cap ? 1 : 1.14));
+      const d = Math.round(t * (cap ? 1 : 1.3));
       const pad = cap ? Math.round(d * 0.35) : 4;
       const c = canvas((d + 8) * dpr, (d + pad + 4) * dpr);
       const g = c.getContext('2d')!;
