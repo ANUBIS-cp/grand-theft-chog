@@ -147,10 +147,11 @@ export async function applyMove(
           if (input.jailbreakTarget !== undefined && !isChogId(input.jailbreakTarget))
             throw new MoveFailed('BAD_TARGET');
           const st = await lockStates(tx, ids, now);
-          const [{ n }] = rowsOf<{ n: number }>(
+          const seq = rowsOf<{ n: number }>(
             await tx.execute(sql`select nextval(${sql.raw(`'${crewSeq.seqName}'`)})::int as n`),
-          );
-          const crewId = `${day}-${n}`;
+          )[0];
+          if (!seq) throw new Error('crew_seq returned no row');
+          const crewId = `${day}-${seq.n}`;
           const jb = input.jailbreakTarget ? { target: st.get(input.jailbreakTarget)! } : undefined;
           const r = need(
             openCrew(ctx, crewId, info(input.chogId), st.get(input.chogId)!, input.offerKey, input.slot, jb),

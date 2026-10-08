@@ -13,7 +13,7 @@
   "scripts": {
     "dev": "npm run dev -w @chog-city/web",
     "build": "npm run build -w @chog-city/web",
-    "typecheck": "tsc -p packages/data --noEmit && npm run typecheck -w @chog-city/web",
+    "typecheck": "tsc -p packages/data --noEmit && tsc -p packages/game --noEmit && tsc -p packages/server --noEmit && npm run typecheck -w @chog-city/web",
     "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --write .",
