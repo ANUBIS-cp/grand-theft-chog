@@ -11,9 +11,9 @@ export async function GET() {
   const address = await currentAddress();
   if (!address) return json({ address: null, chogs: [] });
   const now = Date.now();
-  const mine = await chogsFor(db(), address);
+  const mine = await chogsFor(await db(), address);
   const states = await getStates(
-    db(),
+    await db(),
     mine.map((m) => m.tokenId),
   );
   return json({

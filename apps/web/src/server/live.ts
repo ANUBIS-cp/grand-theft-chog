@@ -19,6 +19,8 @@ function start(): Promise<void> {
 }
 
 export async function subscribe(l: Listener): Promise<() => void> {
+  // The local development database has no LISTEN; the feed just stays quiet there.
+  if ((process.env.DATABASE_URL ?? '').startsWith('pglite:')) return () => {};
   await start();
   listeners.add(l);
   return () => listeners.delete(l);

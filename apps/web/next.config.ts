@@ -5,7 +5,7 @@ const config: NextConfig = {
   output: 'standalone',
   outputFileTracingRoot: fileURLToPath(new URL('../../', import.meta.url)),
   transpilePackages: ['@chog-city/data', '@chog-city/game', '@chog-city/server'],
-  serverExternalPackages: ['postgres'],
+  serverExternalPackages: ['postgres', '@electric-sql/pglite', 'sharp'],
   poweredByHeader: false,
   agentRules: false,
   reactStrictMode: true,

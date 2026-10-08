@@ -67,3 +67,13 @@ describe('state', () => {
     for (let i = 1; i < LEVEL_XP.length; i++) expect(LEVEL_XP[i]).toBeGreaterThan(LEVEL_XP[i - 1]!);
   });
 });
+
+describe('titles', () => {
+  it('are earned from the record', async () => {
+    const { titlesOf } = await import('./titles.ts');
+    const { emptyStats } = await import('./state.ts');
+    expect(titlesOf(emptyStats())).toEqual([]);
+    const names = titlesOf({ ...emptyStats(), bigJobs: 3, jobsWon: 25, jailbreaks: 1 }).map((t) => t.name);
+    expect(names).toEqual(['Vault Cracker', 'Jailbreaker', 'Untouchable']);
+  });
+});

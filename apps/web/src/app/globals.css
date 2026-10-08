@@ -1,5 +1,15 @@
 @import 'tailwindcss';
 
+/* Koulen's "1" looks like a capital I, which turns "Chog #1476" into "#I476". Digits come from Anton
+   (similar condensed shape, a clear 1); letters stay Koulen. Anton: SIL Open Font License. */
+@font-face {
+  font-family: 'Display Digits';
+  src: url('/fonts/anton-digits.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+0030-0039;
+}
+
 /* Only our tokens: the default Tailwind palette is switched off. */
 @theme {
   --color-*: initial;
@@ -18,7 +28,7 @@
   --color-white: #ffffff;
   --color-transparent: transparent;
 
-  --font-display: var(--font-koulen), 'Impact', sans-serif;
+  --font-display: 'Display Digits', var(--font-koulen), 'Impact', sans-serif;
   --font-sans: var(--font-archivo), 'Helvetica Neue', Arial, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
@@ -59,3 +69,16 @@
     }
   }
 }
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+/* Centring uses the `translate` property (Tailwind v4), so this only adds the slide; it never re-centres. */

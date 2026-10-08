@@ -30,7 +30,9 @@ export async function POST(req: Request) {
     return error('BAD_MESSAGE');
 
   // The nonce is single-use and only valid for 15 minutes.
-  const used = await db()
+  const used = await (
+    await db()
+  )
     .delete(authNonces)
     .where(
       and(eq(authNonces.nonce, fields.nonce), gt(authNonces.createdAt, new Date(Date.now() - 15 * 60_000))),

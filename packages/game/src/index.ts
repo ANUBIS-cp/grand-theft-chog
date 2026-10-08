@@ -11,3 +11,4 @@ export * from './info.ts';
 export * from './crew.ts';
 export * from './turf.ts';
 export * from './play.ts';
+export * from './titles.ts';

@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   const body = Move.safeParse(await req.json().catch(() => null));
   if (!body.success) return error('BAD_REQUEST');
   const now = Date.now();
-  const r = await applyMove(db(), address, body.data as MoveInput, now);
+  const r = await applyMove(await db(), address, body.data as MoveInput, now);
   if (!r.ok) return json(r, { status: 409 });
   return json({
     ok: true,

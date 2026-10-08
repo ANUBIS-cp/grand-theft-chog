@@ -17,7 +17,9 @@ const Body = z.object({ player: z.string().refine((a) => isAddress(a), 'not an a
 export async function GET() {
   const owner = await currentAddress();
   if (!owner) return error('NOT_LOGGED_IN', 401);
-  const rows = await db()
+  const rows = await (
+    await db()
+  )
     .select({ player: delegations.player, createdAt: delegations.createdAt })
     .from(delegations)
     .where(eq(delegations.owner, owner));
@@ -32,7 +34,12 @@ export async function POST(req: Request) {
   if (!body.success) return error('BAD_REQUEST');
   const player = body.data.player.toLowerCase();
   if (player === owner) return error('SAME_WALLET');
-  await db().insert(delegations).values({ owner, player, signature: 'session' }).onConflictDoNothing();
+  await (
+    await db()
+  )
+    .insert(delegations)
+    .values({ owner, player, signature: 'session' })
+    .onConflictDoNothing();
   return json({ ok: true });
 }
 
@@ -41,7 +48,9 @@ export async function DELETE(req: Request) {
   if (!owner) return error('NOT_LOGGED_IN', 401);
   const body = Body.safeParse(await req.json().catch(() => null));
   if (!body.success) return error('BAD_REQUEST');
-  await db()
+  await (
+    await db()
+  )
     .delete(delegations)
     .where(and(eq(delegations.owner, owner), eq(delegations.player, body.data.player.toLowerCase())));
   return json({ ok: true });

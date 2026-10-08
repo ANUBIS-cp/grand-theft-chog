@@ -13,9 +13,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isChogId(id)) return error('UNKNOWN_CHOG', 404);
   const now = Date.now();
   const [states, owner, recent] = await Promise.all([
-    getStates(db(), [id]),
-    ownerOf(db(), id),
-    db()
+    getStates(await db(), [id]),
+    ownerOf(await db(), id),
+    (await db())
       .select()
       .from(events)
       .where(or(eq(events.chogId, id), eq(events.target, id)))

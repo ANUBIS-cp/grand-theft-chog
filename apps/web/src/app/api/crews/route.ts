@@ -8,7 +8,9 @@ export const dynamic = 'force-dynamic';
 
 /** Today's open crews, newest first. */
 export async function GET() {
-  const rows = await db()
+  const rows = await (
+    await db()
+  )
     .select()
     .from(crews)
     .where(and(eq(crews.day, dayOf(Date.now())), eq(crews.status, 'open')))

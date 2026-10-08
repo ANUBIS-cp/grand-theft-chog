@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const now = Date.now();
   const day = dayOf(now);
-  const row = await ensureDay(db(), day);
+  const row = await ensureDay(await db(), day);
   const offers = fullBoard(day, activeEvents(now)).map((o) => ({
     key: o.key,
     district: o.district,

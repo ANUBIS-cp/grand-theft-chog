@@ -10,9 +10,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   if (!allow(`nonce:${clientIp(req)}`, 10, 0.5)) return error('SLOW_DOWN', 429);
   const nonce = generateSiweNonce();
-  await db()
-    .delete(authNonces)
-    .where(lt(authNonces.createdAt, new Date(Date.now() - 15 * 60_000)));
-  await db().insert(authNonces).values({ nonce });
+  await (await db()).delete(authNonces).where(lt(authNonces.createdAt, new Date(Date.now() - 15 * 60_000)));
+  await (await db()).insert(authNonces).values({ nonce });
   return json({ nonce });
 }

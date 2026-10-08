@@ -11,7 +11,9 @@ const hash = (v: string) => createHash('sha256').update(v).digest('hex');
 export async function createSession(address: string): Promise<void> {
   const value = randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + DAYS * 86_400_000);
-  await db()
+  await (
+    await db()
+  )
     .insert(sessions)
     .values({ idHash: hash(value), address: address.toLowerCase(), expiresAt });
   (await cookies()).set(COOKIE, value, {
@@ -27,7 +29,9 @@ export async function createSession(address: string): Promise<void> {
 export async function currentAddress(): Promise<string | null> {
   const value = (await cookies()).get(COOKIE)?.value;
   if (!value) return null;
-  const [s] = await db()
+  const [s] = await (
+    await db()
+  )
     .select({ address: sessions.address })
     .from(sessions)
     .where(and(eq(sessions.idHash, hash(value)), gt(sessions.expiresAt, new Date())));
@@ -37,9 +41,6 @@ export async function currentAddress(): Promise<string | null> {
 export async function endSession(): Promise<void> {
   const jar = await cookies();
   const value = jar.get(COOKIE)?.value;
-  if (value)
-    await db()
-      .delete(sessions)
-      .where(eq(sessions.idHash, hash(value)));
+  if (value) await (await db()).delete(sessions).where(eq(sessions.idHash, hash(value)));
   jar.delete(COOKIE);
 }
