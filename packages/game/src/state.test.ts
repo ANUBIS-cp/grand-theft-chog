@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HOUR, MOVES_PER_DAY } from './constants.ts';
+import { HOUR, JAIL_BASE_HOURS, JAIL_HOURS_PER_STAR, LEVEL_XP, MOVES_PER_DAY } from './constants.ts';
 import {
   addWanted,
   currentWanted,
@@ -48,20 +48,22 @@ describe('state', () => {
     expect(addWanted(newChogState(1, T0), -3, T0).wanted).toBe(0);
   });
 
-  it('jails for 2 hours plus 1 per star and clears the stars', () => {
+  it('jails for the base time plus 1 hour per star and clears the stars', () => {
+    const hours = JAIL_BASE_HOURS + 3 * JAIL_HOURS_PER_STAR;
     const s = sendToJail(addWanted(newChogState(1, T0), 3, T0), T0);
-    expect(s.jailUntil).toBe(T0 + 5 * HOUR);
+    expect(s.jailUntil).toBe(T0 + hours * HOUR);
     expect(s.wanted).toBe(0);
-    expect(s.stats.jailHours).toBe(5);
-    expect(refresh(s, T0 + 5 * HOUR).jailUntil).toBe(0);
+    expect(s.stats.jailHours).toBe(hours);
+    expect(refresh(s, T0 + hours * HOUR).jailUntil).toBe(0);
   });
 
   it('levels up at the XP table', () => {
-    expect(levelOf(29)).toBe(1);
-    expect(levelOf(30)).toBe(2);
-    expect(levelOf(1830)).toBe(10);
+    expect(levelOf(LEVEL_XP[1] - 1)).toBe(1);
+    expect(levelOf(LEVEL_XP[1])).toBe(2);
+    expect(levelOf(LEVEL_XP[9])).toBe(10);
     expect(levelOf(99_999)).toBe(10);
-    expect(xpToNext(25)).toBe(5);
-    expect(xpToNext(5000)).toBe(0);
+    expect(xpToNext(LEVEL_XP[1] - 5)).toBe(5);
+    expect(xpToNext(99_999)).toBe(0);
+    for (let i = 1; i < LEVEL_XP.length; i++) expect(LEVEL_XP[i]).toBeGreaterThan(LEVEL_XP[i - 1]!);
   });
 });

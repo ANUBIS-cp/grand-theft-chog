@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TURF_TOP_CHOGS_COUNTED as TOP } from './constants.ts';
 import { flipTurf, turfScores } from './turf.ts';
 import type { GameEvent } from './types.ts';
 
@@ -26,11 +27,11 @@ const job = (
 });
 
 describe('turf', () => {
-  it('counts only the best 15 Chogs per gang per district', () => {
+  it("counts only each gang's best Chogs per district", () => {
     const big = Array.from({ length: 40 }, (_, i) => job(i + 1, 'lazoor', 'lemon-row', 2)); // 40 Chogs x 2
-    const small = Array.from({ length: 12 }, (_, i) => job(100 + i, 'mcga', 'lemon-row', 6)); // 12 Chogs x 6
+    const small = Array.from({ length: TOP }, (_, i) => job(100 + i, 'mcga', 'lemon-row', 3)); // a focused small gang
     const s = turfScores([...big, ...small]);
-    expect(s['lemon-row']).toEqual({ lazoor: 30, mcga: 72 });
+    expect(s['lemon-row']).toEqual({ lazoor: TOP * 2, mcga: TOP * 3 });
   });
 
   it("adds a Chog's jobs together and ignores failures and gangless Chogs", () => {

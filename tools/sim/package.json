@@ -1,0 +1,13 @@
+{
+  "name": "@chog-city/sim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sim": "tsx src/run.ts"
+  },
+  "dependencies": {
+    "@chog-city/data": "*",
+    "@chog-city/game": "*"
+  }
+}

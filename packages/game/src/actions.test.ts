@@ -1,7 +1,15 @@
 import { CHOGS, getChog, gangOptions } from '@chog-city/data';
 import { describe, expect, it } from 'vitest';
 import { arrest, bailCost, chooseGang, doSoloJob, payBail, release, rob } from './actions.ts';
-import { HOUR, MOVES_PER_DAY, ROB } from './constants.ts';
+import {
+  ARREST,
+  BAIL_CASH_PER_HOUR,
+  HOUR,
+  JAIL_BASE_HOURS,
+  JAIL_HOURS_PER_STAR,
+  MOVES_PER_DAY,
+  ROB,
+} from './constants.ts';
 import { roll, rollLabel } from './dice.ts';
 import { infoOf } from './info.ts';
 import { jobOdds, robOdds } from './odds.ts';
@@ -48,8 +56,8 @@ describe('solo jobs', () => {
     });
     const out = mustOk(doSoloJob(ctxAt(T0, seed), tech.info, tech.state, ATM));
     expect(out.state.cash).toBe(100);
-    // one star from failing, then jail clears it: 2 h + 1 h per star
-    expect(out.state.jailUntil).toBe(T0 + 3 * HOUR);
+    // one star from failing, then jail clears it
+    expect(out.state.jailUntil).toBe(T0 + (JAIL_BASE_HOURS + JAIL_HOURS_PER_STAR) * HOUR);
     expect(out.state.wanted).toBe(0);
     expect(out.state.stats.jobsLost).toBe(1);
   });
@@ -221,28 +229,33 @@ describe('arrests and bail', () => {
     ).toEqual({ ok: false, error: 'TARGET_NOT_WANTED' });
   });
 
-  it('jails the target and pays 25 per star', () => {
+  it('jails the target and pays a bounty per star', () => {
     const seed = seedWhere(rollLabel('arrest', guard.info.id, 0), (r) => r <= 61);
     const out = mustOk(
       arrest(ctxAt(T0, seed), guard.info, guard.state, crook.info, addWanted(crook.state, 4, T0), {
         sameOwner: false,
       }),
     );
-    expect(out.attacker.cash).toBe(100 + 4 * 25);
-    expect(out.target.jailUntil).toBe(T0 + 6 * HOUR);
+    expect(out.attacker.cash).toBe(100 + 4 * ARREST.bountyPerStar);
+    expect(out.target.jailUntil).toBe(T0 + (JAIL_BASE_HOURS + 4 * JAIL_HOURS_PER_STAR) * HOUR);
     expect(out.target.wanted).toBe(0);
   });
 
-  it('charges 50 cash per started hour and lets anyone pay', () => {
-    const jailed = sendToJail(addWanted(crook.state, 1, T0), T0); // 3 hours
-    expect(bailCost(jailed, T0 + 30 * 60_000)).toBe(150);
-    expect(payBail(ctxAt(), guard.state, jailed)).toEqual({ ok: false, error: 'NOT_ENOUGH_CASH' });
+  it('charges per started hour and lets anyone pay', () => {
+    const jailed = sendToJail(addWanted(crook.state, 1, T0), T0);
+    const hours = JAIL_BASE_HOURS + JAIL_HOURS_PER_STAR;
+    const cost = hours * BAIL_CASH_PER_HOUR; // half an hour in, every hour is still a started hour
+    expect(bailCost(jailed, T0 + 30 * 60_000)).toBe(cost);
+    expect(payBail(ctxAt(), { ...guard.state, cash: 0 }, jailed)).toEqual({
+      ok: false,
+      error: 'NOT_ENOUGH_CASH',
+    });
     const rich = { ...guard.state, cash: 500 };
     const out = mustOk(payBail(ctxAt(), rich, jailed));
-    expect(out.payer.cash).toBe(350);
+    expect(out.payer.cash).toBe(500 - cost);
     expect(out.target.jailUntil).toBe(0);
     const self = mustOk(payBail(ctxAt(), { ...jailed, cash: 400 }, { ...jailed, cash: 400 }));
-    expect(self.target.cash).toBe(250);
+    expect(self.target.cash).toBe(400 - cost);
     expect(self.payer).toEqual(self.target);
     expect(mustOk(release(ctxAt(), jailed, { chogId: 0, method: 'chog', cost: 30 })).target.jailUntil).toBe(
       0,

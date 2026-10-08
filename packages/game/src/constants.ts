@@ -24,7 +24,7 @@ export const MAX_WANTED = 5;
 /** One star drops off every 6 hours. */
 export const WANTED_DECAY_MS = 6 * HOUR;
 /** Jail time = base + per star (stars counted before the arrest). */
-export const JAIL_BASE_HOURS = 2;
+export const JAIL_BASE_HOURS = 1;
 export const JAIL_HOURS_PER_STAR = 1;
 /** Cash bail: this much per started hour left. */
 export const BAIL_CASH_PER_HOUR = 50;
@@ -43,21 +43,21 @@ export const ROB = {
   maxTimesRobbedPerDayInactive: 1,
   wantedOnSuccess: 1,
   wantedOnFail: 2,
-  jailChanceOnFail: 40,
+  jailChanceOnFail: 30,
 } as const;
 
 export const ARREST = {
   minTargetWanted: 3,
   baseOdds: 60,
-  bountyPerStar: 25,
+  bountyPerStar: 15,
 } as const;
 
 /** XP needed to reach each level (index 0 = level 1). */
-export const LEVEL_XP = [0, 30, 80, 160, 280, 450, 680, 980, 1360, 1830] as const;
+export const LEVEL_XP = [0, 40, 120, 260, 480, 780, 1180, 1700, 2350, 3150] as const;
 export const MAX_LEVEL = LEVEL_XP.length;
 export const XP = { legal: 5, solo: 10, crew: 25, big: 50, rob: 8, arrest: 12 } as const;
 /** A failed job still teaches something. */
 export const XP_ON_FAIL_SHARE = 0.5;
 
-export const TURF_TOP_CHOGS_COUNTED = 15;
+export const TURF_TOP_CHOGS_COUNTED = 5;
 export const GANG_SWITCH_COOLDOWN_DAYS = 7;

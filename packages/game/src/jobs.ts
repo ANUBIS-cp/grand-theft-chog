@@ -53,7 +53,7 @@ const solo = (
   turf: 2,
   wantedOnSuccess: 1,
   wantedOnFail: 1,
-  jailChanceOnFail: 30,
+  jailChanceOnFail: 25,
   minLevel: 1,
   ...t,
 });
@@ -66,7 +66,7 @@ const crew = (
   turf: t.slots.length >= 5 ? 15 : 6,
   wantedOnSuccess: t.slots.length >= 5 ? 2 : 1,
   wantedOnFail: 2,
-  jailChanceOnFail: t.slots.length >= 5 ? 60 : 50,
+  jailChanceOnFail: t.slots.length >= 5 ? 45 : 35,
   minLevel: t.slots.length >= 5 ? 5 : 2,
   ...t,
 });
@@ -97,7 +97,7 @@ export const JOBS: readonly JobTemplate[] = [
     district: 'mon-square',
     slots: [s('laser'), s('tech'), s('stealth'), s('runner'), s('muscle')],
     helps: ['blade'],
-    baseOdds: 45,
+    baseOdds: 55,
     pay: 1500,
   }),
   // Purple Hill: rich area

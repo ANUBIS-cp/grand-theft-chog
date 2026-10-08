@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { findOffer } from './board.ts';
-import { HOUR, MOVES_PER_DAY } from './constants.ts';
+import { HOUR, LEVEL_XP, MOVES_PER_DAY } from './constants.ts';
 import {
   clearExpired,
   joinCrew,
@@ -24,7 +24,7 @@ function mustOk<T>(r: { ok: true; value: T } | { ok: false; error: string }): T 
 
 // "Con a whale": slots Smooth, Money; level 2 needed.
 const WHALE = 'con-whale@purple-hill';
-const lvl2 = (s: ChogState): ChogState => ({ ...s, xp: 30 });
+const lvl2 = (s: ChogState): ChogState => ({ ...s, xp: LEVEL_XP[1] });
 const smooth = player(chogWith('smooth', ['money']));
 const money = player(chogWith('money', ['smooth']));
 smooth.state = lvl2(smooth.state);
