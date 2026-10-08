@@ -24,3 +24,9 @@ export function displayName(chog: Chog): string {
 export function metadataIdFor(tokenId: number): number {
   return ((tokenId - 1 + COLLECTION.offset) % COLLECTION.supply) + 1;
 }
+
+/** The token ID behind the number people see ("Chog #1595" -> token 134). */
+export function tokenIdFor(metadataId: number): number {
+  const n = COLLECTION.supply;
+  return ((((metadataId - 1 - COLLECTION.offset) % n) + n) % n) + 1;
+}

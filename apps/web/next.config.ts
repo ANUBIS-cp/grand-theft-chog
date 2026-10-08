@@ -9,6 +9,7 @@ const config: NextConfig = {
   poweredByHeader: false,
   agentRules: false,
   reactStrictMode: true,
+  devIndicators: false,
   // Images live on the server; in local development, fetch them from there.
   async rewrites() {
     return process.env.NODE_ENV === 'development'

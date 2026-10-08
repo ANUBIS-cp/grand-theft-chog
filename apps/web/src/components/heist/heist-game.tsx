@@ -1,0 +1,651 @@
+'use client';
+import type { SkillId } from '@chog-city/data';
+import {
+  POWERS,
+  TPS,
+  buildLevel,
+  startHeist,
+  step,
+  type Dir,
+  type HeistEvent,
+  type HeistState,
+  type Input,
+  type PowerId,
+  type VaultDef,
+} from '@chog-city/game/heist';
+import { ArrowClockwise, SpeakerHigh, SpeakerSlash, Vault } from '@phosphor-icons/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SkillIcon } from '@/components/skill-icons';
+import { cn } from '@/lib/cn';
+import { chogImage } from '@/lib/images';
+import { Fx } from './fx';
+import { VaultRenderer, snapshot, type Prev } from './render';
+import { Sound } from './sound';
+
+export interface HeistChog {
+  id: number;
+  name: string;
+}
+
+export interface HeistGameProps {
+  vault: VaultDef;
+  player: HeistChog & { gang: string | null; powers: PowerId[] };
+  guards: HeistChog[];
+  owner: { name: string; color: string; ink: string };
+}
+
+const ICON: Record<PowerId, SkillId> = {
+  hide: 'stealth',
+  zap: 'laser',
+  sprint: 'runner',
+  distract: 'clown',
+  hack: 'tech',
+  tackle: 'muscle',
+  bribe: 'smooth',
+  magnet: 'money',
+  blink: 'magic',
+  scare: 'undead',
+  lockpick: 'jailbird',
+};
+
+const KEYS: Record<string, Dir> = {
+  ArrowUp: 0,
+  KeyW: 0,
+  ArrowRight: 1,
+  KeyD: 1,
+  ArrowDown: 2,
+  KeyS: 2,
+  ArrowLeft: 3,
+  KeyA: 3,
+};
+const POWER_KEYS: Record<string, number> = { Digit1: 0, KeyJ: 0, Space: 0, Digit2: 1, KeyK: 1 };
+
+interface Hud {
+  phase: HeistState['phase'];
+  started: boolean;
+  seconds: number;
+  carried: number;
+  used: boolean[];
+  active: (number | null)[];
+  score: number;
+  spotted: boolean;
+  caughtBy: number | null;
+}
+
+const money = (n: number) => `$${n.toLocaleString('en-US')}`;
+const clock = (ticks: number) => {
+  const s = Math.ceil(ticks / TPS);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+
+export function HeistGame({ vault, player, guards, owner }: HeistGameProps) {
+  const level = useMemo(() => buildLevel(vault), [vault]);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const game = useRef<{
+    s: HeistState;
+    prev: Prev;
+    fx: Fx;
+    r: VaultRenderer | null;
+    started: boolean;
+    held: Dir[];
+    queued: { d: Dir; until: number } | null;
+    press: number;
+    inputs: Input[];
+    endAt: number;
+  } | null>(null);
+  const sound = useRef<Sound | null>(null);
+  const [hud, setHud] = useState<Hud | null>(null);
+  const [muted, setMuted] = useState(false);
+  const [showEnd, setShowEnd] = useState(false);
+  const [joy, setJoy] = useState<{ x: number; y: number; dx: number; dy: number } | null>(null);
+
+  const fresh = useCallback(() => {
+    const s = startHeist(level, player.powers);
+    return { s, prev: snapshot(s), fx: new Fx(), started: false, held: [], queued: null, press: -1, inputs: [], endAt: 0 };
+  }, [level, player.powers]);
+
+  const restart = useCallback(() => {
+    const g = game.current;
+    if (!g) return;
+    sound.current?.alarmOff();
+    Object.assign(g, fresh());
+    setShowEnd(false);
+  }, [fresh]);
+
+  // Set up the renderer, the loop and the images once.
+  useEffect(() => {
+    const cv = canvasRef.current;
+    const stage = stageRef.current;
+    if (!cv || !stage) return;
+    sound.current ??= new Sound();
+    try {
+      const m = localStorage.getItem('heist-muted') === '1';
+      sound.current.setMuted(m);
+      setMuted(m);
+    } catch {}
+    const load = (src: string) => {
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = src;
+      return img;
+    };
+    const images = { player: load(chogImage(player.id, 256)), guards: guards.map((c) => load(chogImage(c.id, 96))) };
+    const r = new VaultRenderer(cv, level, images, { color: owner.color });
+    r.font = getComputedStyle(document.body).getPropertyValue('--font-display').trim() || 'Impact, sans-serif';
+    const g = { ...fresh(), r };
+    game.current = g;
+    for (const img of [images.player, ...images.guards]) img.onload = () => r.faceReady();
+
+    const fit = () => {
+      const box = stage.getBoundingClientRect();
+      r.resize(box.width, box.height);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(stage);
+    void document.fonts?.ready.then(fit);
+
+    let raf = 0;
+    let last = performance.now();
+    let acc = 0;
+    let fxAcc = 0;
+    let lastKey = '';
+    let crackTick = 0;
+    const DT = 1000 / TPS;
+    const frame = (now: number) => {
+      const st = game.current!;
+      const elapsed = Math.min(250, now - last);
+      last = now;
+      const live = st.started && (st.s.phase === 'play' || st.s.phase === 'alarm');
+      if (live) {
+        acc += elapsed;
+        while (acc >= DT && (st.s.phase === 'play' || st.s.phase === 'alarm')) {
+          st.prev = snapshot(st.s);
+          const input = readInput(st);
+          st.inputs.push(input);
+          const sus = st.s.guards.map((x) => x.sus).concat(st.s.cameras.map((c) => c.sus));
+          const ev = step(st.s, level, input);
+          react(st, ev, sus);
+          if (st.s.player.crack >= 0 && ++crackTick % 6 === 0) sound.current?.click();
+          acc -= DT;
+        }
+      } else acc = 0;
+      fxAcc += elapsed;
+      while (fxAcc >= 1000 / 60) {
+        st.fx.tick();
+        fxAcc -= 1000 / 60;
+      }
+      st.r?.draw(st.s, st.prev, live ? acc / DT : 1, st.fx, now);
+      if (st.endAt && now >= st.endAt) {
+        st.endAt = 0;
+        setShowEnd(true);
+      }
+      const p = st.s.player;
+      const next: Hud = {
+        phase: st.s.phase,
+        started: st.started,
+        seconds: st.s.phase === 'alarm' ? Math.ceil(st.s.alarmLeft / TPS) : Math.ceil(st.s.timeLeft / TPS),
+        carried: st.s.carried,
+        used: st.s.powers.map((x) => x.used),
+        active: st.s.powers.map((x) => {
+          const left = { hide: p.hide, sprint: p.sprint, tackle: p.tackle, magnet: p.magnet, hack: st.s.hacked }[x.id as 'hide'];
+          return left ? left : null;
+        }),
+        score: st.s.score,
+        spotted: st.s.spotted,
+        caughtBy: st.s.caughtBy,
+      };
+      const key = JSON.stringify(next);
+      if (key !== lastKey) {
+        lastKey = key;
+        setHud(next);
+      }
+      raf = requestAnimationFrame(frame);
+    };
+
+    const readInput = (st: NonNullable<typeof game.current>): Input => {
+      let d: Dir | -1 = st.held.at(-1) ?? -1;
+      if (d === -1 && st.queued) {
+        d = st.queued.d;
+        if (st.s.tick >= st.queued.until || st.s.player.dir === st.queued.d) st.queued = null;
+      }
+      const p = st.press;
+      st.press = -1;
+      return { d, p };
+    };
+
+    const react = (st: NonNullable<typeof game.current>, ev: HeistEvent[], susBefore: number[]) => {
+      const sfx = sound.current;
+      const rr = st.r!;
+      const t = rr.t;
+      const tileX = (x: number) => x * t + t / 2;
+      const tileY = (y: number) => y * t + t / 2 + rr.lift;
+      const px = rr.X(st.s.player.x);
+      const py = rr.Y(st.s.player.y);
+      const susNow = st.s.guards.map((x) => x.sus).concat(st.s.cameras.map((c) => c.sus));
+      if (st.s.phase === 'play' && susNow.some((v, i) => v > 0 && (susBefore[i] ?? 0) === 0)) sfx?.suspect();
+      for (const e of ev) {
+        switch (e.t) {
+          case 'loot':
+            if (e.kind === 'coin') sfx?.coin();
+            else if (e.kind === 'cash') sfx?.cash();
+            else sfx?.bag();
+            st.fx.burst(tileX(e.x), tileY(e.y), e.kind === 'coin' ? 5 : 12, ['#ffd666', '#fff3b0', '#5fd17e'], e.kind === 'bag' ? 3 : 2);
+            st.fx.float(tileX(e.x), tileY(e.y) - t * 0.3, `+${money(e.value)}`, e.kind === 'coin' ? '#ffd666' : '#7dffa8', e.kind === 'bag');
+            break;
+          case 'safe':
+            sfx?.safe();
+            st.fx.burst(tileX(e.x), tileY(e.y), 40, ['#ffd666', '#fff3b0', '#ffffff', '#5fd17e'], 4, 0.15);
+            st.fx.float(tileX(e.x), tileY(e.y) - t * 0.5, `+${money(e.value)}`, '#ffd666', true);
+            st.fx.flash = 0.35;
+            st.fx.flashColor = '#ffd666';
+            st.fx.shake = 6;
+            break;
+          case 'alarm':
+            sfx?.alarmOn();
+            st.fx.shake = 8;
+            st.fx.flash = 0.35;
+            st.fx.flashColor = '#ff2d55';
+            break;
+          case 'calm':
+            sfx?.alarmOff();
+            st.fx.float(px, py - t * 0.6, 'PAID OFF', '#7dffa8', true);
+            break;
+          case 'pass': {
+            const gd = st.s.guards[e.i]!;
+            st.fx.float(rr.X(gd.x), rr.Y(gd.y) - t * 0.7, 'LOOKED AWAY', '#7dffa8');
+            break;
+          }
+          case 'power':
+            sfx?.power();
+            st.fx.ring(px, py, t * 1.6, '#ff4f9a');
+            st.fx.float(px, py - t * 0.7, POWERS[e.id].name.toUpperCase(), '#ff8fc0');
+            break;
+          case 'zap': {
+            sfx?.zap();
+            const ex = tileX(e.tx);
+            const ey = tileY(e.ty);
+            st.fx.beam(px, py - t * 0.1, ex, ey, '#e040fb');
+            st.fx.burst(ex, ey, 14, ['#e040fb', '#ffffff'], 2.5);
+            break;
+          }
+          case 'blink':
+            st.fx.burst(tileX(e.fx), tileY(e.fy), 16, ['#b388ff', '#ffffff'], 2.5, 0);
+            st.fx.burst(tileX(e.tx), tileY(e.ty), 16, ['#b388ff', '#ffffff'], 2.5, 0);
+            st.fx.ring(tileX(e.tx), tileY(e.ty), t * 1.2, '#b388ff');
+            break;
+          case 'noise':
+            st.fx.ring(tileX(e.x), tileY(e.y), t * 2.4, '#ffffff', 50);
+            st.fx.float(tileX(e.x), tileY(e.y) - t * 0.4, 'HEY!', '#ffffff');
+            break;
+          case 'stun':
+            sfx?.thud();
+            st.fx.shake = Math.max(st.fx.shake, 4);
+            break;
+          case 'escaped':
+            sfx?.escaped();
+            st.fx.burst(px, py, 50, ['#ffd666', '#7dffa8', '#ffffff', '#ff4f9a'], 4, 0.1);
+            st.endAt = performance.now() + 700;
+            break;
+          case 'busted':
+            sfx?.busted();
+            st.fx.shake = 14;
+            st.fx.flash = 0.5;
+            st.fx.flashColor = '#ff2d55';
+            st.endAt = performance.now() + 900;
+            break;
+        }
+      }
+    };
+
+    raf = requestAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      sound.current?.alarmOff();
+    };
+  }, [level, player.id, guards, owner.color, fresh]);
+
+  // Keyboard.
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      const g = game.current;
+      if (!g || e.metaKey || e.ctrlKey || e.altKey) return;
+      if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      const d = KEYS[e.code];
+      const pw = POWER_KEYS[e.code];
+      if (e.code === 'KeyR' && (g.s.phase === 'escaped' || g.s.phase === 'busted')) {
+        restart();
+        return;
+      }
+      if (d === undefined && pw === undefined) return;
+      e.preventDefault();
+      sound.current?.unlock();
+      if (d !== undefined) {
+        g.started = true;
+        if (!g.held.includes(d)) g.held.push(d);
+        g.queued = { d, until: g.s.tick + 8 };
+      } else if (pw !== undefined && g.started) g.press = pw;
+    };
+    const up = (e: KeyboardEvent) => {
+      const g = game.current;
+      const d = KEYS[e.code];
+      if (!g || d === undefined) return;
+      g.held = g.held.filter((x) => x !== d);
+    };
+    const blur = () => {
+      if (game.current) game.current.held = [];
+    };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', blur);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', blur);
+    };
+  }, [restart]);
+
+  // Touch and mouse: drag anywhere to move, like a joystick that follows your finger.
+  const drag = useRef<{ id: number; ax: number; ay: number; t0: number; d: Dir | -1; ox: number; oy: number } | null>(null);
+  const onPointerDown = (e: React.PointerEvent) => {
+    const g = game.current;
+    if (!g || g.s.phase === 'escaped' || g.s.phase === 'busted') return;
+    sound.current?.unlock();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    drag.current = { id: e.pointerId, ax: e.clientX, ay: e.clientY, t0: performance.now(), d: -1, ox: box.left, oy: box.top };
+    setJoy({ x: e.clientX - box.left, y: e.clientY - box.top, dx: 0, dy: 0 });
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const dr = drag.current;
+    const g = game.current;
+    if (!dr || !g || dr.id !== e.pointerId) return;
+    let dx = e.clientX - dr.ax;
+    let dy = e.clientY - dr.ay;
+    const len = Math.hypot(dx, dy);
+    const MAX = 34;
+    if (len > MAX) {
+      dr.ax += (dx / len) * (len - MAX);
+      dr.ay += (dy / len) * (len - MAX);
+      dx = e.clientX - dr.ax;
+      dy = e.clientY - dr.ay;
+    }
+    if (Math.hypot(dx, dy) > 10) {
+      const d: Dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : dy > 0 ? 2 : 0;
+      if (d !== dr.d) {
+        dr.d = d;
+        g.started = true;
+        g.held = [d];
+        g.queued = { d, until: g.s.tick + 8 };
+      }
+    }
+    setJoy({ x: dr.ax - dr.ox, y: dr.ay - dr.oy, dx, dy });
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    const dr = drag.current;
+    const g = game.current;
+    if (!dr || !g || dr.id !== e.pointerId) return;
+    g.held = [];
+    drag.current = null;
+    setJoy(null);
+  };
+
+  const usePower = (i: number) => {
+    const g = game.current;
+    if (!g) return;
+    sound.current?.unlock();
+    if (!g.started) return;
+    g.press = i;
+  };
+
+  const toggleMute = () => {
+    const m = !muted;
+    setMuted(m);
+    sound.current?.setMuted(m);
+    try {
+      localStorage.setItem('heist-muted', m ? '1' : '0');
+    } catch {}
+  };
+
+  const phase = hud?.phase ?? 'play';
+  const alarm = phase === 'alarm';
+  const over = phase === 'escaped' || phase === 'busted';
+  const caughtBy = hud?.caughtBy != null ? guards[hud.caughtBy % guards.length] : null;
+
+  return (
+    <div className="flex h-full flex-col bg-[#0b0918] text-white">
+      {/* Top bar */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pb-1.5 pt-2 sm:px-4">
+        <div
+          className="flex min-w-0 items-center gap-1.5 justify-self-start rounded-[6px] border-2 border-ink py-1 pl-1.5 pr-2 shadow-[2px_2px_0_0_#000]"
+          style={{ background: owner.color, color: owner.ink }}
+          title={`You're robbing ${owner.name}`}
+        >
+          <Vault size={16} weight="fill" className="shrink-0" />
+          <span className="truncate font-display text-[16px] uppercase leading-none pt-0.5">{owner.name}</span>
+        </div>
+        <div
+          className={cn('font-display text-[32px] leading-none tabular-nums sm:text-[36px]', alarm ? 'text-[#ff4d6d]' : 'text-white')}
+          aria-label={alarm ? 'Seconds to get out' : 'Time left'}
+        >
+          {alarm ? `0:${String(hud?.seconds ?? 0).padStart(2, '0')}` : clock(hud ? hud.seconds * TPS : level.ticks)}
+        </div>
+        <div className="flex items-center gap-1 justify-self-end">
+          <div className="rounded-[6px] border-2 border-ink bg-[#ffd666] px-2 pb-0.5 pt-1 font-display text-[22px] leading-none text-ink tabular-nums shadow-[2px_2px_0_0_#000]">
+            {money(hud?.carried ?? 0)}
+          </div>
+          <button
+            onClick={toggleMute}
+            className="grid h-9 w-9 place-items-center rounded-full text-white/60 hover:text-white"
+            aria-label={muted ? 'Sound on' : 'Sound off'}
+          >
+            {muted ? <SpeakerSlash size={20} weight="bold" /> : <SpeakerHigh size={20} weight="bold" />}
+          </button>
+        </div>
+      </div>
+
+      {/* The vault */}
+      <div
+        ref={stageRef}
+        className="relative min-h-0 flex-1 touch-none select-none"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        <canvas ref={canvasRef} className="absolute inset-0" />
+        {alarm && (
+          <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
+            <div className="rounded-[6px] border-2 border-ink bg-[#ff2d55] px-3 pb-0.5 pt-1.5 font-display text-[18px] uppercase leading-none tracking-wide text-white shadow-[2px_2px_0_0_#000]">
+              Alarm! Get out
+            </div>
+          </div>
+        )}
+        {joy && (
+          <div className="pointer-events-none absolute" style={{ left: joy.x, top: joy.y }}>
+            <div className="absolute -left-9 -top-9 h-[72px] w-[72px] rounded-full border-2 border-white/30 bg-white/5" />
+            <div
+              className="absolute -left-4 -top-4 h-8 w-8 rounded-full border-2 border-white/70 bg-white/25"
+              style={{ transform: `translate(${joy.dx}px, ${joy.dy}px)` }}
+            />
+          </div>
+        )}
+        {hud && !hud.started && !over && <StartHint player={player} />}
+        {over && showEnd && hud && (
+          <EndCard
+            escaped={phase === 'escaped'}
+            score={hud.score}
+            carried={hud.carried}
+            clean={!hud.spotted}
+            owner={owner.name}
+            caughtBy={caughtBy}
+            onAgain={restart}
+          />
+        )}
+      </div>
+
+      {/* Powers */}
+      <div className="px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 sm:px-4">
+        {player.powers.some((id) => POWERS[id].passive) && (
+          <p className="mb-1.5 flex flex-wrap gap-x-3 text-[12px] text-white/60">
+            {player.powers
+              .filter((id) => POWERS[id].passive)
+              .map((id) => (
+                <span key={id} className="inline-flex items-center gap-1">
+                  <SkillIcon skill={ICON[id]} width={16} height={16} />
+                  <strong className="text-white/85">{POWERS[id].name}:</strong> {POWERS[id].does}
+                </span>
+              ))}
+          </p>
+        )}
+        <div className="grid auto-cols-fr grid-flow-col gap-2">
+          {player.powers.map((id, i) => {
+            const def = POWERS[id];
+            if (def.passive) return null;
+            const used = hud?.used[i] ?? false;
+            const active = hud?.active[i] ?? null;
+            const full = id === 'hack' ? 8 * TPS : id === 'tackle' || id === 'magnet' ? 5 * TPS : 3 * TPS;
+            return (
+              <button
+                key={id}
+                onPointerDown={() => usePower(i)}
+                onClick={(e) => e.detail === 0 && usePower(i)}
+                disabled={used || over}
+                title={def.does}
+                className={cn(
+                  'relative flex min-w-0 items-center gap-2 overflow-hidden rounded-[10px] border-2 border-ink p-1.5 pr-2 text-left transition active:translate-x-[2px] active:translate-y-[2px] active:shadow-none',
+                  used && !active ? 'bg-white/10 text-white/40' : 'bg-pink text-ink shadow-[3px_3px_0_0_#000]',
+                )}
+              >
+                <span
+                  className={cn(
+                    'grid h-10 w-10 shrink-0 place-items-center rounded-[7px] border-2 border-ink',
+                    used && !active ? 'bg-transparent' : 'bg-paper-raised',
+                  )}
+                >
+                  <SkillIcon skill={ICON[id]} width={26} height={26} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline justify-between gap-1">
+                    <span className="truncate pt-0.5 font-display text-[19px] uppercase leading-none">{def.name}</span>
+                    <kbd className="hidden font-mono text-[10px] opacity-60 sm:inline">{i + 1}</kbd>
+                  </span>
+                  <span className="mt-0.5 line-clamp-2 text-[11px] leading-[1.2] opacity-80">
+                    {used && !active ? 'Used' : def.does}
+                  </span>
+                </span>
+                {active && (
+                  <span className="absolute bottom-0 left-0 h-1 bg-ink" style={{ width: `${Math.min(100, (active / full) * 100)}%` }} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StartHint({ player }: { player: HeistGameProps['player'] }) {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
+      <div className="flex items-center gap-3 rounded-[10px] border-2 border-ink bg-paper-raised px-3 py-2 text-ink shadow-[3px_3px_0_0_#000]">
+        <img src={chogImage(player.id, 96)} alt="" className="h-9 w-9 rounded-full border-2 border-ink" />
+        <div className="text-[13px] leading-snug">
+          <strong className="block font-display text-[18px] uppercase leading-none">Move to start</strong>
+          <span className="hidden sm:inline">Arrow keys or WASD. </span>
+          <span className="sm:hidden">Drag anywhere. </span>
+          Grab the cash, stay out of the light, get out.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EndCard({
+  escaped,
+  score,
+  carried,
+  clean,
+  owner,
+  caughtBy,
+  onAgain,
+}: {
+  escaped: boolean;
+  score: number;
+  carried: number;
+  clean: boolean;
+  owner: string;
+  caughtBy: HeistChog | null | undefined;
+  onAgain: () => void;
+}) {
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    if (!escaped) return;
+    let raf = 0;
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - t0) / 900);
+      setShown(Math.round(score * (1 - Math.pow(1 - k, 3))));
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [escaped, score]);
+
+  return (
+    <div className="absolute inset-0 z-10 grid place-items-center bg-[#0b0918]/70 p-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-[340px] rounded-[14px] border-2 border-ink bg-paper-raised p-5 text-center text-ink shadow-[5px_5px_0_0_#000]">
+        <div
+          className={cn(
+            'mx-auto inline-block -rotate-3 rounded-[6px] border-[3px] px-4 pb-1 pt-2 font-display text-[44px] uppercase leading-none',
+            escaped ? 'border-cash text-cash' : 'border-jail text-jail',
+          )}
+        >
+          {escaped ? 'Escaped' : 'Busted'}
+        </div>
+        {escaped ? (
+          <>
+            <div className="mt-4 font-display text-[56px] leading-none tabular-nums">{money(shown)}</div>
+            <p className="mt-1 text-[14px] text-ink-soft">taken from {owner}</p>
+            <ul className="mx-auto mt-4 max-w-[240px] space-y-1 text-[14px]">
+              <li className="flex justify-between">
+                <span>Grabbed</span>
+                <span className="font-mono tabular-nums">{money(carried)}</span>
+              </li>
+              <li className={cn('flex justify-between', !clean && 'text-ink-soft line-through')}>
+                <span>Never seen</span>
+                <span className="font-mono">×1.5</span>
+              </li>
+            </ul>
+          </>
+        ) : (
+          <>
+            {caughtBy ? (
+              <div className="mt-4 flex items-center justify-center gap-3">
+                <img src={chogImage(caughtBy.id, 96)} alt="" className="h-14 w-14 rounded-full border-2 border-ink" />
+                <p className="text-left text-[15px] leading-snug">
+                  <strong className="block">{caughtBy.name}</strong>
+                  caught you
+                </p>
+              </div>
+            ) : (
+              <p className="mt-4 text-[15px]">The doors locked before you got out.</p>
+            )}
+            <p className="mt-3 text-[14px] text-ink-soft">You dropped {money(carried)}.</p>
+          </>
+        )}
+        <button
+          onClick={onAgain}
+          className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[8px] border-2 border-ink bg-pink font-display text-[22px] uppercase leading-none text-ink shadow-[3px_3px_0_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+        >
+          <ArrowClockwise size={20} weight="bold" />
+          <span className="pt-1">Again</span>
+        </button>
+        <p className="mt-2 hidden text-[12px] text-ink-soft sm:block">or press R</p>
+      </div>
+    </div>
+  );
+}
