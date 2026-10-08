@@ -8,6 +8,7 @@ import { followTransfers, snapshotOwners } from './owners.ts';
 
 const { db, sql } = connect();
 const client = createPublicClient({
+  chain: monad,
   transport: http(process.env.MONAD_RPC ?? 'https://rpc.monad.xyz', { retryCount: 2, timeout: 15_000 }),
 });
 let stopping = false;
