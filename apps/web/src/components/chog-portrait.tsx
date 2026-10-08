@@ -40,7 +40,7 @@ export function ChogPortrait({
       )}
       style={{ width: w, height: w }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element -- pre-sized on our server */}
+      {/* A plain img on purpose: images are pre-sized on our server, no optimizer needed. */}
       <img
         src={chogImage(id, img as 96 | 256 | 640)}
         alt={name}
