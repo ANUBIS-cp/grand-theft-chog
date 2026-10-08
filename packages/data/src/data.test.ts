@@ -99,3 +99,27 @@ describe('skill and gang tables', () => {
     }
   });
 });
+
+describe('game text', () => {
+  it('fills placeholders and picks lines by number', async () => {
+    const { fill, line } = await import('./copy.ts');
+    expect(fill('{chog} took {loot}.', { chog: 'Chog #12', loot: 40 })).toBe('Chog #12 took 40.');
+    expect(fill('{chog} {typo}', { chog: 'x' })).toBe('x {typo}');
+    expect(line(['a', 'b'], 3)).toBe('b');
+  });
+
+  it('uses no emoji or hype words', async () => {
+    const copy = await import('./copy.ts');
+    const all = JSON.stringify([
+      copy.JOB_LINES,
+      copy.ROB_LINES,
+      copy.ARREST_LINES,
+      copy.BAIL_LINES,
+      copy.TURF_LINES,
+      copy.MISC_LINES,
+    ]);
+    expect(all).not.toMatch(/\p{Extended_Pictographic}/u);
+    expect(all).not.toMatch(/\b(epic|legendary heist|unleash|embark|journey|insane|crazy)\b/i);
+    expect(all).not.toMatch(/!/);
+  });
+});
