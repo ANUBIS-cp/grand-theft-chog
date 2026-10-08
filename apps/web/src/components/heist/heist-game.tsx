@@ -4,6 +4,7 @@ import {
   POWERS,
   TPS,
   buildLevel,
+  encodeInputs,
   startHeist,
   step,
   type Dir,
@@ -27,11 +28,26 @@ export interface HeistChog {
   name: string;
 }
 
+/** What the server says a real hit was worth (it replays the run itself). */
+export interface RealResult {
+  result: 'escaped' | 'busted';
+  carried: number;
+  score: number;
+  moved: number;
+  caughtBy: number | null;
+  jailedUntil: number | null;
+  revenge: boolean;
+}
+
 export interface HeistGameProps {
   vault: VaultDef;
+  /** Defence level; practice runs use the starting level. */
+  tier?: number;
   player: HeistChog & { gang: string | null; powers: PowerId[] };
   guards: HeistChog[];
   owner: { name: string; color: string; ink: string };
+  /** A real hit: the inputs go to the server when it ends, and the card offers a way back. */
+  real?: { myGang: string; finish: (inputs: string) => Promise<RealResult>; onLeave: () => void };
 }
 
 const ICON: Record<PowerId, SkillId> = {
@@ -81,8 +97,12 @@ const clock = (ticks: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-export function HeistGame({ vault, player, guards, owner }: HeistGameProps) {
-  const level = useMemo(() => buildLevel(vault), [vault]);
+export function HeistGame({ vault, tier = 1, player, guards, owner, real }: HeistGameProps) {
+  const level = useMemo(() => buildLevel(vault, tier), [vault, tier]);
+  const [saved, setSaved] = useState<{ result?: RealResult; error?: string } | null>(null);
+  const sentRef = useRef(false);
+  const realRef = useRef(real);
+  realRef.current = real;
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const game = useRef<{
@@ -183,6 +203,13 @@ export function HeistGame({ vault, player, guards, owner }: HeistGameProps) {
       if (st.endAt && now >= st.endAt) {
         st.endAt = 0;
         setShowEnd(true);
+      }
+      if (realRef.current && !sentRef.current && (st.s.phase === 'escaped' || st.s.phase === 'busted')) {
+        sentRef.current = true;
+        realRef.current
+          .finish(encodeInputs(st.inputs))
+          .then((result) => setSaved({ result }))
+          .catch((e: unknown) => setSaved({ error: e instanceof Error ? e.message : 'Could not save the run.' }));
       }
       const p = st.s.player;
       const next: Hud = {
@@ -319,7 +346,7 @@ export function HeistGame({ vault, player, guards, owner }: HeistGameProps) {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       const d = KEYS[e.code];
       const pw = POWER_KEYS[e.code];
-      if (e.code === 'KeyR' && (g.s.phase === 'escaped' || g.s.phase === 'busted')) {
+      if (e.code === 'KeyR' && !realRef.current && (g.s.phase === 'escaped' || g.s.phase === 'busted')) {
         restart();
         return;
       }
@@ -486,6 +513,7 @@ export function HeistGame({ vault, player, guards, owner }: HeistGameProps) {
             owner={owner.name}
             caughtBy={caughtBy}
             onAgain={restart}
+            real={real ? { ...real, saved } : undefined}
           />
         )}
       </div>
@@ -582,6 +610,7 @@ function EndCard({
   owner,
   caughtBy,
   onAgain,
+  real,
 }: {
   escaped: boolean;
   score: number;
@@ -590,20 +619,22 @@ function EndCard({
   owner: string;
   caughtBy: HeistChog | null | undefined;
   onAgain: () => void;
+  real?: { myGang: string; onLeave: () => void; saved: { result?: RealResult; error?: string } | null };
 }) {
   const [shown, setShown] = useState(0);
+  const target = real ? (real.saved?.result?.moved ?? 0) : score;
   useEffect(() => {
     if (!escaped) return;
     let raf = 0;
     const t0 = performance.now();
     const tick = (now: number) => {
       const k = Math.min(1, (now - t0) / 900);
-      setShown(Math.round(score * (1 - Math.pow(1 - k, 3))));
+      setShown(Math.round(target * (1 - Math.pow(1 - k, 3))));
       if (k < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [escaped, score]);
+  }, [escaped, target]);
 
   return (
     <div className="absolute inset-0 z-10 grid place-items-center bg-[#0b0918]/70 p-4 backdrop-blur-[2px]">
@@ -616,10 +647,16 @@ function EndCard({
         >
           {escaped ? 'Escaped' : 'Busted'}
         </div>
-        {escaped ? (
+        {real && !real.saved ? (
+          <p className="mt-5 animate-pulse text-[15px] text-ink-soft">Counting the cash…</p>
+        ) : real?.saved?.error ? (
+          <p className="mt-5 text-[15px] text-jail">{real.saved.error}</p>
+        ) : escaped ? (
           <>
             <div className="mt-4 font-display text-[56px] leading-none tabular-nums">{money(shown)}</div>
-            <p className="mt-1 text-[14px] text-ink-soft">taken from {owner}</p>
+            <p className="mt-1 text-[14px] text-ink-soft">
+              {real ? `moved from ${owner} to ${real.myGang}` : 'Practice run: no real cash moves.'}
+            </p>
             <ul className="mx-auto mt-4 max-w-[240px] space-y-1 text-[14px]">
               <li className="flex justify-between">
                 <span>Grabbed</span>
@@ -629,6 +666,12 @@ function EndCard({
                 <span>Never seen</span>
                 <span className="font-mono">×1.5</span>
               </li>
+              {real?.saved?.result?.revenge && (
+                <li className="flex justify-between font-semibold text-pink-deep">
+                  <span>Revenge</span>
+                  <span className="font-mono">+25%</span>
+                </li>
+              )}
             </ul>
           </>
         ) : (
@@ -644,17 +687,36 @@ function EndCard({
             ) : (
               <p className="mt-4 text-[15px]">The doors locked before you got out.</p>
             )}
-            <p className="mt-3 text-[14px] text-ink-soft">You dropped {money(carried)}.</p>
+            {real ? (
+              <p className="mt-3 text-[14px] leading-snug">
+                Your Chog is in jail for 30 minutes.
+                {real.saved?.result?.moved ? ` ${real.myGang} paid ${owner} a ${money(real.saved.result.moved)} fine.` : ''}
+              </p>
+            ) : (
+              <p className="mt-3 text-[14px] text-ink-soft">You dropped {money(carried)}.</p>
+            )}
           </>
         )}
-        <button
-          onClick={onAgain}
-          className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[8px] border-2 border-ink bg-pink font-display text-[22px] uppercase leading-none text-ink shadow-[3px_3px_0_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
-        >
-          <ArrowClockwise size={20} weight="bold" />
-          <span className="pt-1">Again</span>
-        </button>
-        <p className="mt-2 hidden text-[12px] text-ink-soft sm:block">or press R</p>
+        {real ? (
+          <button
+            onClick={real.onLeave}
+            disabled={!real.saved}
+            className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-[8px] border-2 border-ink bg-pink font-display text-[22px] uppercase leading-none text-ink shadow-[3px_3px_0_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50"
+          >
+            <span className="pt-1">Back to the city</span>
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={onAgain}
+              className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[8px] border-2 border-ink bg-pink font-display text-[22px] uppercase leading-none text-ink shadow-[3px_3px_0_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+            >
+              <ArrowClockwise size={20} weight="bold" />
+              <span className="pt-1">Again</span>
+            </button>
+            <p className="mt-2 hidden text-[12px] text-ink-soft sm:block">or press R</p>
+          </>
+        )}
       </div>
     </div>
   );

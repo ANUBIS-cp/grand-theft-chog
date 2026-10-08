@@ -21,9 +21,9 @@ const check = (name: string, ok: boolean, detail = '') =>
 
 const health = await call('/api/health');
 check('health', health.status === 200);
-const board = await call('/api/board');
-check('board', board.status === 200 && board.body.offers.length > 10, `${board.body?.offers?.length} offers`);
-const before = await call('/api/me');
+const board = await call('/api/war');
+check('gang vaults', board.status === 200 && board.body.board.length === 16, `${board.body?.board?.length} vaults`);
+const before = await call('/api/war/me');
 check('me before login', before.body?.address === null);
 const { body: n } = await call('/api/auth/nonce');
 const message = createSiweMessage({
@@ -46,24 +46,18 @@ const replay = await call('/api/auth/verify', {
   body: JSON.stringify({ message, signature }),
 });
 check('nonce cannot be reused', replay.status === 400 && replay.body.error === 'NONCE_EXPIRED');
-const me = await call('/api/me');
+const me = await call('/api/war/me');
 check('me after login', me.body?.address === account.address.toLowerCase() && me.body.chogs.length === 0);
-const move = await call('/api/move', {
-  method: 'POST',
-  body: JSON.stringify({ action: 'job', chogId: 1, offerKey: 'skim-atm@mon-square' }),
-});
-check('cannot play a Chog you do not own', move.status === 409 && move.body.error === 'NOT_YOUR_CHOG');
-const bad = await call('/api/move', {
-  method: 'POST',
-  body: JSON.stringify({ action: 'job', chogId: 99999 }),
-});
+const start = await call('/api/heist/start', { method: 'POST', body: JSON.stringify({ chogId: 1, target: 'mcga' }) });
+check('cannot rob with a Chog you do not own', start.status === 409 && start.body.error === 'not-yours');
+const bad = await call('/api/heist/start', { method: 'POST', body: JSON.stringify({ chogId: 99999, target: 'nope' }) });
 check('rejects bad input', bad.status === 400);
-const chog = await call('/api/chog/683');
-check(
-  'chog page data',
-  chog.status === 200 && typeof chog.body.chog.name === 'string',
-  chog.body?.chog?.name,
-);
+const finish = await call('/api/heist/finish', { method: 'POST', body: JSON.stringify({ runId: 'not-a-real-run', inputs: '' }) });
+check('cannot finish a run that is not yours', finish.status === 409 && finish.body.error === 'no-run');
+for (const page of ['/', '/heist', '/chog/683', '/gangs/mcga', '/chog/683/opengraph-image']) {
+  const r = await fetch(base + page);
+  check(`page ${page}`, r.status === 200);
+}
 const ctl = new AbortController();
 const live = await fetch(base + '/api/live', { signal: ctl.signal });
 check(
@@ -72,4 +66,4 @@ check(
 );
 ctl.abort();
 const out = await call('/api/auth/logout', { method: 'POST' });
-check('logout', out.status === 200 && (await call('/api/me')).body.address === null);
+check('logout', out.status === 200 && (await call('/api/war/me')).body.address === null);

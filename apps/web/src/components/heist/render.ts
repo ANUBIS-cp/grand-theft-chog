@@ -217,7 +217,7 @@ export class VaultRenderer {
     // Walls, row by row so front faces sit over the floor below.
     for (let y = 0; y < level.h; y++) for (let x = 0; x < level.w; x++) if (tileAt(level, x, y) === Tile.Wall) this.wall(g, x, y);
     this.exitSign(g);
-    for (const l of level.lasers) this.laserPosts(g, l.x, l.y, l.across);
+    for (const l of level.lasers) if (l.on > 0) this.laserPosts(g, l.x, l.y, l.across);
     for (const cam of level.cameras) this.cameraBody(g, cam.x, cam.y);
     this.base = c;
 
@@ -834,7 +834,7 @@ export class VaultRenderer {
       const on = laserOn(level, s, i);
       const period = l.on + l.off;
       const into = (s.tick + l.phase) % period;
-      const warn = !on && s.hacked === 0 && into > period - 18;
+      const warn = l.on > 0 && !on && s.hacked === 0 && into > period - 18;
       if (!on && !warn) return;
       const x1 = l.across ? this.tx(l.x) + t * 0.08 : this.tx(l.x) + t / 2;
       const y1 = l.across ? this.ty(l.y) + t / 2 : this.ty(l.y) + t * 0.08;

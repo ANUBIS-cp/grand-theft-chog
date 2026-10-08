@@ -13,6 +13,7 @@ const LEFT = 3 as Dir;
 /** A tiny vault for rule tests: no guards unless a test adds them. */
 const room = (rows: string[], extra: Partial<VaultDef> = {}): VaultDef => ({
   id: 'test',
+  name: 'Test',
   rooms: [],
   rows,
   guards: [],

@@ -25,7 +25,13 @@ export interface GuardDef {
   route: [number, number][];
   /** Ticks to stand and look around at each waypoint. */
   wait: number;
+  /** Only in vaults at this defence level or higher (default 0). */
+  tier?: number;
 }
+
+/** How well a vault is defended, from its stash: richer vaults get more guards, cameras and lasers. */
+export const TIER_CASH = [0, 6_000, 14_000, 25_000] as const;
+export const tierFor = (cash: number): number => TIER_CASH.reduce<number>((t, min, i) => (cash >= min ? i : t), 0);
 
 export interface CameraDef {
   /** The wall tile it hangs on. */
@@ -34,6 +40,7 @@ export interface CameraDef {
   /** Sweeps between these angle indices (clockwise from a to b). */
   from: number;
   to: number;
+  tier?: number;
 }
 
 export interface LaserDef {
@@ -44,6 +51,7 @@ export interface LaserDef {
   on: number;
   off: number;
   phase: number;
+  tier?: number;
 }
 
 export type Floor = 'tile' | 'carpet' | 'wood' | 'gold' | 'steel';
@@ -58,6 +66,8 @@ export interface Room {
 
 export interface VaultDef {
   id: string;
+  /** What players call it. */
+  name: string;
   /** Floor looks, for drawing only. Tiles outside every room get 'tile'. */
   rooms: Room[];
   rows: string[];
@@ -100,7 +110,8 @@ const LEGEND: Record<string, Tile> = {
   E: Tile.Exit,
 };
 
-export function buildLevel(def: VaultDef): Level {
+/** Builds a vault at a defence level (0-3); things above that level are left out (lasers stay off). */
+export function buildLevel(def: VaultDef, tier = 3): Level {
   const h = def.rows.length;
   const w = def.rows[0]!.length;
   const tiles: Tile[] = [];
@@ -137,11 +148,14 @@ export function buildLevel(def: VaultDef): Level {
     loot,
     safes,
     guards: [],
-    cameras: def.cameras,
-    lasers: laserTiles.map(([x, y], i) => ({ x, y, ...def.lasers[i]! })),
+    cameras: def.cameras.filter((c) => (c.tier ?? 0) <= tier),
+    lasers: laserTiles.map(([x, y], i) => {
+      const l = def.lasers[i]!;
+      return { x, y, ...l, on: (l.tier ?? 0) <= tier ? l.on : 0 };
+    }),
     ticks: def.seconds * TPS,
   };
-  level.guards = def.guards.map((g) => {
+  level.guards = def.guards.filter((g) => (g.tier ?? 0) <= tier).map((g) => {
     const path: [number, number][] = [];
     const stops = new Map<number, number>();
     if (g.route.length === 1) {

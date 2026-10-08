@@ -132,3 +132,62 @@ export const chainCursors = pgTable('chain_cursors', {
     .notNull()
     .default(sql`now()`),
 });
+
+// ---------- The gang war (heists) ----------
+
+/** Each gang's vault and the cash in it. Robbing moves cash from one vault to another. */
+export const gangVaults = pgTable('gang_vaults', {
+  gang: text('gang').$type<GangId>().primaryKey(),
+  cash: integer('cash').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** A Chog's heist record. It belongs to the token: it moves with the Chog when it's sold. */
+export const heistChogs = pgTable(
+  'heist_chogs',
+  {
+    id: integer('id').primaryKey(),
+    gang: text('gang').$type<GangId>(),
+    jailedUntil: timestamp('jailed_until', { withTimezone: true }),
+    stolen: integer('stolen').notNull().default(0),
+    escapes: integer('escapes').notNull().default(0),
+    busts: integer('busts').notNull().default(0),
+    /** Robbers it caught while guarding its gang's vault. */
+    catches: integer('catches').notNull().default(0),
+    best: integer('best').notNull().default(0),
+    lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+  },
+  (t) => [index('heist_chogs_gang').on(t.gang)],
+);
+
+/** One heist: created when it starts, finished when the server has replayed the inputs. */
+export const heistRuns = pgTable(
+  'heist_runs',
+  {
+    id: text('id').primaryKey(),
+    chogId: integer('chog_id').notNull(),
+    player: text('player').notNull(),
+    gang: text('gang').$type<GangId>().notNull(),
+    target: text('target').$type<GangId>().notNull(),
+    day: integer('day').notNull(),
+    vault: text('vault').notNull(),
+    tier: integer('tier').notNull(),
+    revenge: boolean('revenge').notNull().default(false),
+    powers: jsonb('powers').$type<string[]>().notNull(),
+    guards: jsonb('guards').$type<number[]>().notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    result: text('result').$type<'escaped' | 'busted'>(),
+    carried: integer('carried'),
+    score: integer('score'),
+    /** Cash that moved: to the robber's gang on an escape, to the vault's gang (a fine) on a bust. */
+    moved: integer('moved'),
+    caughtBy: integer('caught_by'),
+    inputs: text('inputs'),
+  },
+  (t) => [
+    index('heist_runs_chog_day').on(t.chogId, t.day),
+    index('heist_runs_finished').on(t.finishedAt),
+    index('heist_runs_target').on(t.target, t.finishedAt),
+  ],
+);

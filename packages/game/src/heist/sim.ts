@@ -243,7 +243,7 @@ export function cameraView(level: Level, s: HeistState, i: number) {
 
 export const laserOn = (level: Level, s: HeistState, i: number) => {
   const l = level.lasers[i]!;
-  return s.hacked === 0 && (s.tick + l.phase) % (l.on + l.off) < l.on;
+  return l.on > 0 && s.hacked === 0 && (s.tick + l.phase) % (l.on + l.off) < l.on;
 };
 
 export function step(s: HeistState, level: Level, input: Input): HeistEvent[] {

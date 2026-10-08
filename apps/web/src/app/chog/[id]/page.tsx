@@ -1,201 +1,180 @@
-import { SKILLS, getChog } from '@chog-city/data';
-import { newChogState } from '@chog-city/game';
-import { events as eventsTable } from '@chog-city/server/db';
-import { getStates, isChogId, ownerOf } from '@chog-city/server';
-import { desc, eq, or } from 'drizzle-orm';
+import { GANGS, SKILLS, displayName, getChog, skillSources } from '@chog-city/data';
+import { chogInfo } from '@chog-city/game';
+import { POWERS, powersFor } from '@chog-city/game/heist';
+import { chogHits, heistRecord, isChogId, ownerOf } from '@chog-city/server';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ChogPortrait } from '@/components/chog-portrait';
-import { DistrictPlate } from '@/components/district-plate';
-import { GangTag } from '@/components/gang-tag';
-import { SiteHeader } from '@/components/site-header';
 import { SkillIcon } from '@/components/skill-icons';
-import { Stars } from '@/components/stars';
-import { Label, Panel } from '@/components/ui/panel';
-import { describe } from '@/lib/describe';
-import { ago } from '@/lib/time';
-import { chogView } from '@/lib/views';
+import { GANG_COLOR } from '@/lib/theme';
+import { chogImage } from '@/lib/images';
+import { ago, formatLeft } from '@/lib/time';
 import { db } from '@/server/db';
 
 export const dynamic = 'force-dynamic';
 
 type Props = { params: Promise<{ id: string }> };
 
+const money = (n: number) => `$${n.toLocaleString('en-US')}`;
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const id = Number((await params).id);
   const c = isChogId(id) ? getChog(id) : undefined;
   if (!c) return { title: 'Chog not found · Chog City' };
-  const name = c.title ?? `Chog #${c.metadataId}`;
-  return { title: `${name} · Chog City`, description: `${name}'s skills, gang and record in Chog City.` };
+  const name = displayName(c);
+  return { title: `${name} · Chog City`, description: `${name}'s heists, powers and gang in Chog City.` };
 }
 
 export default async function ChogPage({ params }: Props) {
   const id = Number((await params).id);
   if (!isChogId(id)) notFound();
+  const chog = getChog(id)!;
+  const name = displayName(chog);
   const now = Date.now();
   const d = await db();
-  const [states, owner, recent] = await Promise.all([
-    getStates(d, [id]),
-    ownerOf(d, id),
-    d
-      .select()
-      .from(eventsTable)
-      .where(or(eq(eventsTable.chogId, id), eq(eventsTable.target, id)))
-      .orderBy(desc(eventsTable.id))
-      .limit(30),
-  ]);
-  const c = chogView(states.get(id) ?? newChogState(id, now), now);
-  const s = c.stats;
-  const record: [string, number][] = [
-    ['Jobs done', s.jobsWon],
-    ['Jobs failed', s.jobsLost],
-    ['Cash earned', s.cashEarned],
-    ['Biggest payout', s.biggestPayout],
-    ['Crew jobs', s.crewJobs],
-    ['Robbed others', s.robWins],
-    ['Got robbed', s.timesRobbed],
-    ['Arrests made', s.arrestsMade],
-    ['Times arrested', s.timesArrested],
-    ['Hours in jail', s.jailHours],
+  const [record, owner, hits] = await Promise.all([heistRecord(d, id), ownerOf(d, id), chogHits(d, id)]);
+  const skills = chogInfo(id).skills;
+  const powers = powersFor(skills);
+  const gang = record?.gang ?? null;
+  const jailed = record?.jailedUntil && record.jailedUntil.getTime() > now ? record.jailedUntil.getTime() : null;
+  const stats: [string, string][] = [
+    ['Stolen', money(record?.stolen ?? 0)],
+    ['Escapes', String(record?.escapes ?? 0)],
+    ['Busted', String(record?.busts ?? 0)],
+    ['Robbers caught', String(record?.catches ?? 0)],
+    ['Best run', money(record?.best ?? 0)],
   ];
 
   return (
-    <main className="mx-auto max-w-[1180px] px-4 pb-20 sm:px-6">
-      <SiteHeader
-        right={
-          <Link
-            href="/play"
-            className="rounded-[6px] border-2 border-ink bg-paper-raised px-3 py-2 text-sm font-semibold shadow-hard-sm"
-          >
-            Play
-          </Link>
-        }
-      />
-      <div className="grid gap-8 pt-8 lg:grid-cols-[auto_1fr]">
-        <div className="mx-auto w-full max-w-[340px] lg:mx-0">
-          <ChogPortrait
-            id={c.id}
-            name={c.name}
-            size="xl"
-            className="!h-auto !w-full aspect-square"
-            jailed={!!c.jailUntil}
-            priority
+    <main className="min-h-dvh bg-[#0b0918] text-white">
+      <header className="mx-auto flex max-w-[960px] items-center justify-between px-4 py-3">
+        <Link href="/" className="font-display text-[22px] uppercase leading-none">
+          Chog City
+        </Link>
+        <Link href="/" className="text-[13px] font-semibold hover:underline">
+          Gang vaults
+        </Link>
+      </header>
+      <div className="mx-auto grid max-w-[960px] gap-8 px-4 pb-16 pt-2 md:grid-cols-[320px_1fr]">
+        <section>
+          <img
+            src={chogImage(id, 640)}
+            alt={name}
+            className="aspect-square w-full rounded-[14px] border-2 border-ink shadow-[5px_5px_0_0_#000]"
           />
-          <p className="mt-3 font-mono text-[12px] text-ink-soft">
-            Token {c.id} · owner {owner ? `${owner.slice(0, 6)}…${owner.slice(-4)}` : 'unknown'}
-          </p>
-        </div>
-
-        <div className="min-w-0">
-          <Label>{c.active ? 'Playing in Chog City' : "Its owner hasn't played yet"}</Label>
-          <h1 className="mt-2 font-display text-[60px] uppercase leading-[0.85] sm:text-[84px]">{c.name}</h1>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            {c.gang ? (
-              <GangTag gang={c.gang} />
+          <h1 className="mt-4 font-display text-[44px] uppercase leading-none">{name}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-white/60">
+            {gang ? (
+              <Link
+                href={`/gangs/${gang}`}
+                className="rounded-[5px] border-2 border-ink px-1.5 pt-1 font-display text-[15px] uppercase leading-none"
+                style={{ background: GANG_COLOR[gang].bg, color: GANG_COLOR[gang].fg }}
+              >
+                {GANGS[gang].name}
+              </Link>
             ) : (
-              <span className="text-[14px] text-ink-soft">No gang yet</span>
+              <span>No gang yet</span>
             )}
-            {c.home !== 'any' && <DistrictPlate district={c.home} />}
-            <span className="font-display text-[22px] uppercase leading-none pt-1">Level {c.level}</span>
-            <span className="font-display text-[22px] uppercase leading-none text-cash pt-1">
-              {c.cash.toLocaleString('en-US')} cash
-            </span>
-            {c.wanted > 0 && <Stars n={c.wanted} />}
-            {c.jailUntil > 0 && (
-              <span className="rounded-[4px] border-2 border-jail px-2 py-0.5 text-[13px] font-semibold text-jail">
-                In jail
-              </span>
-            )}
+            {owner && <span>Owner {owner.slice(0, 6)}…{owner.slice(-4)}</span>}
           </div>
-
-          <h2 className="mt-8 font-display text-[30px] uppercase leading-none">Skills</h2>
-          {c.wildcard ? (
-            <p className="mt-2 text-[15px]">A Legendary 1:1: it counts as any skill once per job.</p>
-          ) : (
-            <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-              {c.skills.map((k) => (
-                <li
-                  key={k}
-                  className="flex items-center gap-2.5 rounded-[8px] border-2 border-ink bg-paper-raised p-2.5"
-                >
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-ink bg-white">
-                    <SkillIcon skill={k} width={20} height={20} />
-                  </span>
-                  <span className="min-w-0 text-[14px] leading-tight">
-                    <strong>{SKILLS[k].name}</strong>
-                    <span className="block truncate text-[12px] text-ink-soft">
-                      from {c.skillFrom[k]?.join(', ')}
-                    </span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <h2 className="mt-8 font-display text-[30px] uppercase leading-none">Titles</h2>
-          {c.titles.length ? (
-            <ul className="mt-3 flex flex-wrap gap-2">
-              {c.titles.map((t) => (
-                <li
-                  key={t.id}
-                  className="rounded-[6px] border-2 border-ink bg-white px-2.5 py-1.5"
-                  title={t.how}
-                >
-                  <span className="font-display text-[18px] uppercase leading-none">{t.name}</span>
-                  <span className="block text-[11px] text-ink-soft">{t.how}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-2 text-[14px] text-ink-soft">
-              No titles yet. They come from the record: big jobs, arrests, robberies and more.
+          {jailed && (
+            <p className="mt-3 inline-block rounded-[6px] bg-jail px-2 py-1 text-[13px] font-semibold">
+              In jail, out in {formatLeft(jailed - now)}
             </p>
           )}
-        </div>
-      </div>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Link
+              href="/"
+              className="inline-flex h-12 items-center rounded-[8px] border-2 border-ink bg-pink px-4 pt-1 font-display text-[20px] uppercase leading-none text-ink shadow-[3px_3px_0_0_#000]"
+            >
+              Play
+            </Link>
+            <Link
+              href={`/heist?chog=${chog.metadataId}`}
+              className="inline-flex h-12 items-center rounded-[8px] border-2 border-ink bg-[#ffd666] px-4 pt-1 font-display text-[20px] uppercase leading-none text-ink shadow-[3px_3px_0_0_#000]"
+            >
+              Practice as it
+            </Link>
+          </div>
+        </section>
 
-      <section className="mt-12 grid gap-8 border-t-2 border-ink pt-8 lg:grid-cols-2">
-        <div>
-          <h2 className="font-display text-[36px] uppercase leading-none">Record</h2>
-          <p className="mt-1.5 text-[14px] text-ink-soft">
-            It belongs to the NFT. If the Chog is sold, the record goes with it.
-          </p>
-          <dl className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-            {record.map(([k, v]) => (
-              <Panel key={k} className="p-3 shadow-none">
-                <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">{k}</dt>
-                <dd className="mt-1 font-display text-[30px] leading-none">{v.toLocaleString('en-US')}</dd>
-              </Panel>
-            ))}
-          </dl>
-        </div>
-        <div>
-          <h2 className="font-display text-[36px] uppercase leading-none">Latest</h2>
-          {recent.length === 0 ? (
-            <p className="mt-3 text-[14px] text-ink-soft">
-              Nothing yet. When this Chog does a job or gets robbed, it shows up here.
-            </p>
-          ) : (
-            <ol className="mt-4 space-y-2.5">
-              {recent.map((e) => {
-                const line = describe(e.data, e.id);
+        <div className="space-y-8">
+          <section aria-labelledby="record">
+            <h2 id="record" className="font-display text-[30px] uppercase leading-none">
+              Record
+            </h2>
+            <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {stats.map(([k, v]) => (
+                <div key={k} className="rounded-[10px] border-2 border-white/10 bg-[#1d1838] px-3 py-2.5">
+                  <dt className="text-[12px] text-white/60">{k}</dt>
+                  <dd className="font-display text-[24px] leading-none tabular-nums">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+
+          <section aria-labelledby="powers">
+            <h2 id="powers" className="font-display text-[30px] uppercase leading-none">
+              Powers
+            </h2>
+            <p className="mt-1 text-[14px] text-white/60">They come from its traits.</p>
+            <ul className="mt-3 space-y-2">
+              {powers.map((p) => {
+                const skill = skills.find((s) => powersFor([s]).includes(p));
+                const from = skill ? skillSources(chog, skill) : [];
                 return (
-                  <li
-                    key={e.id}
-                    className="flex items-start justify-between gap-3 border-b-2 border-dashed border-ink-faint pb-2.5 text-[14px]"
-                  >
-                    <span className={line.tone === 'bad' ? 'text-jail' : ''}>{line.text}</span>
-                    <time className="shrink-0 font-mono text-[11px] text-ink-soft">
-                      {ago(e.at.getTime(), now)}
-                    </time>
+                  <li key={p} className="flex items-start gap-3 rounded-[10px] border-2 border-white/10 bg-[#1d1838] p-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[7px] border-2 border-ink bg-paper-raised text-ink">
+                      {skill && <SkillIcon skill={skill} width={26} height={26} />}
+                    </span>
+                    <div>
+                      <strong className="font-display text-[20px] uppercase leading-none">{POWERS[p].name}</strong>
+                      <p className="text-[14px] text-white/80">{POWERS[p].does}</p>
+                      {from.length > 0 && (
+                        <p className="mt-0.5 text-[12px] text-white/50">
+                          From {from.map(([type, value]) => `${type}: ${value}`).join(', ')}
+                          {skill ? ` (${SKILLS[skill].name})` : ''}
+                        </p>
+                      )}
+                    </div>
                   </li>
                 );
               })}
-            </ol>
-          )}
+            </ul>
+          </section>
+
+          <section aria-labelledby="hits">
+            <h2 id="hits" className="font-display text-[30px] uppercase leading-none">
+              Latest hits
+            </h2>
+            {hits.length === 0 ? (
+              <p className="mt-2 text-[14px] text-white/60">No hits yet.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-white/10 rounded-[12px] border-2 border-white/10">
+                {hits.map((h) => (
+                  <li key={h.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-[14px]">
+                    <span>
+                      {h.caughtBy === id && h.chogId !== id ? (
+                        <>
+                          Caught a {GANGS[h.gang].name} robber in its vault
+                        </>
+                      ) : h.result === 'escaped' ? (
+                        <>
+                          Robbed {GANGS[h.target].name} of <strong className="text-[#ffd666]">{money(h.moved)}</strong>
+                          {h.revenge ? ' (revenge)' : ''}
+                        </>
+                      ) : (
+                        <>Got caught in {GANGS[h.target].name}’s vault</>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-[12px] text-white/50">{ago(h.at, now)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
-      </section>
+      </div>
     </main>
   );
 }

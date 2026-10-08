@@ -1,12 +1,15 @@
 // A search bot for vault design: finds sneaky routes (never seen) through a vault and reports the best score.
-//   npx tsx tools/sim/heist-bot.ts [beam=150] [powers=]
+//   npx tsx tools/sim/heist-bot.ts [beam=150] [vault=vault-1] [tier=3] [powers=]
 // It plays without powers unless given some (comma list). It only moves tile to tile, so a human can do
 // better; if the bot can't get out clean with decent loot, the vault is too hard.
-import { DX, DY, IDLE, LOOT_VALUE, UNIT, buildLevel, distances, startHeist, step, walkable, FIRST_VAULT, type Dir, type HeistState, type Input, type PowerId } from '@chog-city/game/heist';
+import { DX, DY, IDLE, LOOT_VALUE, UNIT, buildLevel, distances, startHeist, step, walkable, vaultDef, type Dir, type HeistState, type Input, type PowerId } from '@chog-city/game/heist';
 
 const beam = Number(process.argv[2] ?? 150);
-const powers = (process.argv[3] ?? '').split(',').filter(Boolean) as PowerId[];
-const level = buildLevel(FIRST_VAULT);
+const vault = vaultDef(process.argv[3] ?? 'vault-1');
+if (!vault) throw new Error('unknown vault');
+const tier = Number(process.argv[4] ?? 3);
+const powers = (process.argv[5] ?? '').split(',').filter(Boolean) as PowerId[];
+const level = buildLevel(vault, tier);
 const toExit = distances(level, level.exit[0], level.exit[1]);
 const total = level.loot.reduce((a, l) => a + LOOT_VALUE[l.kind], 0) + level.safes.reduce((a, s) => a + s.value, 0);
 
@@ -87,7 +90,7 @@ for (let round = 0; frontier.length && round < 400; round++) {
     })
     .slice(0, beam);
 }
-console.log(`vault ${level.id}: ${total} on the floor, beam ${beam}, powers [${powers.join(',')}], ${((Date.now() - started) / 1000).toFixed(1)} s`);
+console.log(`vault ${level.id} tier ${tier}: ${total} on the floor, beam ${beam}, powers [${powers.join(',')}], ${((Date.now() - started) / 1000).toFixed(1)} s`);
 if (!best) console.log('no clean escape found');
 else {
   const s = best.s;

@@ -1,12 +1,12 @@
-import { DISTRICTS, GANGS, SKILLS, getChog } from '@chog-city/data';
-import { newChogState } from '@chog-city/game';
-import { getStates, isChogId } from '@chog-city/server';
+import { GANGS, displayName, getChog } from '@chog-city/data';
+import { chogInfo } from '@chog-city/game';
+import { POWERS, powersFor } from '@chog-city/game/heist';
+import { heistRecord, isChogId } from '@chog-city/server';
 import { ImageResponse } from 'next/og';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { GANG_COLOR } from '@/lib/theme';
-import { chogView } from '@/lib/views';
 import { db } from '@/server/db';
 
 export const alt = 'A Chog in Chog City';
@@ -54,13 +54,15 @@ export default async function Image({ params }: { params: Promise<{ id: string }
     readFile(join(process.cwd(), 'public/fonts/koulen.woff')),
     readFile(join(process.cwd(), 'public/fonts/anton.woff')),
   ]);
-  const now = Date.now();
-  const state = (await getStates(await db(), [id])).get(id) ?? newChogState(id, now);
-  const c = chogView(state, now);
+  const r = await heistRecord(await db(), id);
+  const name = displayName(getChog(id)!);
   const art = await chogPng(id);
-  const gang = c.gang ? GANG_COLOR[c.gang] : null;
-  const jobs = c.stats.jobsWon;
-  const home = c.home === 'any' ? 'LIVES ANYWHERE' : `LIVES IN ${DISTRICTS[c.home].name.toUpperCase()}`;
+  const gangId = r?.gang ?? null;
+  const gang = gangId ? GANG_COLOR[gangId] : null;
+  const powers = powersFor(chogInfo(id).skills).map((p) => POWERS[p].name.toUpperCase());
+  const stolen = (r?.stolen ?? 0).toLocaleString('en-US');
+  const escapes = r?.escapes ?? 0;
+  const catches = r?.catches ?? 0;
 
   return new ImageResponse(
     <div
@@ -68,10 +70,10 @@ export default async function Image({ params }: { params: Promise<{ id: string }
         width: '100%',
         height: '100%',
         display: 'flex',
-        background: '#d8d6c7',
+        background: '#0b0918',
         padding: 56,
         fontFamily: 'Koulen',
-        color: '#111',
+        color: '#ffffff',
       }}
     >
       <img
@@ -81,10 +83,10 @@ export default async function Image({ params }: { params: Promise<{ id: string }
         style={{ border: '6px solid #111', borderRadius: 18, boxShadow: '10px 10px 0 #111' }}
       />
       <div style={{ display: 'flex', flexDirection: 'column', marginLeft: 56, flex: 1 }}>
-        <div style={{ fontSize: 34, letterSpacing: 2, color: '#555' }}>CHOG CITY</div>
-        <T text={c.name.toUpperCase()} style={{ fontSize: 104, lineHeight: 0.9, marginTop: 8 }} />
+        <div style={{ fontSize: 34, letterSpacing: 2, color: '#a59fc9' }}>CHOG CITY HEISTS</div>
+        <T text={name.toUpperCase()} style={{ fontSize: 104, lineHeight: 0.9, marginTop: 8 }} />
         <div style={{ display: 'flex', marginTop: 22, gap: 16, alignItems: 'center' }}>
-          {gang && c.gang && (
+          {gang && gangId && (
             <div
               style={{
                 background: gang.bg,
@@ -95,19 +97,19 @@ export default async function Image({ params }: { params: Promise<{ id: string }
                 fontSize: 38,
               }}
             >
-              {GANGS[c.gang].name.toUpperCase()}
+              {GANGS[gangId].name.toUpperCase()}
             </div>
           )}
-          <T text={`LEVEL ${c.level}`} style={{ fontSize: 40, paddingTop: 4 }} />
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 26 }}>
-          {(c.wildcard ? ['ANY SKILL'] : c.skills.map((k) => SKILLS[k].name.toUpperCase())).map((n) => (
+          {powers.map((n) => (
             <div
               key={n}
               style={{
                 border: '4px solid #111',
                 borderRadius: 999,
-                background: '#fff',
+                background: '#d83e7e',
+                color: '#111',
                 padding: '6px 18px 0',
                 fontSize: 30,
               }}
@@ -116,9 +118,10 @@ export default async function Image({ params }: { params: Promise<{ id: string }
             </div>
           ))}
         </div>
+        <T text={`STOLE $${stolen}`} style={{ marginTop: 'auto', fontSize: 64, color: '#ffd666' }} />
         <T
-          text={`${home} · ${jobs} ${jobs === 1 ? 'JOB' : 'JOBS'} · ${c.cash} CASH`}
-          style={{ marginTop: 'auto', fontSize: 30, color: '#555' }}
+          text={`${escapes} ${escapes === 1 ? 'ESCAPE' : 'ESCAPES'} · CAUGHT ${catches} ${catches === 1 ? 'ROBBER' : 'ROBBERS'}`}
+          style={{ fontSize: 30, color: '#a59fc9' }}
         />
       </div>
     </div>,
