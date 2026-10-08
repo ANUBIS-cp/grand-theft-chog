@@ -20,24 +20,30 @@ export type PowerId = (typeof POWER_IDS)[number];
 export interface PowerDef {
   id: PowerId;
   name: string;
-  /** One short line, shown on the button's long-press and on the Chog page. */
+  /** One short line, shown on the button. */
   does: string;
+  /** Seconds the effect lasts (0 = instant). */
+  lasts: number;
+  /** Seconds before it can be used again. */
+  cooldown: number;
+  /** Works once per run. */
+  once?: boolean;
   /** Works on its own for the whole run (no button). */
   passive?: boolean;
 }
 
 export const POWERS: Record<PowerId, PowerDef> = {
-  hide: { id: 'hide', name: 'Hide', does: 'Lights can’t see you for 3 seconds.' },
-  zap: { id: 'zap', name: 'Laser eyes', does: 'Knocks out the first guard or camera in front of you.' },
-  sprint: { id: 'sprint', name: 'Sprint', does: 'Run twice as fast for 3 seconds.' },
-  distract: { id: 'distract', name: 'Distract', does: 'Makes a noise ahead of you. Nearby guards go and look.' },
-  hack: { id: 'hack', name: 'Hack', does: 'Cameras and lasers switch off for 8 seconds.' },
-  tackle: { id: 'tackle', name: 'Tackle', does: 'For 5 seconds, run into a guard to knock them out.' },
-  bribe: { id: 'bribe', name: 'Bribe', does: 'Calls off the alarm once. Use it early and the first guard who sees you looks away.' },
-  magnet: { id: 'magnet', name: 'Magnet', does: 'Pulls in cash from 2 tiles away for 5 seconds.' },
-  blink: { id: 'blink', name: 'Blink', does: 'Jumps up to 3 tiles ahead, through walls.' },
-  scare: { id: 'scare', name: 'Scare', does: 'Guards next to you freeze for 3 seconds.' },
-  lockpick: { id: 'lockpick', name: 'Lockpick', does: 'Cracks safes four times faster.', passive: true },
+  hide: { id: 'hide', name: 'Hide', does: 'Lights can’t see you for 5 seconds.', lasts: 5, cooldown: 12 },
+  zap: { id: 'zap', name: 'Laser eyes', does: 'Knocks out the nearest guard or camera you can see.', lasts: 6, cooldown: 10 },
+  sprint: { id: 'sprint', name: 'Sprint', does: 'Run twice as fast for 4 seconds.', lasts: 4, cooldown: 10 },
+  distract: { id: 'distract', name: 'Distract', does: 'Makes a noise ahead of you. Guards go and look.', lasts: 0, cooldown: 10 },
+  hack: { id: 'hack', name: 'Hack', does: 'Cameras and lasers off for 10 seconds.', lasts: 10, cooldown: 20 },
+  tackle: { id: 'tackle', name: 'Tackle', does: 'For 6 seconds, run into a guard to knock them out.', lasts: 6, cooldown: 12 },
+  bribe: { id: 'bribe', name: 'Bribe', does: 'Calls off the alarm. Once a run.', lasts: 0, cooldown: 0, once: true },
+  magnet: { id: 'magnet', name: 'Magnet', does: 'Pulls in cash from 2 tiles away for 6 seconds.', lasts: 6, cooldown: 12 },
+  blink: { id: 'blink', name: 'Blink', does: 'Jumps up to 3 tiles ahead, through walls.', lasts: 0, cooldown: 8 },
+  scare: { id: 'scare', name: 'Scare', does: 'Guards near you freeze for 4 seconds.', lasts: 4, cooldown: 12 },
+  lockpick: { id: 'lockpick', name: 'Lockpick', does: 'Cracks safes four times faster.', lasts: 0, cooldown: 0, passive: true },
 };
 
 const FROM_SKILL: Record<SkillId, PowerId> = {

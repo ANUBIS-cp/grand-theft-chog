@@ -65,8 +65,11 @@ interface Hud {
   started: boolean;
   seconds: number;
   carried: number;
-  used: boolean[];
-  active: (number | null)[];
+  /** Seconds until each power can be used again (0 = ready). */
+  wait: number[];
+  spent: boolean[];
+  /** Share of each power's effect still running (0..1). */
+  active: number[];
   score: number;
   spotted: boolean;
   caughtBy: number | null;
@@ -187,10 +190,11 @@ export function HeistGame({ vault, player, guards, owner }: HeistGameProps) {
         started: st.started,
         seconds: st.s.phase === 'alarm' ? Math.ceil(st.s.alarmLeft / TPS) : Math.ceil(st.s.timeLeft / TPS),
         carried: st.s.carried,
-        used: st.s.powers.map((x) => x.used),
+        wait: st.s.powers.map((x) => Math.max(0, Math.ceil((x.ready - st.s.tick) / TPS))),
+        spent: st.s.powers.map((x) => x.used),
         active: st.s.powers.map((x) => {
-          const left = { hide: p.hide, sprint: p.sprint, tackle: p.tackle, magnet: p.magnet, hack: st.s.hacked }[x.id as 'hide'];
-          return left ? left : null;
+          const left = { hide: p.hide, sprint: p.sprint, tackle: p.tackle, magnet: p.magnet, hack: st.s.hacked }[x.id as 'hide'] ?? 0;
+          return left ? Math.round((left / (POWERS[x.id].lasts * TPS)) * 50) / 50 : 0;
         }),
         score: st.s.score,
         spotted: st.s.spotted,
@@ -504,28 +508,36 @@ export function HeistGame({ vault, player, guards, owner }: HeistGameProps) {
           {player.powers.map((id, i) => {
             const def = POWERS[id];
             if (def.passive) return null;
-            const used = hud?.used[i] ?? false;
-            const active = hud?.active[i] ?? null;
-            const full = id === 'hack' ? 8 * TPS : id === 'tackle' || id === 'magnet' ? 5 * TPS : 3 * TPS;
+            const active = hud?.active[i] ?? 0;
+            const wait = hud?.wait[i] ?? 0;
+            const spent = hud?.spent[i] ?? false;
+            const needsAlarm = id === 'bribe' && !alarm;
+            const off = !active && (spent || wait > 0 || needsAlarm);
             return (
               <button
                 key={id}
                 onPointerDown={() => usePower(i)}
                 onClick={(e) => e.detail === 0 && usePower(i)}
-                disabled={used || over}
+                disabled={off || over}
                 title={def.does}
                 className={cn(
                   'relative flex min-w-0 items-center gap-2 overflow-hidden rounded-[10px] border-2 border-ink p-1.5 pr-2 text-left transition active:translate-x-[2px] active:translate-y-[2px] active:shadow-none',
-                  used && !active ? 'bg-white/10 text-white/40' : 'bg-pink text-ink shadow-[3px_3px_0_0_#000]',
+                  off ? 'bg-white/10 text-white/50' : 'bg-pink text-ink shadow-[3px_3px_0_0_#000]',
+                  active > 0 && 'bg-[#ffd666]',
                 )}
               >
                 <span
                   className={cn(
-                    'grid h-10 w-10 shrink-0 place-items-center rounded-[7px] border-2 border-ink',
-                    used && !active ? 'bg-transparent' : 'bg-paper-raised',
+                    'relative grid h-10 w-10 shrink-0 place-items-center rounded-[7px] border-2 border-ink',
+                    off ? 'bg-transparent' : 'bg-paper-raised',
                   )}
                 >
-                  <SkillIcon skill={ICON[id]} width={26} height={26} />
+                  <SkillIcon skill={ICON[id]} width={26} height={26} className={cn(off && wait > 0 && 'opacity-30')} />
+                  {off && wait > 0 && !spent && (
+                    <span className="absolute inset-0 grid place-items-center font-display text-[22px] leading-none text-white">
+                      {wait}
+                    </span>
+                  )}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline justify-between gap-1">
@@ -533,12 +545,10 @@ export function HeistGame({ vault, player, guards, owner }: HeistGameProps) {
                     <kbd className="hidden font-mono text-[10px] opacity-60 sm:inline">{i + 1}</kbd>
                   </span>
                   <span className="mt-0.5 line-clamp-2 text-[11px] leading-[1.2] opacity-80">
-                    {used && !active ? 'Used' : def.does}
+                    {spent ? 'Used' : active > 0 ? 'On!' : wait > 0 ? `Ready in ${wait}s` : needsAlarm ? 'Use it when the alarm goes off.' : def.does}
                   </span>
                 </span>
-                {active && (
-                  <span className="absolute bottom-0 left-0 h-1 bg-ink" style={{ width: `${Math.min(100, (active / full) * 100)}%` }} />
-                )}
+                {active > 0 && <span className="absolute bottom-0 left-0 h-1.5 bg-ink" style={{ width: `${active * 100}%` }} />}
               </button>
             );
           })}
@@ -557,7 +567,7 @@ function StartHint({ player }: { player: HeistGameProps['player'] }) {
           <strong className="block font-display text-[18px] uppercase leading-none">Move to start</strong>
           <span className="hidden sm:inline">Arrow keys or WASD. </span>
           <span className="sm:hidden">Drag anywhere. </span>
-          Grab the cash, stay out of the light, get out.
+          Grab cash, stay out of the flashlights, walk out the green EXIT.
         </div>
       </div>
     </div>

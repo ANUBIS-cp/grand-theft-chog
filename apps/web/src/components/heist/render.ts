@@ -101,7 +101,7 @@ export class VaultRenderer {
    */
   resize(boxW: number, boxH: number) {
     // Phones: keep tiles big and scroll. Wider screens: show the whole vault.
-    const MIN_TILE = boxW >= 560 ? 24 : 38;
+    const MIN_TILE = boxW >= 560 ? 24 : 34;
     const { w, h } = this.level;
     const fit = Math.floor(Math.min(boxW / w, boxH / (h + 0.35)));
     this.t = Math.min(60, Math.max(MIN_TILE, fit));
@@ -917,6 +917,49 @@ export class VaultRenderer {
     fx.draw(g, t, this.font);
 
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // When the exit is off screen and you have loot (or the alarm is on), an arrow at the edge points to it.
+    if ((alarm || s.carried > 0) && s.phase !== 'escaped') {
+      const ex = this.tx(level.exit[0]) + t / 2 - this.cam.x;
+      const ey = this.ty(level.exit[1]) + t / 2 - this.cam.y;
+      const m = 34;
+      if (ex < m || ey < m || ex > SW - m || ey > SH - m) {
+        const cx = SW / 2;
+        const cy = SH / 2;
+        const ang = Math.atan2(ey - cy, ex - cx);
+        const k = Math.min(Math.abs((SW / 2 - m) / Math.cos(ang) || Infinity), Math.abs((SH / 2 - m) / Math.sin(ang) || Infinity));
+        const ax = cx + Math.cos(ang) * k;
+        const ay = cy + Math.sin(ang) * k;
+        const pulse = 1 + 0.12 * Math.sin(now / 120);
+        g.save();
+        g.translate(ax, ay);
+        g.rotate(ang);
+        g.scale(pulse, pulse);
+        g.fillStyle = alarm ? '#ff2d55' : '#1fbf6a';
+        g.strokeStyle = INK;
+        g.lineWidth = 2.5;
+        g.beginPath();
+        g.moveTo(18, 0);
+        g.lineTo(-10, -14);
+        g.lineTo(-4, 0);
+        g.lineTo(-10, 14);
+        g.closePath();
+        g.fill();
+        g.stroke();
+        g.restore();
+        g.save();
+        g.font = `${14}px ${this.font}`;
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.lineWidth = 3;
+        g.strokeStyle = INK;
+        const lx = ax - Math.cos(ang) * 30;
+        const ly = ay - Math.sin(ang) * 26;
+        g.strokeText('EXIT', lx, ly);
+        g.fillStyle = '#ffffff';
+        g.fillText('EXIT', lx, ly);
+        g.restore();
+      }
+    }
     if (alarm) {
       const pulse = 0.5 + 0.5 * Math.sin(now / 160);
       const gr = g.createRadialGradient(SW / 2, SH / 2, Math.min(SW, SH) * 0.3, SW / 2, SH / 2, Math.max(SW, SH) * 0.75);

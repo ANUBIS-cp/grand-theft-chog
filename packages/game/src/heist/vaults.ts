@@ -46,7 +46,7 @@ export const FIRST_VAULT: VaultDef = {
   cameras: [{ x: 6, y: 6, from: 38, to: 58 }],
   lasers: [{ across: true, on: 50, off: 40, phase: 0 }],
   safeValue: 400,
-  seconds: 60,
+  seconds: 90,
 };
 
 export const VAULTS = [FIRST_VAULT];

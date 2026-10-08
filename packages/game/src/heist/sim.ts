@@ -29,9 +29,9 @@ export const CAMERA_RANGE = 4 * UNIT;
 /** Flashlight half-width: tan of the half-angle, in tenths (5.5 -> about 29 degrees each side). */
 export const CONE_TAN = 0.55;
 /** Ticks a light has to stay on you before it counts as being seen. */
-export const SPOT = 15;
+export const SPOT = 24;
 export const CRACK = 45;
-export const ALARM = 10 * TPS;
+export const ALARM = 15 * TPS;
 const TOUCH = 18;
 
 export interface Input {
@@ -91,7 +91,8 @@ export interface HeistState {
   cameras: Camera[];
   hacked: number;
   noise: { x: number; y: number; t: number } | null;
-  powers: { id: PowerId; used: boolean }[];
+  /** `ready` is the tick a power can be used again; `used` marks a once-a-run power as spent. */
+  powers: { id: PowerId; ready: number; used: boolean }[];
   freePass: boolean;
   carried: number;
   spotted: boolean;
@@ -160,7 +161,7 @@ export function startHeist(level: Level, powers: readonly PowerId[]): HeistState
     cameras: level.cameras.map(() => ({ r: 0, sweep: 1, stun: 0, sus: 0 })),
     hacked: 0,
     noise: null,
-    powers: powers.map((id) => ({ id, used: false })),
+    powers: powers.map((id) => ({ id, ready: 0, used: false })),
     freePass: false,
     carried: 0,
     spotted: false,
@@ -338,7 +339,7 @@ export function step(s: HeistState, level: Level, input: Input): HeistEvent[] {
     }
     const dx = g.x - p.x;
     const dy = g.y - p.y;
-    g.sus = Math.min(SPOT, g.sus + (dx * dx + dy * dy < 36 * 36 ? 3 : 1));
+    g.sus = Math.min(SPOT, g.sus + (dx * dx + dy * dy < 36 * 36 ? 2 : 1));
     if (g.sus < SPOT || s.phase !== 'play') return;
     if (s.freePass) {
       s.freePass = false;
@@ -410,7 +411,8 @@ function moveGuards(s: HeistState, level: Level, ptx: number, pty: number) {
     const diff = ((g.want - g.a + 96) % 64) - 32;
     g.a = (g.a + Math.max(-4, Math.min(4, diff)) + 64) % 64;
     const route = level.guards[i]!;
-    const speed = g.mode === 'chase' ? 2 + (s.tick % 2) : SPEED.guard;
+    // Chasing guards average 2.33 units a tick against your 3: they catch you only if you run into a corner.
+    const speed = g.mode === 'chase' ? (s.tick % 3 === 0 ? 3 : 2) : SPEED.guard;
     const wasMoving = g.dir !== -1;
     travel(g, speed, () => {
       const tx = g.x / UNIT;
@@ -482,32 +484,34 @@ function towards(level: Level, from: [number, number], to: [number, number]): Di
 
 function usePower(s: HeistState, level: Level, slot: number, ev: HeistEvent[]) {
   const pw = s.powers[slot];
-  if (!pw || pw.used || POWERS[pw.id].passive) return;
+  const def = pw && POWERS[pw.id];
+  if (!pw || !def || def.passive || pw.used || s.tick < pw.ready) return;
+  const lasts = def.lasts * TPS;
   const p = s.player;
   const tx = tileOf(p.x);
   const ty = tileOf(p.y);
   switch (pw.id) {
     case 'hide':
-      p.hide = 3 * TPS;
+      p.hide = lasts;
       break;
     case 'sprint':
-      p.sprint = 3 * TPS;
+      p.sprint = lasts;
       break;
     case 'tackle':
-      p.tackle = 5 * TPS;
+      p.tackle = lasts;
       break;
     case 'magnet':
-      p.magnet = 5 * TPS;
+      p.magnet = lasts;
       break;
     case 'hack':
-      s.hacked = 8 * TPS;
+      s.hacked = lasts;
       break;
     case 'scare':
       s.guards.forEach((g, i) => {
         const dx = g.x - p.x;
         const dy = g.y - p.y;
-        if (dx * dx + dy * dy <= 9 * UNIT * UNIT) {
-          g.stun = Math.max(g.stun, 3 * TPS);
+        if (dx * dx + dy * dy <= 16 * UNIT * UNIT) {
+          g.stun = Math.max(g.stun, lasts);
           ev.push({ t: 'stun', who: 'guard', i });
         }
       });
@@ -522,7 +526,7 @@ function usePower(s: HeistState, level: Level, slot: number, ev: HeistEvent[]) {
           g.sus = 0;
         }
         ev.push({ t: 'calm' });
-      } else s.freePass = true;
+      } else return;
       break;
     case 'distract': {
       let nx = tx;
@@ -546,30 +550,37 @@ function usePower(s: HeistState, level: Level, slot: number, ev: HeistEvent[]) {
       break;
     }
     case 'zap': {
-      let hit: 'guard' | 'camera' | null = null;
-      let ex = tx;
-      let ey = ty;
-      for (let k = 1; k <= 7 && !hit; k++) {
-        ex = tx + DX[p.face] * k;
-        ey = ty + DY[p.face] * k;
-        const gi = s.guards.findIndex((g) => g.stun === 0 && tileOf(g.x) === ex && tileOf(g.y) === ey);
-        if (gi >= 0) {
-          s.guards[gi]!.stun = 6 * TPS;
-          ev.push({ t: 'stun', who: 'guard', i: gi });
-          hit = 'guard';
-          break;
+      // Aims itself: the nearest guard in clear view within 6 tiles, else the nearest camera.
+      const reach = 6 * UNIT;
+      let best = -1;
+      let bestD = reach * reach + 1;
+      s.guards.forEach((g, i) => {
+        const d = (g.x - p.x) ** 2 + (g.y - p.y) ** 2;
+        if (g.stun === 0 && d < bestD && clearLine(level, p.x, p.y, g.x, g.y)) {
+          best = i;
+          bestD = d;
         }
-        if (blocksLight(level, ex, ey)) {
-          const ci = level.cameras.findIndex((c) => c.x === ex && c.y === ey);
-          if (ci >= 0) {
-            s.cameras[ci]!.stun = 6 * TPS;
-            ev.push({ t: 'stun', who: 'camera', i: ci });
-            hit = 'camera';
-          }
-          break;
-        }
+      });
+      if (best >= 0) {
+        const g = s.guards[best]!;
+        g.stun = lasts;
+        ev.push({ t: 'stun', who: 'guard', i: best });
+        ev.push({ t: 'zap', x: tx, y: ty, tx: tileOf(g.x), ty: tileOf(g.y), hit: 'guard' });
+        break;
       }
-      ev.push({ t: 'zap', x: tx, y: ty, tx: ex, ty: ey, hit });
+      let cam = -1;
+      level.cameras.forEach((c, i) => {
+        const v = cameraView(level, s, i);
+        const d = (v.x - p.x) ** 2 + (v.y - p.y) ** 2;
+        if (s.cameras[i]!.stun === 0 && d < bestD && clearLine(level, p.x, p.y, v.x, v.y)) {
+          cam = i;
+          bestD = d;
+        }
+      });
+      if (cam < 0) return;
+      s.cameras[cam]!.stun = lasts;
+      ev.push({ t: 'stun', who: 'camera', i: cam });
+      ev.push({ t: 'zap', x: tx, y: ty, tx: level.cameras[cam]!.x, ty: level.cameras[cam]!.y, hit: 'camera' });
       break;
     }
     case 'blink': {
@@ -587,7 +598,8 @@ function usePower(s: HeistState, level: Level, slot: number, ev: HeistEvent[]) {
       break;
     }
   }
-  pw.used = true;
+  pw.used = !!def.once;
+  pw.ready = s.tick + def.cooldown * TPS;
   ev.push({ t: 'power', id: pw.id });
 }
 
