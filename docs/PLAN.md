@@ -7,6 +7,7 @@
 > everyone can see, and friends can break them out. Every robbery can be watched as a replay. Visitors without a
 > Chog walk in as a guest and can do practice runs. Parts of this plan about jobs, crews, districts, turf, moves
 > and the nightly turf flip are obsolete. The heist rules (vault cash, jail, fines, once a day, revenge) still hold.
+> Built early (8 Oct): Days 1-5 below are done and live. Next: Day 6, then Checkpoint 3.
 > Days, in order (Day 1 = 9 Oct):
 > - Day 1: city map + renderer (night streets, 16 gang buildings, jail, plaza, training warehouse), walking (keys, drag, click-to-walk), minimap, door cards, wandering Chogs.
 > - Day 2: live server (WebSocket, signed tickets from the web app, 10 updates a second), other holders live, guests, Chog cards on click, emotes; deploy behind Caddy.
