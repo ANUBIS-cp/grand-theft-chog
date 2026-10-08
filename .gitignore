@@ -14,3 +14,4 @@ coverage/
 /contracts/broadcast/
 playwright-report/
 test-results/
+apps/worker/dist/

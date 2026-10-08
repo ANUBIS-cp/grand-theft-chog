@@ -1,0 +1,19 @@
+{
+  "name": "@chog-city/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/worker.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "dev": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@chog-city/data": "*",
+    "@chog-city/game": "*",
+    "@chog-city/server": "*",
+    "viem": "2.57.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

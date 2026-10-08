@@ -13,7 +13,11 @@
     "@chog-city/data": "*",
     "next": "16.4.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "@chog-city/game": "*",
+    "@chog-city/server": "*",
+    "viem": "2.57.3",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",

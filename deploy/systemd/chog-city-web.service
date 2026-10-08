@@ -8,6 +8,7 @@ User=chogcity
 Group=chogcity
 WorkingDirectory=/opt/chog-city/current/apps/web/.next/standalone/apps/web
 EnvironmentFile=/etc/chog-city/db.env
+EnvironmentFile=-/etc/chog-city/app.env
 Environment=NODE_ENV=production PORT=3000 HOSTNAME=127.0.0.1 NEXT_TELEMETRY_DISABLED=1
 ExecStart=/usr/bin/node server.js
 Restart=always

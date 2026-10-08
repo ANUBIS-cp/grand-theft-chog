@@ -1,0 +1,22 @@
+[Unit]
+Description=Chog City worker (owners from the chain, game days)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=chogcity
+Group=chogcity
+WorkingDirectory=/opt/chog-city/current/apps/worker
+EnvironmentFile=/etc/chog-city/db.env
+EnvironmentFile=-/etc/chog-city/app.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/worker.mjs
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
