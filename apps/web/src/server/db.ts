@@ -1,5 +1,5 @@
 import { connect, schema, type Db } from '@chog-city/server/db';
-import { seedStates, setOwners } from '@chog-city/server';
+import { lockStates, saveStates, seedStates, setOwners } from '@chog-city/server';
 
 // Production: DATABASE_URL is a Postgres URL. Local development can set DATABASE_URL=pglite:<dir> to get a
 // throwaway in-process Postgres with the migrations applied and DEV_OWNER owning DEV_CHOGS. It only exists
@@ -27,23 +27,38 @@ async function makeDevDb(dir: string): Promise<Db> {
       for (const stmt of readFileSync(join(migrations, f), 'utf8').split('--> statement-breakpoint'))
         if (stmt.trim()) await pg.exec(stmt);
   await seedStates(db, Date.now());
-  const owner = process.env.DEV_OWNER;
-  if (owner) {
-    const ids = (process.env.DEV_CHOGS ?? '561,683,1061').split(',').map(Number);
+  // DEV_OWNER / DEV_CHOGS (and DEV_OWNER2 / DEV_CHOGS2 for a second test player) own those Chogs here.
+  // DEV_XP starts their Chogs with some XP, so crew jobs (level 2+) can be tried right away.
+  const players = [
+    [process.env.DEV_OWNER, process.env.DEV_CHOGS ?? '561,683,1061'],
+    [process.env.DEV_OWNER2, process.env.DEV_CHOGS2 ?? ''],
+  ] as const;
+  const xp = Number(process.env.DEV_XP ?? 0);
+  for (const [owner, list] of players) {
+    if (!owner || !list) continue;
+    const ids = list.split(',').map(Number);
     await setOwners(
       db,
-      ids.map((tokenId) => ({ tokenId, owner, block: 1 })),
+      ids.map((tokenId) => ({ tokenId, owner: owner.toLowerCase(), block: 1 })),
     );
-    // Some other owners so robbing and crews have targets.
-    await setOwners(
-      db,
-      [12, 40, 900, 1200, 1500, 1864].map((tokenId) => ({
-        tokenId,
-        owner: '0x000000000000000000000000000000000000dead',
-        block: 1,
-      })),
-    );
+    if (xp > 0)
+      await db.transaction(async (tx) => {
+        const st = await lockStates(tx, ids, Date.now());
+        await saveStates(
+          tx,
+          [...st.values()].map((s) => ({ ...s, xp })),
+        );
+      });
   }
+  // Some other owners so robbing has targets.
+  await setOwners(
+    db,
+    [12, 40, 900, 1200, 1500, 1864].map((tokenId) => ({
+      tokenId,
+      owner: '0x000000000000000000000000000000000000dead',
+      block: 1,
+    })),
+  );
   return db;
 }
 

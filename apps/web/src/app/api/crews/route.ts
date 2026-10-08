@@ -1,20 +1,14 @@
-import { crews } from '@chog-city/server/db';
-import { dayOf } from '@chog-city/game';
-import { and, desc, eq } from 'drizzle-orm';
+import { chogsFor, crewsFor } from '@chog-city/server';
 import { db } from '@/server/db';
 import { json } from '@/server/http';
+import { currentAddress } from '@/server/session';
 
 export const dynamic = 'force-dynamic';
 
-/** Today's open crews, newest first. */
+/** Today's open crews, plus the crews your Chogs are in. */
 export async function GET() {
-  const rows = await (
-    await db()
-  )
-    .select()
-    .from(crews)
-    .where(and(eq(crews.day, dayOf(Date.now())), eq(crews.status, 'open')))
-    .orderBy(desc(crews.createdAt))
-    .limit(200);
-  return json({ crews: rows.map((r) => ({ ...r, createdAt: r.createdAt.getTime() })) });
+  const d = await db();
+  const address = await currentAddress();
+  const mine = address ? (await chogsFor(d, address)).map((c) => c.tokenId) : [];
+  return json(await crewsFor(d, Date.now(), mine));
 }

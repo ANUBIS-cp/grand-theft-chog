@@ -1,6 +1,6 @@
 'use client';
-import type { DistrictId, GangId } from '@chog-city/data';
-import type { Crew, GameEvent, JobTemplate, MoveInput, TurfChange } from '@chog-city/game';
+import type { DistrictId, GangId, SkillId } from '@chog-city/data';
+import type { Crew, GameEvent, JobTemplate, MoveInput, Scores, TurfChange } from '@chog-city/game';
 import type { ChogView } from './views';
 
 export interface Board {
@@ -24,6 +24,37 @@ export interface FeedItem {
   event: GameEvent;
 }
 
+export interface TargetRow {
+  id: number;
+  cash: number;
+  wanted: number;
+  active: boolean;
+  gang: GangId | null;
+  jailUntil: number;
+  robbedToday: number;
+}
+
+export interface GangRow {
+  gang: GangId;
+  members: number;
+  holds: DistrictId[];
+  pointsToday: number;
+  districtDays: number;
+}
+
+export interface Recap {
+  day: number;
+  jobs: number;
+  jobsWon: number;
+  robberies: number;
+  arrests: number;
+  jailed: number;
+  biggestJob: FeedItem | null;
+  mostRobbed: { id: number; times: number } | null;
+  topEarner: { id: number; cash: number } | null;
+  changes: { district: DistrictId; from: GangId | null; to: GangId | null }[];
+}
+
 export type MoveResponse =
   { ok: true; events: FeedItem[]; chogs: ChogView[]; crew: Crew | null } | { ok: false; error: string };
 
@@ -38,6 +69,18 @@ export const api = {
   board: () => get<Board>('/api/board'),
   feed: () => get<{ events: FeedItem[] }>('/api/feed'),
   chog: (id: number) => get<{ chog: ChogView; owner: string | null; events: FeedItem[] }>(`/api/chog/${id}`),
+  turf: () =>
+    get<{ day: number; scores: Scores; holders: Partial<Record<DistrictId, GangId>>; nextReset: number }>(
+      '/api/turf',
+    ),
+  targets: (kind: 'rob' | 'arrest' | 'jailed') => get<{ targets: TargetRow[] }>(`/api/targets?kind=${kind}`),
+  finder: (skill: SkillId) =>
+    get<{ chogs: (TargetRow & { lastSeen: number })[] }>(`/api/finder?skill=${skill}`),
+  gangs: () => get<{ gangs: GangRow[] }>('/api/gangs'),
+  recap: (day?: number) => get<Recap>(day === undefined ? '/api/recap' : `/api/recap?day=${day}`),
+  inbox: () => get<{ items: FeedItem[] }>('/api/inbox'),
+  crews: () => get<{ open: Crew[]; mine: Crew[] }>('/api/crews'),
+  crew: (id: string) => get<{ crew: Crew }>(`/api/crew/${id}`),
   async move(input: MoveInput): Promise<MoveResponse> {
     const r = await fetch('/api/move', {
       method: 'POST',
@@ -63,6 +106,21 @@ export const ERROR_TEXT: Record<string, string> = {
   SLOW_DOWN: 'Too many moves at once. Wait a second and try again.',
   GANG_NOT_ALLOWED: "Your Chog's traits don't allow that gang.",
   GANG_COOLDOWN: 'You can switch gang once every 7 days.',
+  TARGET_IN_JAIL: "That Chog is in jail. You can't rob someone in jail.",
+  TARGET_ROBBED_OUT: 'That Chog has been robbed enough today. Pick someone else.',
+  SAME_OWNER: "You can't rob or arrest your own Chogs.",
+  SELF: "A Chog can't do that to itself.",
+  NOT_A_GUARD: 'Only Chogs with the Guard skill can arrest.',
+  TARGET_NOT_WANTED: 'You can only arrest Chogs with 3 or more Wanted stars.',
+  NOT_IN_JAIL: "That Chog isn't in jail any more.",
+  NOT_ENOUGH_CASH: "Your Chog doesn't have enough cash for that.",
+  IN_A_CREW: 'Your Chog is already in a crew. Finish or leave that one first.',
+  CREW_NOT_OPEN: 'That crew is closed: it already ran, or it was from yesterday.',
+  SLOT_TAKEN: 'Someone just took that slot. Pick another one.',
+  NOT_IN_CREW: "Your Chog isn't in that crew.",
+  UNKNOWN_CREW: "That crew doesn't exist.",
+  BAD_TARGET: "That target doesn't work for this move.",
+  WRONG_JOB_TYPE: 'That job needs a crew.',
   NETWORK: 'Could not reach Chog City. Check your connection and try again.',
 };
 

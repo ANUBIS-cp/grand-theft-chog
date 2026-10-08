@@ -12,6 +12,8 @@ export interface JobPosterProps {
   hot?: boolean;
   /** Odds for the selected Chog, or null when it can't take this job. */
   odds: number | null;
+  /** "Odds" by default; crew jobs show "Base odds" because the crew changes them. */
+  oddsLabel?: string;
   reason?: string;
   slots?: SlotView[];
   done?: boolean;
@@ -33,6 +35,7 @@ export function JobPoster({
   pay,
   hot,
   odds,
+  oddsLabel = 'Odds',
   reason,
   slots,
   done,
@@ -90,7 +93,7 @@ export function JobPoster({
 
       <dl className="mt-4 grid grid-cols-3 gap-2 border-t-2 border-dashed border-ink-faint pt-3">
         <div>
-          <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">Odds</dt>
+          <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-soft">{oddsLabel}</dt>
           <dd className={cn('font-display text-[30px] leading-none', odds === null && 'text-ink-soft')}>
             {odds === null ? '—' : `${odds}%`}
           </dd>

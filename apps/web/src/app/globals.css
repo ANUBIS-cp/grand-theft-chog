@@ -82,3 +82,22 @@
   }
 }
 /* Centring uses the `translate` property (Tailwind v4), so this only adds the slide; it never re-centres. */
+
+@keyframes ping-pop {
+  0% {
+    opacity: 0;
+    r: 2;
+  }
+  15% {
+    opacity: 1;
+    r: 8;
+  }
+  70% {
+    opacity: 1;
+    r: 6;
+  }
+  100% {
+    opacity: 0;
+    r: 6;
+  }
+}

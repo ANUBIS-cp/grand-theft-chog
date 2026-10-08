@@ -1,11 +1,16 @@
 'use client';
-import { DISTRICT_IDS, DISTRICTS, type DistrictId } from '@chog-city/data';
-import { useMemo, useState } from 'react';
+import { DISTRICT_IDS, DISTRICTS, SKILLS, type DistrictId } from '@chog-city/data';
+import type { Crew } from '@chog-city/game';
+import { useEffect, useMemo, useState } from 'react';
+import { ChogPortrait } from '@/components/chog-portrait';
 import { DistrictPlate } from '@/components/district-plate';
 import { JobPoster } from '@/components/job-poster';
 import { Button } from '@/components/ui/button';
-import type { Board } from '@/lib/api';
+import { Sheet } from '@/components/ui/sheet';
+import { api, type Board, type TargetRow } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { fittingSlots, openSlotsFor } from '@/lib/crews';
+import { nameOf } from '@/lib/describe';
 import { checkJob, ctxFor, type Offer } from '@/lib/play';
 import type { ChogView } from '@/lib/views';
 
@@ -13,18 +18,28 @@ import type { ChogView } from '@/lib/views';
 export function JobBoard({
   chog,
   board,
+  crews,
   now,
   busyKey,
+  district,
+  onDistrict,
   onDo,
+  onStartCrew,
+  onJoin,
 }: {
   chog: ChogView;
   board: Board;
+  crews: Crew[];
   now: number;
   busyKey: string | null;
+  district: DistrictId | 'all';
+  onDistrict: (d: DistrictId | 'all') => void;
   onDo: (offer: Offer) => void;
+  onStartCrew: (offer: Offer, slot: number, jailbreakTarget?: number) => void;
+  onJoin: (crew: Crew, slot: number) => void;
 }) {
-  const [district, setDistrict] = useState<DistrictId | 'all'>('all');
   const [onlyMine, setOnlyMine] = useState(true);
+  const [jailbreak, setJailbreak] = useState<{ offer: Offer; slot: number } | null>(null);
   const ctx = ctxFor(board, now);
 
   const rows = useMemo(() => {
@@ -51,6 +66,7 @@ export function JobBoard({
   const solo = rows.filter((r) => r.o.job.slots.length === 1);
   const crew = rows.filter((r) => r.o.job.slots.length > 1);
   const open = DISTRICT_IDS.filter((d) => board.offers.some((o) => o.district === d));
+  const inCrew = chog.crewId !== null;
 
   return (
     <section aria-labelledby="jobs-title">
@@ -79,7 +95,7 @@ export function JobBoard({
       >
         <div className="flex gap-2">
           <button
-            onClick={() => setDistrict('all')}
+            onClick={() => onDistrict('all')}
             aria-pressed={district === 'all'}
             className={cn(
               'shrink-0 rounded-[5px] border-2 border-ink px-2.5 pb-[2px] pt-[5px] font-display text-[15px] uppercase leading-none',
@@ -91,7 +107,7 @@ export function JobBoard({
           {open.map((d) => (
             <button
               key={d}
-              onClick={() => setDistrict(d)}
+              onClick={() => onDistrict(d)}
               aria-pressed={district === d}
               aria-label={DISTRICTS[d].name}
               className={cn(
@@ -150,23 +166,119 @@ export function JobBoard({
         </p>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {crew.map(({ o, c }) => (
-            <JobPoster
-              key={o.key}
-              job={o.job}
-              district={o.district}
-              pay={o.pay}
-              hot={o.hot}
-              odds={c.odds?.odds ?? null}
-              reason={c.reason ?? undefined}
-            >
-              <Button variant="secondary" className="w-full" disabled>
-                Crews open in the next build
-              </Button>
-            </JobPoster>
-          ))}
+          {crew.map(({ o, c }) => {
+            const existing = crews.find(
+              (x) => x.offerKey === o.key && x.status === 'open' && openSlotsFor(chog, x, o.job).length > 0,
+            );
+            const mine = crews.find(
+              (x) => x.offerKey === o.key && x.status === 'open' && x.slots.includes(chog.id),
+            );
+            const slot = fittingSlots(chog, o.job)[0];
+            const reason = c.reason ?? (inCrew && !mine ? `${chog.name} is already in a crew.` : undefined);
+            const slots =
+              (existing ?? mine)
+                ? (existing ?? mine)!.slots.map((who, i) => ({
+                    slot: o.job.slots[i]!,
+                    chog: who ? { id: who, name: nameOf(who) } : null,
+                  }))
+                : undefined;
+            return (
+              <JobPoster
+                key={o.key}
+                job={o.job}
+                district={o.district}
+                pay={o.pay}
+                hot={o.hot}
+                odds={o.job.baseOdds}
+                oddsLabel="Base odds"
+                reason={mine ? undefined : reason}
+                slots={slots}
+              >
+                {mine ? (
+                  <p className="text-center text-[13px] font-semibold">
+                    {chog.name} is in this crew. See the Crews tab.
+                  </p>
+                ) : reason ? null : existing ? (
+                  <Button
+                    className="w-full"
+                    loading={busyKey === `join:${existing.id}`}
+                    onClick={() => onJoin(existing, openSlotsFor(chog, existing, o.job)[0]!)}
+                  >
+                    Join · {existing.slots.filter((x) => x === null).length} open
+                  </Button>
+                ) : slot !== undefined ? (
+                  <Button
+                    className="w-full"
+                    loading={busyKey === `start:${o.key}`}
+                    onClick={() =>
+                      o.job.special === 'jailbreak' ? setJailbreak({ offer: o, slot }) : onStartCrew(o, slot)
+                    }
+                  >
+                    Start a crew as{' '}
+                    {o.job.slots[slot] === 'any'
+                      ? 'any Chog'
+                      : SKILLS[(o.job.slots[slot] as { anyOf: (keyof typeof SKILLS)[] }).anyOf[0]!].name}
+                  </Button>
+                ) : null}
+              </JobPoster>
+            );
+          })}
         </div>
       )}
+      {jailbreak && (
+        <JailbreakSheet
+          busy={busyKey === `start:${jailbreak.offer.key}`}
+          onPick={(target) => {
+            onStartCrew(jailbreak.offer, jailbreak.slot, target);
+            setJailbreak(null);
+          }}
+          onClose={() => setJailbreak(null)}
+        />
+      )}
     </section>
+  );
+}
+
+function JailbreakSheet({
+  busy,
+  onPick,
+  onClose,
+}: {
+  busy: boolean;
+  onPick: (id: number) => void;
+  onClose: () => void;
+}) {
+  const [rows, setRows] = useState<TargetRow[] | null>(null);
+  useEffect(() => {
+    api
+      .targets('jailed')
+      .then((r) => setRows(r.targets))
+      .catch(() => setRows([]));
+  }, []);
+  return (
+    <Sheet
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title="Who are you breaking out?"
+      description="Pick a Chog in jail. If the crew pulls it off, that Chog walks free."
+    >
+      {rows === null ? (
+        <div className="h-24 animate-pulse rounded-[8px] bg-ink-faint" />
+      ) : rows.length === 0 ? (
+        <p className="text-[14px] text-ink-soft">Nobody is in jail right now.</p>
+      ) : (
+        <ul className="space-y-2">
+          {rows.map((t) => (
+            <li key={t.id} className="flex items-center gap-3">
+              <ChogPortrait id={t.id} name={nameOf(t.id)} size="xs" jailed />
+              <span className="flex-1 text-[14px] font-semibold">{nameOf(t.id)}</span>
+              <Button size="sm" loading={busy} onClick={() => onPick(t.id)}>
+                Break out
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Sheet>
   );
 }
