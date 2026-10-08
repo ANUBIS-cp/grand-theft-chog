@@ -154,6 +154,17 @@ export type GameEvent =
   | { type: 'gang'; chogId: number; gang: GangId }
   | { type: 'level'; chogId: number; level: number };
 
+/** A move as the player asks for it. Same shape for the server and the practice city. */
+export type MoveInput =
+  | { action: 'job'; chogId: number; offerKey: string }
+  | { action: 'rob'; chogId: number; target: number }
+  | { action: 'arrest'; chogId: number; target: number }
+  | { action: 'bail'; chogId: number; target: number }
+  | { action: 'gang'; chogId: number; gang: import('@chog-city/data').GangId }
+  | { action: 'crew.open'; chogId: number; offerKey: string; slot: number; jailbreakTarget?: number }
+  | { action: 'crew.join'; chogId: number; crewId: string; slot: number }
+  | { action: 'crew.leave'; chogId: number; crewId: string };
+
 export type Result<T> = { ok: true; value: T } | { ok: false; error: GameError };
 
 export const ok = <T>(value: T): Result<T> => ({ ok: true, value });

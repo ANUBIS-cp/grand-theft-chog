@@ -3,7 +3,7 @@ import { newChogState } from '@chog-city/game';
 import { db } from '@/server/db';
 import { json } from '@/server/http';
 import { currentAddress } from '@/server/session';
-import { chogView } from '@/server/views';
+import { chogView } from '@/lib/views';
 
 export const dynamic = 'force-dynamic';
 

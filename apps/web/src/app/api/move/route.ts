@@ -5,7 +5,7 @@ import { db } from '@/server/db';
 import { error, json } from '@/server/http';
 import { allow } from '@/server/rate';
 import { currentAddress } from '@/server/session';
-import { chogView } from '@/server/views';
+import { chogView } from '@/lib/views';
 
 export const dynamic = 'force-dynamic';
 

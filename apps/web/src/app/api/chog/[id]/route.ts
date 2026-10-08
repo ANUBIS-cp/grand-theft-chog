@@ -4,7 +4,7 @@ import { newChogState } from '@chog-city/game';
 import { desc, eq, or } from 'drizzle-orm';
 import { db } from '@/server/db';
 import { error, json } from '@/server/http';
-import { chogView } from '@/server/views';
+import { chogView } from '@/lib/views';
 
 export const dynamic = 'force-dynamic';
 
