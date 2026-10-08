@@ -8,3 +8,5 @@ export * from './odds.ts';
 export * from './board.ts';
 export * from './actions.ts';
 export * from './info.ts';
+export * from './crew.ts';
+export * from './turf.ts';
