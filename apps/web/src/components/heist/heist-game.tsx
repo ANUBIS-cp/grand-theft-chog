@@ -14,7 +14,7 @@ import {
   type PowerId,
   type VaultDef,
 } from '@chog-city/game/heist';
-import { ArrowClockwise, SpeakerHigh, SpeakerSlash, Vault } from '@phosphor-icons/react';
+import { ArrowClockwise, SpeakerHigh, SpeakerSlash, Vault, X } from '@phosphor-icons/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
@@ -48,6 +48,8 @@ export interface HeistGameProps {
   owner: { name: string; color: string; ink: string };
   /** A real hit: the inputs go to the server when it ends, and the card offers a way back. */
   real?: { myGang: string; finish: (inputs: string) => Promise<RealResult>; onLeave: () => void };
+  /** Practice from the city: a way back out. */
+  onLeave?: () => void;
 }
 
 const ICON: Record<PowerId, SkillId> = {
@@ -97,7 +99,7 @@ const clock = (ticks: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-export function HeistGame({ vault, tier = 1, player, guards, owner, real }: HeistGameProps) {
+export function HeistGame({ vault, tier = 1, player, guards, owner, real, onLeave }: HeistGameProps) {
   const level = useMemo(() => buildLevel(vault, tier), [vault, tier]);
   const [saved, setSaved] = useState<{ result?: RealResult; error?: string } | null>(null);
   const sentRef = useRef(false);
@@ -125,7 +127,17 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real }: Heis
 
   const fresh = useCallback(() => {
     const s = startHeist(level, player.powers);
-    return { s, prev: snapshot(s), fx: new Fx(), started: false, held: [], queued: null, press: -1, inputs: [], endAt: 0 };
+    return {
+      s,
+      prev: snapshot(s),
+      fx: new Fx(),
+      started: false,
+      held: [],
+      queued: null,
+      press: -1,
+      inputs: [],
+      endAt: 0,
+    };
   }, [level, player.powers]);
 
   const restart = useCallback(() => {
@@ -153,9 +165,13 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real }: Heis
       img.src = src;
       return img;
     };
-    const images = { player: load(chogImage(player.id, 256)), guards: guards.map((c) => load(chogImage(c.id, 96))) };
+    const images = {
+      player: load(chogImage(player.id, 256)),
+      guards: guards.map((c) => load(chogImage(c.id, 96))),
+    };
     const r = new VaultRenderer(cv, level, images, { color: owner.color });
-    r.font = getComputedStyle(document.body).getPropertyValue('--font-display').trim() || 'Impact, sans-serif';
+    r.font =
+      getComputedStyle(document.body).getPropertyValue('--font-display').trim() || 'Impact, sans-serif';
     const g = { ...fresh(), r };
     game.current = g;
     for (const img of [images.player, ...images.guards]) img.onload = () => r.faceReady();
@@ -209,7 +225,9 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real }: Heis
         realRef.current
           .finish(encodeInputs(st.inputs))
           .then((result) => setSaved({ result }))
-          .catch((e: unknown) => setSaved({ error: e instanceof Error ? e.message : 'Could not save the run.' }));
+          .catch((e: unknown) =>
+            setSaved({ error: e instanceof Error ? e.message : 'Could not save the run.' }),
+          );
       }
       const p = st.s.player;
       const next: Hud = {
@@ -220,7 +238,10 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real }: Heis
         wait: st.s.powers.map((x) => Math.max(0, Math.ceil((x.ready - st.s.tick) / TPS))),
         spent: st.s.powers.map((x) => x.used),
         active: st.s.powers.map((x) => {
-          const left = { hide: p.hide, sprint: p.sprint, tackle: p.tackle, magnet: p.magnet, hack: st.s.hacked }[x.id as 'hide'] ?? 0;
+          const left =
+            { hide: p.hide, sprint: p.sprint, tackle: p.tackle, magnet: p.magnet, hack: st.s.hacked }[
+              x.id as 'hide'
+            ] ?? 0;
           return left ? Math.round((left / (POWERS[x.id].lasts * TPS)) * 50) / 50 : 0;
         }),
         score: st.s.score,
@@ -262,8 +283,20 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real }: Heis
             if (e.kind === 'coin') sfx?.coin();
             else if (e.kind === 'cash') sfx?.cash();
             else sfx?.bag();
-            st.fx.burst(tileX(e.x), tileY(e.y), e.kind === 'coin' ? 5 : 12, ['#ffd666', '#fff3b0', '#5fd17e'], e.kind === 'bag' ? 3 : 2);
-            st.fx.float(tileX(e.x), tileY(e.y) - t * 0.3, `+${money(e.value)}`, e.kind === 'coin' ? '#ffd666' : '#7dffa8', e.kind === 'bag');
+            st.fx.burst(
+              tileX(e.x),
+              tileY(e.y),
+              e.kind === 'coin' ? 5 : 12,
+              ['#ffd666', '#fff3b0', '#5fd17e'],
+              e.kind === 'bag' ? 3 : 2,
+            );
+            st.fx.float(
+              tileX(e.x),
+              tileY(e.y) - t * 0.3,
+              `+${money(e.value)}`,
+              e.kind === 'coin' ? '#ffd666' : '#7dffa8',
+              e.kind === 'bag',
+            );
             break;
           case 'safe':
             sfx?.safe();
@@ -379,14 +412,30 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real }: Heis
   }, [restart]);
 
   // Touch and mouse: drag anywhere to move, like a joystick that follows your finger.
-  const drag = useRef<{ id: number; ax: number; ay: number; t0: number; d: Dir | -1; ox: number; oy: number } | null>(null);
+  const drag = useRef<{
+    id: number;
+    ax: number;
+    ay: number;
+    t0: number;
+    d: Dir | -1;
+    ox: number;
+    oy: number;
+  } | null>(null);
   const onPointerDown = (e: React.PointerEvent) => {
     const g = game.current;
     if (!g || g.s.phase === 'escaped' || g.s.phase === 'busted') return;
     sound.current?.unlock();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    drag.current = { id: e.pointerId, ax: e.clientX, ay: e.clientY, t0: performance.now(), d: -1, ox: box.left, oy: box.top };
+    drag.current = {
+      id: e.pointerId,
+      ax: e.clientX,
+      ay: e.clientY,
+      t0: performance.now(),
+      d: -1,
+      ox: box.left,
+      oy: box.top,
+    };
     setJoy({ x: e.clientX - box.left, y: e.clientY - box.top, dx: 0, dy: 0 });
   };
   const onPointerMove = (e: React.PointerEvent) => {
@@ -449,19 +498,37 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real }: Heis
     <div className="flex h-full flex-col bg-[#0b0918] text-white">
       {/* Top bar */}
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pb-1.5 pt-2 sm:px-4">
-        <div
-          className="flex min-w-0 items-center gap-1.5 justify-self-start rounded-[6px] border-2 border-ink py-1 pl-1.5 pr-2 shadow-[2px_2px_0_0_#000]"
-          style={{ background: owner.color, color: owner.ink }}
-          title={`You're robbing ${owner.name}`}
-        >
-          <Vault size={16} weight="fill" className="shrink-0" />
-          <span className="truncate font-display text-[16px] uppercase leading-none pt-0.5">{owner.name}</span>
+        <div className="flex min-w-0 items-center gap-2 justify-self-start">
+          {onLeave && !real && (
+            <button
+              onClick={onLeave}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-white/70 hover:text-white"
+              aria-label="Back to the city"
+            >
+              <X size={20} weight="bold" />
+            </button>
+          )}
+          <div
+            className="flex min-w-0 items-center gap-1.5 rounded-[6px] border-2 border-ink py-1 pl-1.5 pr-2 shadow-[2px_2px_0_0_#000]"
+            style={{ background: owner.color, color: owner.ink }}
+            title={`You're robbing ${owner.name}`}
+          >
+            <Vault size={16} weight="fill" className="shrink-0" />
+            <span className="truncate pt-0.5 font-display text-[16px] uppercase leading-none">
+              {owner.name}
+            </span>
+          </div>
         </div>
         <div
-          className={cn('font-display text-[32px] leading-none tabular-nums sm:text-[36px]', alarm ? 'text-[#ff4d6d]' : 'text-white')}
+          className={cn(
+            'font-display text-[32px] leading-none tabular-nums sm:text-[36px]',
+            alarm ? 'text-[#ff4d6d]' : 'text-white',
+          )}
           aria-label={alarm ? 'Seconds to get out' : 'Time left'}
         >
-          {alarm ? `0:${String(hud?.seconds ?? 0).padStart(2, '0')}` : clock(hud ? hud.seconds * TPS : level.ticks)}
+          {alarm
+            ? `0:${String(hud?.seconds ?? 0).padStart(2, '0')}`
+            : clock(hud ? hud.seconds * TPS : level.ticks)}
         </div>
         <div className="flex items-center gap-1 justify-self-end">
           <div className="rounded-[6px] border-2 border-ink bg-[#ffd666] px-2 pb-0.5 pt-1 font-display text-[22px] leading-none text-ink tabular-nums shadow-[2px_2px_0_0_#000]">
@@ -513,6 +580,7 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real }: Heis
             owner={owner.name}
             caughtBy={caughtBy}
             onAgain={restart}
+            onLeave={onLeave}
             real={real ? { ...real, saved } : undefined}
           />
         )}
@@ -560,7 +628,12 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real }: Heis
                     off ? 'bg-transparent' : 'bg-paper-raised',
                   )}
                 >
-                  <SkillIcon skill={ICON[id]} width={26} height={26} className={cn(off && wait > 0 && 'opacity-30')} />
+                  <SkillIcon
+                    skill={ICON[id]}
+                    width={26}
+                    height={26}
+                    className={cn(off && wait > 0 && 'opacity-30')}
+                  />
                   {off && wait > 0 && !spent && (
                     <span className="absolute inset-0 grid place-items-center font-display text-[22px] leading-none text-white">
                       {wait}
@@ -569,14 +642,29 @@ export function HeistGame({ vault, tier = 1, player, guards, owner, real }: Heis
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline justify-between gap-1">
-                    <span className="truncate pt-0.5 font-display text-[19px] uppercase leading-none">{def.name}</span>
+                    <span className="truncate pt-0.5 font-display text-[19px] uppercase leading-none">
+                      {def.name}
+                    </span>
                     <kbd className="hidden font-mono text-[10px] opacity-60 sm:inline">{i + 1}</kbd>
                   </span>
                   <span className="mt-0.5 line-clamp-2 text-[11px] leading-[1.2] opacity-80">
-                    {spent ? 'Used' : active > 0 ? 'On!' : wait > 0 ? `Ready in ${wait}s` : needsAlarm ? 'Use it when the alarm goes off.' : def.does}
+                    {spent
+                      ? 'Used'
+                      : active > 0
+                        ? 'On!'
+                        : wait > 0
+                          ? `Ready in ${wait}s`
+                          : needsAlarm
+                            ? 'Use it when the alarm goes off.'
+                            : def.does}
                   </span>
                 </span>
-                {active > 0 && <span className="absolute bottom-0 left-0 h-1.5 bg-ink" style={{ width: `${active * 100}%` }} />}
+                {active > 0 && (
+                  <span
+                    className="absolute bottom-0 left-0 h-1.5 bg-ink"
+                    style={{ width: `${active * 100}%` }}
+                  />
+                )}
               </button>
             );
           })}
@@ -610,6 +698,7 @@ function EndCard({
   owner,
   caughtBy,
   onAgain,
+  onLeave,
   real,
 }: {
   escaped: boolean;
@@ -619,6 +708,7 @@ function EndCard({
   owner: string;
   caughtBy: HeistChog | null | undefined;
   onAgain: () => void;
+  onLeave?: () => void;
   real?: { myGang: string; onLeave: () => void; saved: { result?: RealResult; error?: string } | null };
 }) {
   const [shown, setShown] = useState(0);
@@ -678,7 +768,11 @@ function EndCard({
           <>
             {caughtBy ? (
               <div className="mt-4 flex items-center justify-center gap-3">
-                <img src={chogImage(caughtBy.id, 96)} alt="" className="h-14 w-14 rounded-full border-2 border-ink" />
+                <img
+                  src={chogImage(caughtBy.id, 96)}
+                  alt=""
+                  className="h-14 w-14 rounded-full border-2 border-ink"
+                />
                 <p className="text-left text-[15px] leading-snug">
                   <strong className="block">{caughtBy.name}</strong>
                   caught you
@@ -690,7 +784,9 @@ function EndCard({
             {real ? (
               <p className="mt-3 text-[14px] leading-snug">
                 Your Chog is in jail for 30 minutes.
-                {real.saved?.result?.moved ? ` ${real.myGang} paid ${owner} a ${money(real.saved.result.moved)} fine.` : ''}
+                {real.saved?.result?.moved
+                  ? ` ${real.myGang} paid ${owner} a ${money(real.saved.result.moved)} fine.`
+                  : ''}
               </p>
             ) : (
               <p className="mt-3 text-[14px] text-ink-soft">You dropped {money(carried)}.</p>
@@ -714,7 +810,16 @@ function EndCard({
               <ArrowClockwise size={20} weight="bold" />
               <span className="pt-1">Again</span>
             </button>
-            <p className="mt-2 hidden text-[12px] text-ink-soft sm:block">or press R</p>
+            {onLeave ? (
+              <button
+                onClick={onLeave}
+                className="mt-3 text-[14px] font-semibold underline underline-offset-2"
+              >
+                Back to the city
+              </button>
+            ) : (
+              <p className="mt-2 hidden text-[12px] text-ink-soft sm:block">or press R</p>
+            )}
           </>
         )}
       </div>

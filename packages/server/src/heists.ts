@@ -83,7 +83,10 @@ export async function setGang(db: Db, address: string, chogId: number, gang: Gan
   if (!chog || !canJoinGang(chog, gang)) throw new HeistRefused('bad-gang');
   const current = await heistRecord(db, chogId);
   if (current?.gang) throw new HeistRefused('bad-gang');
-  await db.insert(heistChogs).values({ id: chogId, gang }).onConflictDoUpdate({ target: heistChogs.id, set: { gang } });
+  await db
+    .insert(heistChogs)
+    .values({ id: chogId, gang })
+    .onConflictDoUpdate({ target: heistChogs.id, set: { gang } });
 }
 
 /** Gangs that robbed `gang` in the last day: hitting them back pays a bonus. */
@@ -185,18 +188,36 @@ export async function finishRun(
     if (now - run.startedAt.getTime() > RUN_MAX_MS) throw new HeistRefused('too-late');
     // Lock both vaults in a fixed order so two runs settling at once can't deadlock.
     const pair = [run.gang, run.target].sort();
-    const vaults = await tx.select().from(gangVaults).where(inArray(gangVaults.gang, pair)).orderBy(gangVaults.gang).for('update');
+    const vaults = await tx
+      .select()
+      .from(gangVaults)
+      .where(inArray(gangVaults.gang, pair))
+      .orderBy(gangVaults.gang)
+      .for('update');
     const cash = Object.fromEntries(vaults.map((v) => [v.gang, v.cash])) as Record<string, number>;
     const def = vaultDef(run.vault);
     if (!def) throw new HeistRefused('no-run');
     const built = buildLevel(def, run.tier);
     if (inputs.length > maxTicks(built)) throw new HeistRefused('bad-inputs');
-    const { state, moved } = settle(built, run.powers as PowerId[], inputs, cash[run.target] ?? 0, cash[run.gang] ?? 0, run.revenge);
+    const { state, moved } = settle(
+      built,
+      run.powers as PowerId[],
+      inputs,
+      cash[run.target] ?? 0,
+      cash[run.gang] ?? 0,
+      run.revenge,
+    );
     const escaped = state.phase === 'escaped';
     const [from, to] = escaped ? [run.target, run.gang] : [run.gang, run.target];
     if (moved > 0) {
-      await tx.update(gangVaults).set({ cash: sql`${gangVaults.cash} - ${moved}`, updatedAt: new Date(now) }).where(eq(gangVaults.gang, from));
-      await tx.update(gangVaults).set({ cash: sql`${gangVaults.cash} + ${moved}`, updatedAt: new Date(now) }).where(eq(gangVaults.gang, to));
+      await tx
+        .update(gangVaults)
+        .set({ cash: sql`${gangVaults.cash} - ${moved}`, updatedAt: new Date(now) })
+        .where(eq(gangVaults.gang, from));
+      await tx
+        .update(gangVaults)
+        .set({ cash: sql`${gangVaults.cash} + ${moved}`, updatedAt: new Date(now) })
+        .where(eq(gangVaults.gang, to));
     }
     const caughtBy = !escaped && state.caughtBy !== null ? (run.guards[state.caughtBy] ?? null) : null;
     const jailedUntil = escaped ? null : now + JAIL_MS;
@@ -210,7 +231,11 @@ export async function finishRun(
               best: sql`greatest(${heistChogs.best}, ${state.score})`,
               lastRunAt: new Date(now),
             }
-          : { busts: sql`${heistChogs.busts} + 1`, jailedUntil: new Date(jailedUntil!), lastRunAt: new Date(now) },
+          : {
+              busts: sql`${heistChogs.busts} + 1`,
+              jailedUntil: new Date(jailedUntil!),
+              lastRunAt: new Date(now),
+            },
       )
       .where(eq(heistChogs.id, run.chogId));
     if (caughtBy !== null)
@@ -230,7 +255,9 @@ export async function finishRun(
         inputs: text,
       })
       .where(eq(heistRuns.id, run.id));
-    await tx.execute(sql`select pg_notify('city', ${JSON.stringify({ war: run.id })})`).catch(() => undefined);
+    await tx
+      .execute(sql`select pg_notify('city', ${JSON.stringify({ war: run.id })})`)
+      .catch(() => undefined);
     return {
       result: escaped ? 'escaped' : 'busted',
       carried: state.carried,
@@ -262,7 +289,10 @@ export async function recentHits(db: Db, limit = 30, gang?: GangId): Promise<War
     .from(heistRuns)
     .where(
       gang
-        ? and(isNotNull(heistRuns.finishedAt), sql`(${heistRuns.gang} = ${gang} or ${heistRuns.target} = ${gang})`)
+        ? and(
+            isNotNull(heistRuns.finishedAt),
+            sql`(${heistRuns.gang} = ${gang} or ${heistRuns.target} = ${gang})`,
+          )
         : isNotNull(heistRuns.finishedAt),
     )
     .orderBy(desc(heistRuns.finishedAt))
@@ -315,7 +345,12 @@ export async function chogHits(db: Db, chogId: number, limit = 20): Promise<WarH
   const rows = await db
     .select()
     .from(heistRuns)
-    .where(and(isNotNull(heistRuns.finishedAt), sql`(${heistRuns.chogId} = ${chogId} or ${heistRuns.caughtBy} = ${chogId})`))
+    .where(
+      and(
+        isNotNull(heistRuns.finishedAt),
+        sql`(${heistRuns.chogId} = ${chogId} or ${heistRuns.caughtBy} = ${chogId})`,
+      ),
+    )
     .orderBy(desc(heistRuns.finishedAt))
     .limit(limit);
   return rows.map((r) => ({
@@ -339,4 +374,29 @@ export async function gangMembers(db: Db, gang: GangId, limit = 50) {
     .where(eq(heistChogs.gang, gang))
     .orderBy(desc(heistChogs.stolen), desc(heistChogs.catches), heistChogs.id)
     .limit(limit);
+}
+
+/** Chogs sitting in jail right now, soonest out first. */
+export async function jailed(db: Db, now: number, limit = 40) {
+  const rows = await db
+    .select({ id: heistChogs.id, gang: heistChogs.gang, until: heistChogs.jailedUntil })
+    .from(heistChogs)
+    .where(gt(heistChogs.jailedUntil, new Date(now)))
+    .orderBy(heistChogs.jailedUntil)
+    .limit(limit);
+  return rows.map((r) => ({ id: r.id, gang: r.gang as GangId, until: r.until!.getTime() }));
+}
+
+/** Chogs strolling round the city today: a fixed pick per day from every gang. */
+export function strollers(now: number, n = 36): { id: number; gang: GangId }[] {
+  const day = dayOf(now);
+  const out: { id: number; gang: GangId }[] = [];
+  let seed = day * 2654435761;
+  for (let tries = 0; out.length < n && tries < n * 20; tries++) {
+    seed = (Math.imul(seed ^ (seed >>> 15), 2246822519) + 3266489917) >>> 0;
+    const c = CHOGS[seed % CHOGS.length]!;
+    const gang = gangOptions(c).born[0];
+    if (gang && !out.some((o) => o.id === c.id)) out.push({ id: c.id, gang });
+  }
+  return out;
 }

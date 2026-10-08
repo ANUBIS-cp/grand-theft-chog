@@ -1,18 +1,23 @@
 # Chog City: build plan
 
-> **Revised 8 Oct 2026 (after checkpoint 2):** the jobs/crews/turf game failed the play test and was replaced.
-> The game is now **the heist + the gang war**: every gang has a vault with real cash; you sneak your Chog into a
-> rival's vault (a 90-second stealth arcade run: flashlights, cameras, lasers, a safe, trait powers), and what you
-> escape with moves into your gang's vault. Caught = 30 min jail and a fine to the vault. Guards are the target
-> gang's real Chogs. One hit per rival vault per Chog per day; revenge +25%. Richer vaults defend harder.
-> Parts of this plan about jobs, crews, districts, turf, moves and the nightly turf flip are obsolete.
-> Remaining days, in order:
-> - Day 8: $CHOG on-chain: bail out of jail early (burn), gang banners; contracts + fork tests; mainnet only with the user's OK.
-> - Day 9: closed test with holders; more vault layouts (aim 4); first-run guided practice.
-> - Day 10: fixes, balance from real runs (route bot + run logs), performance, accessibility.
-> - Day 11: public launch (wipe test data first), Discord posts of big hits.
-> - Day 12: events (gang war weekend, Halloween vault). Day 13: video, README, numbers. Day 14: submit.
-
+> **Revised again 8 Oct 2026 (after checkpoint 2c):** the user played the gang war: it works, but "the game is the
+> whole idea" reads as a small build. Chosen: **a live city**. You walk around a night-time city as your Chog and
+> see every other holder walking around live. Each gang has a building; walk to a rival's door to rob its vault
+> (the heist); walk into your own to set up your vault's defences with stolen cash. Caught Chogs sit in a jail
+> everyone can see, and friends can break them out. Every robbery can be watched as a replay. Visitors without a
+> Chog walk in as a guest and can do practice runs. Parts of this plan about jobs, crews, districts, turf, moves
+> and the nightly turf flip are obsolete. The heist rules (vault cash, jail, fines, once a day, revenge) still hold.
+> Days, in order (Day 1 = 9 Oct):
+> - Day 1: city map + renderer (night streets, 16 gang buildings, jail, plaza, training warehouse), walking (keys, drag, click-to-walk), minimap, door cards, wandering Chogs.
+> - Day 2: live server (WebSocket, signed tickets from the web app, 10 updates a second), other holders live, guests, Chog cards on click, emotes; deploy behind Caddy.
+> - Day 3: city <-> heist (rob from the door, come back to the street), your gang's building inside (members, vault, robberies), live alarm on robbed buildings, jail with jailed Chogs.
+> - Day 4: gang defences: spend vault cash on guards, cameras and lasers in fixed spots; the server builds each vault from its gang's defences.
+> - Day 5: replays of every robbery + share; jail break-out (a jail heist).
+> - Day 6: vault layouts 3 and 4, guided first run in the training warehouse.
+> - Day 7: polish, sound, phones; Checkpoint 3 with the user.
+> - Day 8: $CHOG on-chain (bail, building looks), only with the user's OK. Day 9: closed test with holders.
+> - Day 10: fixes, load test (200 bots), performance. Day 11: public launch (wipe test data first).
+> - Day 12: live fixes, events. Day 13: video, README. Day 14: submit.
 
 Solo entry for Chogathon 2026. Version 1, written 8 October 2026, before the hackathon starts.
 

@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import { WarApp } from '@/components/war/war-app';
+import { CityApp } from '@/components/city/city-app';
 
 export const metadata: Metadata = { title: 'Play · Chog City' };
 
 export default function PlayPage() {
-  return <WarApp />;
+  return <CityApp />;
 }

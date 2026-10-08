@@ -1,0 +1,1284 @@
+import { BH, BW, CITY, Ground, ROAD, groundAt, type Place, type Prop } from '@chog-city/game/city';
+import { chogImage } from '@/lib/images';
+
+// Draws the city at night in the same 3/4 view as the vaults: ground tiles, buildings (roof at the back, front
+// wall at the bottom of the footprint, so nobody is ever hidden behind one), lamps, trees, and the Chogs on the
+// street. A dark layer with light pools cut out of it goes on top, then names and speech bubbles.
+
+const INK = '#0d0b1a';
+
+export interface Person {
+  key: string;
+  /** Token ID for the face; null for a guest. */
+  chog: number | null;
+  name: string;
+  color: string;
+  ink: string;
+  x: number;
+  y: number;
+  /** -1 facing left, 1 facing right. */
+  face: -1 | 1;
+  moving: boolean;
+  me?: boolean;
+  /** Wandering Chogs nobody is playing: drawn a little quieter. */
+  npc?: boolean;
+  emote?: { kind: Emote; at: number };
+}
+
+export type Emote = 'wave' | 'laugh' | 'angry' | 'cash';
+
+export interface PlaceLook {
+  name: string;
+  color: string;
+  ink: string;
+  /** Defence level 0-3 (cameras and wire on the roof). */
+  tier: number;
+  cash: number;
+  rank: number;
+  /** Someone is robbing it right now. */
+  alarm: boolean;
+  mine: boolean;
+}
+
+export interface Board {
+  /** The big screen in the plaza. */
+  lines: { name: string; cash: number; color: string }[];
+}
+
+type Img = HTMLImageElement;
+
+function hash(x: number, y: number) {
+  let h = (x * 374761393 + y * 668265263) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function makeCanvas(w: number, h: number) {
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.ceil(w));
+  c.height = Math.max(1, Math.ceil(h));
+  return c;
+}
+
+const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US');
+
+/** Darker or lighter version of a #rrggbb colour. */
+function shade(hex: string, f: number) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v: number) => Math.max(0, Math.min(255, Math.round(f < 0 ? v * (1 + f) : v + (255 - v) * f)));
+  return `rgb(${ch(n >> 16)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
+}
+
+// Fixed parts of the map that never change: road markings depend only on where a tile sits.
+const PERIOD_X = BW + ROAD;
+const PERIOD_Y = BH + ROAD;
+const inVRoad = (x: number) => x % PERIOD_X < ROAD;
+const inHRoad = (y: number) => y % PERIOD_Y < ROAD;
+
+export class CityRenderer {
+  t = 48;
+  dpr = 1;
+  font = 'Impact, sans-serif';
+  bodyFont = 'Arial, sans-serif';
+  places: Record<string, PlaceLook> = {};
+  board: Board = { lines: [] };
+  private g: CanvasRenderingContext2D;
+  private dark!: HTMLCanvasElement;
+  private tiles: Record<string, HTMLCanvasElement> = {};
+  private buildings = new Map<string, { c: HTMLCanvasElement; key: string }>();
+  private faces = new Map<string, HTMLCanvasElement>();
+  private images = new Map<number, Img>();
+  view = { w: 0, h: 0 };
+  cam = { x: 0, y: 0, ready: false };
+
+  constructor(
+    private cv: HTMLCanvasElement,
+    private onImage: () => void,
+  ) {
+    this.g = cv.getContext('2d')!;
+  }
+
+  resize(w: number, h: number) {
+    this.t = Math.round(Math.min(64, Math.max(36, Math.min(w, h) / 12)));
+    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.view = { w: Math.round(w), h: Math.round(h) };
+    this.cv.width = Math.round(w * this.dpr);
+    this.cv.height = Math.round(h * this.dpr);
+    this.cv.style.width = `${this.view.w}px`;
+    this.cv.style.height = `${this.view.h}px`;
+    this.dark = makeCanvas(this.cv.width, this.cv.height);
+    this.tiles = {};
+    this.buildings.clear();
+    this.faces.clear();
+    this.buildTiles();
+  }
+
+  /** World tile -> screen px. */
+  sx = (x: number) => x * this.t - this.cam.x;
+  sy = (y: number) => y * this.t - this.cam.y;
+  /** Screen px -> world tile. */
+  toWorld(px: number, py: number) {
+    return { x: (px + this.cam.x) / this.t, y: (py + this.cam.y) / this.t };
+  }
+
+  /** Moves the camera toward (x, y) in tiles, kept inside the map. */
+  follow(x: number, y: number, snap = false) {
+    const W = CITY.w * this.t;
+    const H = CITY.h * this.t;
+    const axis = (world: number, screen: number, at: number) =>
+      world <= screen ? (world - screen) / 2 : Math.max(0, Math.min(world - screen, at - screen / 2));
+    const tx = axis(W, this.view.w, x * this.t);
+    const ty = axis(H, this.view.h, y * this.t);
+    if (snap || !this.cam.ready) {
+      this.cam = { x: tx, y: ty, ready: true };
+      return;
+    }
+    this.cam.x += (tx - this.cam.x) * 0.15;
+    this.cam.y += (ty - this.cam.y) * 0.15;
+  }
+
+  /** Pans by a screen distance (dragging the map when you aren't walking). */
+  pan(dx: number, dy: number) {
+    const W = CITY.w * this.t;
+    const H = CITY.h * this.t;
+    this.cam.x = Math.max(0, Math.min(Math.max(0, W - this.view.w), this.cam.x - dx));
+    this.cam.y = Math.max(0, Math.min(Math.max(0, H - this.view.h), this.cam.y - dy));
+  }
+
+  private image(chog: number): Img | undefined {
+    let img = this.images.get(chog);
+    if (!img) {
+      img = new Image();
+      img.decoding = 'async';
+      img.src = chogImage(chog, 256);
+      img.onload = () => {
+        for (const k of this.faces.keys()) if (k.startsWith(`${chog}:`)) this.faces.delete(k);
+        this.onImage();
+      };
+      this.images.set(chog, img);
+    }
+    return img.complete && img.naturalWidth ? img : undefined;
+  }
+
+  // ---------- tiles ----------
+
+  private tile(key: string, draw: (g: CanvasRenderingContext2D, t: number) => void) {
+    const { t, dpr } = this;
+    const c = makeCanvas(t * dpr, t * dpr);
+    const g = c.getContext('2d')!;
+    g.scale(dpr, dpr);
+    draw(g, t);
+    this.tiles[key] = c;
+  }
+
+  private buildTiles() {
+    const speckle = (g: CanvasRenderingContext2D, t: number, base: string, dots: string, seed: number) => {
+      g.fillStyle = base;
+      g.fillRect(0, 0, t, t);
+      g.fillStyle = dots;
+      for (let i = 0; i < 7; i++) {
+        const r = hash(seed, i);
+        const q = hash(i, seed + 9);
+        g.fillRect(Math.floor(r * t), Math.floor(q * t), Math.max(1, t / 24), Math.max(1, t / 24));
+      }
+    };
+    for (let v = 0; v < 4; v++) {
+      this.tile(`road${v}`, (g, t) => speckle(g, t, '#1b1828', '#24203a', v));
+      this.tile(`walk${v}`, (g, t) => {
+        g.fillStyle = v % 2 ? '#2c2843' : '#2a2640';
+        g.fillRect(0, 0, t, t);
+        g.strokeStyle = '#211d34';
+        g.lineWidth = Math.max(1, t / 32);
+        g.strokeRect(0.5, 0.5, t - 1, t - 1);
+        if (v === 3) {
+          g.strokeStyle = '#25213a';
+          g.beginPath();
+          g.moveTo(t * 0.2, t * 0.3);
+          g.lineTo(t * 0.45, t * 0.55);
+          g.stroke();
+        }
+      });
+      this.tile(`yard${v}`, (g, t) => {
+        g.fillStyle = (v & 1) ^ (v >> 1) ? '#352c49' : '#30283f';
+        g.fillRect(0, 0, t, t);
+        g.strokeStyle = '#272035';
+        g.lineWidth = Math.max(1, t / 40);
+        g.strokeRect(0.5, 0.5, t - 1, t - 1);
+      });
+      this.tile(`grass${v}`, (g, t) => {
+        speckle(g, t, v % 2 ? '#173a2b' : '#163628', '#1f4a36', v + 20);
+        g.strokeStyle = '#225440';
+        g.lineWidth = Math.max(1, t / 28);
+        for (let i = 0; i < 4; i++) {
+          const x = hash(v, i + 40) * t;
+          const y = hash(i + 40, v) * t;
+          g.beginPath();
+          g.moveTo(x, y);
+          g.lineTo(x + t * 0.04, y - t * 0.1);
+          g.stroke();
+        }
+      });
+      this.tile(`plaza${v}`, (g, t) => {
+        g.fillStyle = '#2f2848';
+        g.fillRect(0, 0, t, t);
+        g.fillStyle = v % 2 ? '#342d4f' : '#2c2644';
+        g.fillRect(t * 0.04, t * 0.04, t * 0.44, t * 0.44);
+        g.fillRect(t * 0.52, t * 0.52, t * 0.44, t * 0.44);
+        g.fillStyle = v % 2 ? '#2c2644' : '#332c4d';
+        g.fillRect(t * 0.52, t * 0.04, t * 0.44, t * 0.44);
+        g.fillRect(t * 0.04, t * 0.52, t * 0.44, t * 0.44);
+      });
+    }
+    this.tile('crossH', (g, t) => {
+      speckle(g, t, '#1b1828', '#24203a', 7);
+      g.fillStyle = '#bdb8d4';
+      g.globalAlpha = 0.55;
+      for (let i = 0; i < 3; i++) g.fillRect(t * 0.08, t * (0.08 + i * 0.33), t * 0.84, t * 0.17);
+    });
+    this.tile('crossV', (g, t) => {
+      speckle(g, t, '#1b1828', '#24203a', 8);
+      g.fillStyle = '#bdb8d4';
+      g.globalAlpha = 0.55;
+      for (let i = 0; i < 3; i++) g.fillRect(t * (0.08 + i * 0.33), t * 0.08, t * 0.17, t * 0.84);
+    });
+    this.tile('pen', (g, t) => {
+      g.fillStyle = '#3a3a44';
+      g.fillRect(0, 0, t, t);
+      g.fillStyle = '#34343d';
+      g.fillRect(t * 0.5, 0, t * 0.5, t * 0.5);
+      g.fillRect(0, t * 0.5, t * 0.5, t * 0.5);
+    });
+  }
+
+  private groundTile(x: number, y: number): HTMLCanvasElement | undefined {
+    const v = Math.floor(hash(x, y) * 4);
+    switch (groundAt(x, y)) {
+      case Ground.Road:
+        return this.tiles[`road${v}`];
+      case Ground.Cross:
+        // Stripes run the way the traffic does, so you walk across them.
+        return this.tiles[inVRoad(x) ? 'crossV' : 'crossH'];
+      case Ground.Walk:
+      case Ground.Prop:
+        return groundAt(x, y) === Ground.Prop && this.nearPlaza(x, y)
+          ? this.tiles[`plaza${v}`]
+          : this.tiles[`walk${v}`];
+      case Ground.Yard:
+        return this.tiles[`yard${v}`];
+      case Ground.Grass:
+        return this.tiles[`grass${v}`];
+      case Ground.Plaza:
+        return this.tiles[`plaza${v}`];
+      case Ground.Pen:
+        return this.tiles.pen;
+      default:
+        return this.tiles[`walk${v}`];
+    }
+  }
+
+  private nearPlaza(x: number, y: number) {
+    return (
+      groundAt(x - 1, y) === Ground.Plaza ||
+      groundAt(x + 1, y) === Ground.Plaza ||
+      groundAt(x, y - 1) === Ground.Plaza
+    );
+  }
+
+  private drawGround(x0: number, y0: number, x1: number, y1: number) {
+    const { g, t } = this;
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const tile = this.groundTile(x, y);
+        if (tile) g.drawImage(tile, Math.floor(this.sx(x)), Math.floor(this.sy(y)), t + 1, t + 1);
+      }
+    // Lane dashes down the middle of every road, and kerbs where pavement meets road.
+    g.fillStyle = '#8a7a3a';
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        if (groundAt(x, y) !== Ground.Road) continue;
+        const h = inHRoad(y) && !inVRoad(x);
+        const v = inVRoad(x) && !inHRoad(y);
+        if (h && y % PERIOD_Y === 1 && x % 2 === 0)
+          g.fillRect(this.sx(x + 0.15), this.sy(y + 0.46), t * 0.7, t * 0.08);
+        if (v && x % PERIOD_X === 1 && y % 2 === 0)
+          g.fillRect(this.sx(x + 0.46), this.sy(y + 0.15), t * 0.08, t * 0.7);
+      }
+    const kerb = Math.max(2, t / 14);
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const k = groundAt(x, y);
+        if (k === Ground.Road || k === Ground.Cross) continue;
+        if (k === Ground.Block) continue;
+        const road = (gx: number, gy: number) => {
+          const n = groundAt(gx, gy);
+          return n === Ground.Road || n === Ground.Cross;
+        };
+        g.fillStyle = '#4a4466';
+        if (road(x, y + 1)) g.fillRect(this.sx(x), this.sy(y + 1) - kerb, t, kerb);
+        if (road(x, y - 1)) g.fillRect(this.sx(x), this.sy(y), t, kerb * 0.6);
+        if (road(x - 1, y)) g.fillRect(this.sx(x), this.sy(y), kerb * 0.6, t);
+        if (road(x + 1, y)) g.fillRect(this.sx(x + 1) - kerb * 0.6, this.sy(y), kerb * 0.6, t);
+        if (road(x, y + 1)) {
+          g.fillStyle = 'rgba(0,0,0,0.35)';
+          g.fillRect(this.sx(x), this.sy(y + 1), t, kerb * 0.8);
+        }
+      }
+  }
+
+  // ---------- buildings ----------
+
+  /** How tall the front wall is, in tiles. The rest of the footprint is roof. */
+  private static WALL = 3;
+
+  private buildingSprite(p: Place, look: PlaceLook | undefined, now: number): HTMLCanvasElement {
+    const key = `${p.id}:${look?.tier ?? 0}:${look?.rank ?? 0}:${look?.mine ? 1 : 0}`;
+    const have = this.buildings.get(p.id);
+    if (have && have.key === key) return have.c;
+    const { t, dpr } = this;
+    const lip = Math.round(t * 0.7);
+    const c = makeCanvas(p.w * t * dpr, (p.h * t + lip) * dpr);
+    const g = c.getContext('2d')!;
+    g.scale(dpr, dpr);
+    g.translate(0, lip);
+    if (p.kind === 'gang') this.paintHideout(g, p, look);
+    else if (p.kind === 'jail') this.paintJail(g, p);
+    else this.paintWarehouse(g, p);
+    void now;
+    this.buildings.set(p.id, { c, key });
+    return c;
+  }
+
+  private paintRoof(g: CanvasRenderingContext2D, p: Place, roof: string, edge: string) {
+    const { t } = this;
+    const W = p.w * t;
+    const R = (p.h - CityRenderer.WALL) * t;
+    g.fillStyle = roof;
+    g.fillRect(0, 0, W, R);
+    // Tar-paper seams.
+    g.strokeStyle = 'rgba(0,0,0,0.18)';
+    g.lineWidth = 1;
+    for (let i = 1; i < p.w; i++) {
+      g.beginPath();
+      g.moveTo(i * t, 0);
+      g.lineTo(i * t, R);
+      g.stroke();
+    }
+    // Parapet round the roof.
+    const lw = Math.max(3, t * 0.12);
+    g.strokeStyle = edge;
+    g.lineWidth = lw;
+    g.strokeRect(lw / 2, lw / 2, W - lw, R - lw / 2);
+    g.strokeStyle = INK;
+    g.lineWidth = 2;
+    g.strokeRect(1, 1, W - 2, R);
+  }
+
+  private paintHideout(g: CanvasRenderingContext2D, p: Place, look: PlaceLook | undefined) {
+    const { t } = this;
+    const W = p.w * t;
+    const R = (p.h - CityRenderer.WALL) * t;
+    const Hw = CityRenderer.WALL * t;
+    const color = look?.color ?? '#888888';
+    const seed = p.x * 31 + p.y;
+    const wall = ['#3b2f4f', '#40354f', '#352c48', '#463650'][Math.floor(hash(seed, 1) * 4)]!;
+    this.paintRoof(g, p, '#231c33', '#3a3150');
+
+    // Roof furniture: air-con boxes and a water tank, placed per building.
+    const box = (x: number, y: number, w: number, h: number) => {
+      g.fillStyle = '#4a4560';
+      g.fillRect(x, y, w, h);
+      g.fillStyle = '#5c5776';
+      g.fillRect(x, y, w, h * 0.35);
+      g.strokeStyle = INK;
+      g.lineWidth = 1.5;
+      g.strokeRect(x, y, w, h);
+    };
+    box(t * (1 + hash(seed, 2) * 2), t * 0.6, t * 1.1, t * 0.8);
+    box(t * (6.5 + hash(seed, 3) * 1.5), t * 1.2, t * 0.8, t * 0.6);
+    // Water tank.
+    const tx = t * (4 + hash(seed, 4) * 1.5);
+    g.fillStyle = '#5a4030';
+    g.fillRect(tx - t * 0.45, t * 0.5, t * 0.9, t * 1.1);
+    g.fillStyle = '#6c4c38';
+    g.beginPath();
+    g.ellipse(tx, t * 0.5, t * 0.45, t * 0.16, 0, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = INK;
+    g.lineWidth = 1.5;
+    g.stroke();
+    g.strokeRect(tx - t * 0.45, t * 0.5, t * 0.9, t * 1.1);
+
+    // The gang's mark painted on the roof.
+    g.save();
+    g.globalAlpha = 0.85;
+    g.fillStyle = color;
+    g.beginPath();
+    g.arc(W - t * 1.4, R * 0.55, t * 0.55, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = INK;
+    g.lineWidth = 2;
+    g.stroke();
+    g.restore();
+
+    // Defences on the roof edge: wire from level 2, cameras from 1, a searchlight base at 3.
+    const tier = look?.tier ?? 0;
+    if (tier >= 2) {
+      g.strokeStyle = '#9a96b0';
+      g.lineWidth = 1.2;
+      for (let x = t * 0.2; x < W - t * 0.2; x += t * 0.25) {
+        g.beginPath();
+        g.arc(x, t * 0.12, t * 0.08, 0, Math.PI * 2);
+        g.stroke();
+      }
+    }
+    if (tier >= 1) {
+      for (const cx of [t * 0.35, W - t * 0.35]) {
+        g.fillStyle = '#d6d2e8';
+        g.fillRect(cx - t * 0.16, R - t * 0.42, t * 0.32, t * 0.2);
+        g.fillStyle = '#ff3b3b';
+        g.fillRect(cx - t * 0.04, R - t * 0.36, t * 0.08, t * 0.08);
+        g.strokeStyle = INK;
+        g.lineWidth = 1;
+        g.strokeRect(cx - t * 0.16, R - t * 0.42, t * 0.32, t * 0.2);
+      }
+    }
+    if (tier >= 3) {
+      g.fillStyle = '#2b2a33';
+      g.beginPath();
+      g.arc(t * 1.2, R - t * 0.9, t * 0.3, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = INK;
+      g.stroke();
+    }
+    // The richest gang has a gold crown on the roof.
+    if (look?.rank === 1) {
+      const cx = W / 2;
+      const cy = R * 0.5;
+      const s = t * 0.6;
+      g.fillStyle = '#ffd23f';
+      g.strokeStyle = INK;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(cx - s, cy + s * 0.5);
+      g.lineTo(cx - s, cy - s * 0.4);
+      g.lineTo(cx - s * 0.5, cy);
+      g.lineTo(cx, cy - s * 0.6);
+      g.lineTo(cx + s * 0.5, cy);
+      g.lineTo(cx + s, cy - s * 0.4);
+      g.lineTo(cx + s, cy + s * 0.5);
+      g.closePath();
+      g.fill();
+      g.stroke();
+    }
+
+    // The front wall: brick, a door in the middle, lit shop windows, an awning in the gang's colour.
+    g.fillStyle = wall;
+    g.fillRect(0, R, W, Hw);
+    g.strokeStyle = 'rgba(0,0,0,0.16)';
+    g.lineWidth = 1;
+    const brick = t * 0.22;
+    for (let y = R + brick; y < R + Hw; y += brick) {
+      g.beginPath();
+      g.moveTo(0, y);
+      g.lineTo(W, y);
+      g.stroke();
+      const off = Math.round((y - R) / brick) % 2 ? brick : 0;
+      for (let x = off; x < W; x += brick * 2) {
+        g.beginPath();
+        g.moveTo(x, y - brick);
+        g.lineTo(x, y);
+        g.stroke();
+      }
+    }
+    // Sign board across the top of the wall.
+    const signH = t * 0.62;
+    g.fillStyle = '#16121f';
+    g.fillRect(t * 0.6, R + t * 0.12, W - t * 1.2, signH);
+    g.strokeStyle = color;
+    g.lineWidth = Math.max(2, t * 0.06);
+    g.strokeRect(t * 0.6, R + t * 0.12, W - t * 1.2, signH);
+    g.font = `${Math.round(signH * 0.72)}px ${this.font}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillStyle = color === '#141414' ? '#e8b931' : color;
+    g.shadowColor = g.fillStyle as string;
+    g.shadowBlur = t * 0.25;
+    g.fillText((look?.name ?? p.id).toUpperCase(), W / 2, R + t * 0.12 + signH * 0.56, W - t * 1.6);
+    g.shadowBlur = 0;
+
+    // Upstairs windows, some lit.
+    for (let i = 0; i < 5; i++) {
+      const wx = t * (0.75 + i * 1.85);
+      const lit = hash(seed, i + 10) > 0.35;
+      g.fillStyle = lit ? '#ffd88a' : '#1d2440';
+      g.fillRect(wx, R + t * 0.92, t * 0.95, t * 0.62);
+      if (lit) {
+        g.fillStyle = 'rgba(120,60,20,0.35)';
+        g.fillRect(wx, R + t * 0.92, t * 0.95, t * 0.18);
+      }
+      g.strokeStyle = INK;
+      g.lineWidth = 2;
+      g.strokeRect(wx, R + t * 0.92, t * 0.95, t * 0.62);
+      g.fillStyle = '#2a2236';
+      g.fillRect(wx - t * 0.06, R + t * 1.54, t * 1.07, t * 0.08);
+    }
+
+    // Awning.
+    const ay = R + t * 1.72;
+    const stripes = 12;
+    for (let i = 0; i < stripes; i++) {
+      g.fillStyle = i % 2 ? color : shade(color === '#141414' ? '#e8b931' : color, 0.55);
+      g.beginPath();
+      const x0 = t * 0.3 + ((W - t * 0.6) / stripes) * i;
+      const x1 = x0 + (W - t * 0.6) / stripes;
+      g.moveTo(x0, ay);
+      g.lineTo(x1, ay);
+      g.lineTo(x1, ay + t * 0.3);
+      g.quadraticCurveTo((x0 + x1) / 2, ay + t * 0.42, x0, ay + t * 0.3);
+      g.fill();
+    }
+    g.strokeStyle = INK;
+    g.lineWidth = 1.5;
+    g.strokeRect(t * 0.3, ay, W - t * 0.6, t * 0.3);
+
+    // Windows either side of the door.
+    const wy = ay + t * 0.5;
+    const wh = Hw - (wy - R) - t * 0.12;
+    for (const [x, w] of [
+      [t * 0.6, t * 2.6],
+      [W - t * 3.2, t * 2.6],
+    ] as const) {
+      g.fillStyle = '#ffcf6b';
+      g.fillRect(x, wy, w, wh);
+      g.fillStyle = 'rgba(255,255,255,0.25)';
+      g.fillRect(x + w * 0.08, wy + wh * 0.1, w * 0.18, wh * 0.8);
+      g.strokeStyle = INK;
+      g.lineWidth = 2;
+      g.strokeRect(x, wy, w, wh);
+      g.beginPath();
+      g.moveTo(x + w / 2, wy);
+      g.lineTo(x + w / 2, wy + wh);
+      g.stroke();
+    }
+    // The door.
+    const dw = t * 1.3;
+    const dx = W / 2 - dw / 2;
+    const dy = wy - t * 0.1;
+    g.fillStyle = color;
+    g.fillRect(dx - t * 0.1, dy - t * 0.1, dw + t * 0.2, R + Hw - dy + t * 0.1);
+    g.fillStyle = '#120e1b';
+    g.fillRect(dx, dy, dw, R + Hw - dy);
+    g.fillStyle = '#d9b44a';
+    g.fillRect(dx + dw * 0.78, dy + (R + Hw - dy) * 0.5, t * 0.08, t * 0.08);
+    g.strokeStyle = INK;
+    g.lineWidth = 2;
+    g.strokeRect(dx - t * 0.1, dy - t * 0.1, dw + t * 0.2, R + Hw - dy + t * 0.1);
+    // Base line.
+    g.fillStyle = INK;
+    g.fillRect(0, R + Hw - 2, W, 2);
+    g.strokeStyle = INK;
+    g.lineWidth = 2;
+    g.strokeRect(1, R, W - 2, Hw - 1);
+  }
+
+  private paintJail(g: CanvasRenderingContext2D, p: Place) {
+    const { t } = this;
+    const W = p.w * t;
+    const R = (p.h - CityRenderer.WALL) * t;
+    const Hw = CityRenderer.WALL * t;
+    this.paintRoof(g, p, '#3a3a46', '#55556a');
+    // Searchlight tower on the roof.
+    g.fillStyle = '#62627a';
+    g.fillRect(W / 2 - t * 0.5, t * 0.3, t, t * 1.3);
+    g.strokeStyle = INK;
+    g.lineWidth = 2;
+    g.strokeRect(W / 2 - t * 0.5, t * 0.3, t, t * 1.3);
+    g.fillStyle = '#e8e4ff';
+    g.beginPath();
+    g.arc(W / 2, t * 0.7, t * 0.25, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+    // Concrete front, barred windows, the word JAIL.
+    g.fillStyle = '#5a5a68';
+    g.fillRect(0, R, W, Hw);
+    g.strokeStyle = 'rgba(0,0,0,0.15)';
+    for (let x = t; x < W; x += t) {
+      g.beginPath();
+      g.moveTo(x, R);
+      g.lineTo(x, R + Hw);
+      g.stroke();
+    }
+    g.fillStyle = '#16121f';
+    g.fillRect(W / 2 - t * 1.6, R + t * 0.12, t * 3.2, t * 0.62);
+    g.font = `${Math.round(t * 0.46)}px ${this.font}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillStyle = '#ff5a4f';
+    g.shadowColor = '#ff5a4f';
+    g.shadowBlur = t * 0.25;
+    g.fillText('JAIL', W / 2, R + t * 0.47);
+    g.shadowBlur = 0;
+    for (let i = 0; i < 6; i++) {
+      const x = t * (0.6 + i * 1.55) + (i >= 3 ? t * 0.3 : 0);
+      if (i === 3 || (x > W / 2 - t * 1.2 && x < W / 2 + t * 1.2)) continue;
+      const y = R + t * 1.45;
+      g.fillStyle = '#ffcf6b';
+      g.fillRect(x, y, t * 0.9, t * 0.75);
+      g.strokeStyle = '#1b1b22';
+      g.lineWidth = Math.max(2, t * 0.06);
+      for (let b = 1; b < 4; b++) {
+        g.beginPath();
+        g.moveTo(x + (t * 0.9 * b) / 4, y);
+        g.lineTo(x + (t * 0.9 * b) / 4, y + t * 0.75);
+        g.stroke();
+      }
+      g.strokeStyle = INK;
+      g.lineWidth = 2;
+      g.strokeRect(x, y, t * 0.9, t * 0.75);
+    }
+    g.fillStyle = '#26262e';
+    g.fillRect(W / 2 - t * 0.7, R + t * 1.2, t * 1.4, Hw - t * 1.2);
+    g.strokeStyle = INK;
+    g.lineWidth = 2;
+    g.strokeRect(W / 2 - t * 0.7, R + t * 1.2, t * 1.4, Hw - t * 1.2);
+    g.strokeRect(1, R, W - 2, Hw - 1);
+  }
+
+  private paintWarehouse(g: CanvasRenderingContext2D, p: Place) {
+    const { t } = this;
+    const W = p.w * t;
+    const R = (p.h - CityRenderer.WALL) * t;
+    const Hw = CityRenderer.WALL * t;
+    // Corrugated roof.
+    g.fillStyle = '#3f5560';
+    g.fillRect(0, 0, W, R);
+    g.strokeStyle = 'rgba(0,0,0,0.22)';
+    g.lineWidth = Math.max(1, t / 20);
+    for (let y = t * 0.2; y < R; y += t * 0.25) {
+      g.beginPath();
+      g.moveTo(0, y);
+      g.lineTo(W, y);
+      g.stroke();
+    }
+    g.strokeStyle = INK;
+    g.lineWidth = 2;
+    g.strokeRect(1, 1, W - 2, R);
+    // Metal front with a big roller door.
+    g.fillStyle = '#566a74';
+    g.fillRect(0, R, W, Hw);
+    g.strokeStyle = 'rgba(0,0,0,0.2)';
+    for (let x = t * 0.25; x < W; x += t * 0.25) {
+      g.beginPath();
+      g.moveTo(x, R);
+      g.lineTo(x, R + Hw);
+      g.stroke();
+    }
+    g.fillStyle = '#16121f';
+    g.fillRect(W / 2 - t * 2, R + t * 0.12, t * 4, t * 0.6);
+    g.font = `${Math.round(t * 0.44)}px ${this.font}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillStyle = '#7cf0c4';
+    g.shadowColor = '#7cf0c4';
+    g.shadowBlur = t * 0.25;
+    g.fillText('PRACTICE VAULT', W / 2, R + t * 0.44);
+    g.shadowBlur = 0;
+    const dw = t * 2.6;
+    g.fillStyle = '#c9a227';
+    g.fillRect(W / 2 - dw / 2, R + t * 0.85, dw, Hw - t * 0.85);
+    g.strokeStyle = '#8a6e14';
+    g.lineWidth = 1.5;
+    for (let y = R + t * 0.95; y < R + Hw; y += t * 0.16) {
+      g.beginPath();
+      g.moveTo(W / 2 - dw / 2, y);
+      g.lineTo(W / 2 + dw / 2, y);
+      g.stroke();
+    }
+    g.strokeStyle = INK;
+    g.lineWidth = 2;
+    g.strokeRect(W / 2 - dw / 2, R + t * 0.85, dw, Hw - t * 0.85);
+    g.strokeRect(1, R, W - 2, Hw - 1);
+  }
+
+  // ---------- props ----------
+
+  private drawProp(p: Prop, now: number) {
+    const { g, t } = this;
+    const x = this.sx(p.x);
+    const y = this.sy(p.y);
+    g.lineWidth = 2;
+    g.strokeStyle = INK;
+    switch (p.kind) {
+      case 'lamp': {
+        g.fillStyle = 'rgba(0,0,0,0.35)';
+        g.beginPath();
+        g.ellipse(x, y + t * 0.1, t * 0.18, t * 0.07, 0, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = '#2b2838';
+        g.fillRect(x - t * 0.05, y - t * 1.5, t * 0.1, t * 1.6);
+        g.strokeRect(x - t * 0.05, y - t * 1.5, t * 0.1, t * 1.6);
+        g.fillStyle = '#ffe2a0';
+        g.beginPath();
+        g.ellipse(x, y - t * 1.55, t * 0.2, t * 0.12, 0, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+        break;
+      }
+      case 'tree': {
+        g.fillStyle = 'rgba(0,0,0,0.35)';
+        g.beginPath();
+        g.ellipse(x, y + t * 0.15, t * 0.5, t * 0.17, 0, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = '#4a3222';
+        g.fillRect(x - t * 0.08, y - t * 0.6, t * 0.16, t * 0.75);
+        g.strokeRect(x - t * 0.08, y - t * 0.6, t * 0.16, t * 0.75);
+        const sway = Math.sin(now / 1400 + p.x) * t * 0.03;
+        for (const [dx, dy, r, c] of [
+          [0, -1.0, 0.55, '#1f5a3f'],
+          [-0.25, -0.85, 0.35, '#246548'],
+          [0.22, -1.2, 0.3, '#2b7553'],
+        ] as const) {
+          g.fillStyle = c;
+          g.beginPath();
+          g.arc(x + dx * t + sway, y + dy * t, r * t, 0, Math.PI * 2);
+          g.fill();
+          g.stroke();
+        }
+        break;
+      }
+      case 'bench': {
+        g.fillStyle = '#6b4a2e';
+        g.fillRect(x - t * 0.45, y - t * 0.3, t * 0.9, t * 0.18);
+        g.strokeRect(x - t * 0.45, y - t * 0.3, t * 0.9, t * 0.18);
+        g.fillRect(x - t * 0.45, y - t * 0.08, t * 0.9, t * 0.16);
+        g.strokeRect(x - t * 0.45, y - t * 0.08, t * 0.9, t * 0.16);
+        break;
+      }
+      case 'hydrant': {
+        g.fillStyle = '#c23a2b';
+        g.beginPath();
+        g.roundRect(x - t * 0.12, y - t * 0.45, t * 0.24, t * 0.5, t * 0.08);
+        g.fill();
+        g.stroke();
+        break;
+      }
+      case 'fountain': {
+        g.fillStyle = '#4b4766';
+        g.beginPath();
+        g.ellipse(x, y, t * 1.2, t * 0.75, 0, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+        g.fillStyle = '#2a6f9e';
+        g.beginPath();
+        g.ellipse(x, y, t * 1.0, t * 0.58, 0, 0, Math.PI * 2);
+        g.fill();
+        // Ripples.
+        g.strokeStyle = 'rgba(180,225,255,0.5)';
+        g.lineWidth = 1.5;
+        for (let i = 0; i < 2; i++) {
+          const k = ((now / 1800 + i / 2) % 1) * 0.9;
+          g.beginPath();
+          g.ellipse(x, y, t * k, t * k * 0.58, 0, 0, Math.PI * 2);
+          g.stroke();
+        }
+        g.strokeStyle = INK;
+        g.lineWidth = 2;
+        g.fillStyle = '#6a6688';
+        g.fillRect(x - t * 0.12, y - t * 0.7, t * 0.24, t * 0.7);
+        g.strokeRect(x - t * 0.12, y - t * 0.7, t * 0.24, t * 0.7);
+        // Water jet.
+        g.fillStyle = 'rgba(170,220,255,0.75)';
+        const jet = t * (0.55 + Math.sin(now / 160) * 0.05);
+        g.beginPath();
+        g.ellipse(x, y - t * 0.7 - jet / 2, t * 0.08, jet / 2, 0, 0, Math.PI * 2);
+        g.fill();
+        break;
+      }
+      case 'screen':
+        this.drawScreen(p, now);
+        break;
+    }
+  }
+
+  /** The plaza's big screen: the three richest gangs. */
+  private drawScreen(p: Prop, now: number) {
+    const { g, t } = this;
+    const w = t * 6.4;
+    const h = t * 2.6;
+    const x = this.sx(p.x) - w / 2;
+    const y = this.sy(p.y) - h + t * 0.4;
+    // Legs.
+    g.fillStyle = '#2b2838';
+    g.fillRect(x + w * 0.2, y + h - t * 0.1, t * 0.16, t * 0.6);
+    g.fillRect(x + w * 0.8 - t * 0.16, y + h - t * 0.1, t * 0.16, t * 0.6);
+    g.fillStyle = '#0c0a14';
+    g.beginPath();
+    g.roundRect(x, y, w, h, t * 0.12);
+    g.fill();
+    g.strokeStyle = INK;
+    g.lineWidth = 2;
+    g.stroke();
+    g.fillStyle = '#151229';
+    g.fillRect(x + t * 0.15, y + t * 0.15, w - t * 0.3, h - t * 0.3);
+    g.textBaseline = 'middle';
+    g.font = `${Math.round(t * 0.34)}px ${this.font}`;
+    g.textAlign = 'center';
+    g.fillStyle = '#ffd23f';
+    g.fillText('RICHEST GANGS', x + w / 2, y + t * 0.48);
+    const lines = this.board.lines.slice(0, 3);
+    lines.forEach((l, i) => {
+      const ly = y + t * (1.0 + i * 0.52);
+      g.font = `${Math.round(t * 0.3)}px ${this.font}`;
+      g.textAlign = 'left';
+      g.fillStyle = '#ffffff';
+      g.fillText(`${i + 1}`, x + t * 0.4, ly);
+      g.fillStyle = l.color === '#141414' ? '#e8b931' : l.color;
+      g.fillText(l.name.toUpperCase(), x + t * 0.8, ly, w * 0.5);
+      g.textAlign = 'right';
+      g.fillStyle = '#8be9a8';
+      g.fillText(money(l.cash), x + w - t * 0.4, ly);
+    });
+    // Scan line.
+    g.fillStyle = 'rgba(255,255,255,0.04)';
+    const scan = ((now / 30) % (h - t * 0.3)) | 0;
+    g.fillRect(x + t * 0.15, y + t * 0.15 + scan, w - t * 0.3, t * 0.08);
+  }
+
+  // ---------- people ----------
+
+  private face(chog: number | null, d: number): HTMLCanvasElement | undefined {
+    const key = `${chog ?? 'guest'}:${d}`;
+    const have = this.faces.get(key);
+    if (have) return have;
+    const img = chog === null ? undefined : this.image(chog);
+    if (chog !== null && !img) return undefined;
+    const { dpr } = this;
+    const c = makeCanvas(d * dpr, d * dpr);
+    const g = c.getContext('2d')!;
+    g.scale(dpr, dpr);
+    const r = d / 2;
+    g.save();
+    g.beginPath();
+    g.arc(r, r, r - 1.5, 0, Math.PI * 2);
+    g.clip();
+    if (img) {
+      const sw = img.naturalWidth * 0.78;
+      g.drawImage(img, img.naturalWidth * 0.11, img.naturalHeight * 0.04, sw, sw, 0, 0, d, d);
+    } else {
+      // A guest: a plain grey Chog shape.
+      g.fillStyle = '#9b97b0';
+      g.fillRect(0, 0, d, d);
+      g.fillStyle = '#7a7690';
+      g.beginPath();
+      g.arc(r, r * 1.25, r * 0.7, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#ffffff';
+      for (const ex of [0.72, 1.28]) {
+        g.beginPath();
+        g.arc(r * ex, r * 0.85, r * 0.18, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.fillStyle = INK;
+      for (const ex of [0.72, 1.28]) {
+        g.beginPath();
+        g.arc(r * ex, r * 0.88, r * 0.08, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    g.restore();
+    g.strokeStyle = INK;
+    g.lineWidth = 2.5;
+    g.beginPath();
+    g.arc(r, r, r - 1.5, 0, Math.PI * 2);
+    g.stroke();
+    this.faces.set(key, c);
+    return c;
+  }
+
+  private drawPerson(p: Person, now: number) {
+    const { g, t } = this;
+    const x = this.sx(p.x);
+    const y = this.sy(p.y);
+    const step = p.moving ? Math.sin(now / 75 + p.x * 3) : 0;
+    const bob = p.moving ? Math.abs(step) * t * 0.06 : Math.sin(now / 600 + p.y) * t * 0.012;
+    const d = Math.round(t * (p.me ? 1.05 : 0.95));
+    // Shadow.
+    g.fillStyle = 'rgba(0,0,0,0.4)';
+    g.beginPath();
+    g.ellipse(x, y + t * 0.2, t * 0.32, t * 0.11, 0, 0, Math.PI * 2);
+    g.fill();
+    // Feet.
+    g.fillStyle = '#1a1626';
+    g.strokeStyle = INK;
+    g.lineWidth = 1.5;
+    for (const side of [-1, 1]) {
+      const lift = p.moving ? Math.max(0, step * side) * t * 0.1 : 0;
+      g.beginPath();
+      g.ellipse(x + side * t * 0.13, y + t * 0.16 - lift, t * 0.1, t * 0.065, 0, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+    }
+    // Body: a jacket in the gang's colour.
+    const by = y - t * 0.1 - bob;
+    g.fillStyle = p.color;
+    g.beginPath();
+    g.roundRect(x - t * 0.22, by - t * 0.2, t * 0.44, t * 0.36, t * 0.12);
+    g.fill();
+    g.lineWidth = 2;
+    g.stroke();
+    // Head.
+    const f = this.face(p.chog, d);
+    const hy = by - t * 0.2 - d * 0.82;
+    if (f) {
+      g.save();
+      if (p.face < 0) {
+        g.translate(x, 0);
+        g.scale(-1, 1);
+        g.drawImage(f, -d / 2, hy, d, d);
+      } else g.drawImage(f, x - d / 2, hy, d, d);
+      g.restore();
+    } else {
+      g.fillStyle = '#3a3550';
+      g.beginPath();
+      g.arc(x, hy + d / 2, d / 2 - 1.5, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = INK;
+      g.stroke();
+    }
+    if (p.me) {
+      // A ring at your feet so you can find yourself in a crowd.
+      g.strokeStyle = '#ffd23f';
+      g.lineWidth = 2.5;
+      g.beginPath();
+      g.ellipse(x, y + t * 0.2, t * 0.42, t * 0.15, 0, 0, Math.PI * 2);
+      g.stroke();
+    }
+  }
+
+  /** Names and speech bubbles go on top of the darkness so they stay readable. */
+  private drawTag(p: Person, now: number) {
+    const { g, t } = this;
+    const x = this.sx(p.x);
+    const d = Math.round(t * (p.me ? 1.05 : 0.95));
+    const top = this.sy(p.y) - t * 0.3 - d * 0.82 - (p.moving ? 0 : 0);
+    const size = Math.max(10, Math.round(t * (p.me ? 0.24 : 0.21)));
+    g.font = `600 ${size}px ${this.bodyFont}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    const w = g.measureText(p.name).width + size;
+    const h = size * 1.5;
+    const ty = top - h * 0.6;
+    g.globalAlpha = p.npc ? 0.75 : 1;
+    g.fillStyle = p.color;
+    g.beginPath();
+    g.roundRect(x - w / 2, ty - h / 2, w, h, h / 2);
+    g.fill();
+    g.strokeStyle = INK;
+    g.lineWidth = 1.5;
+    g.stroke();
+    g.fillStyle = p.ink;
+    g.fillText(p.name, x, ty + 0.5);
+    g.globalAlpha = 1;
+    if (p.emote && now - p.emote.at < 3500)
+      this.drawEmote(p.emote.kind, x, ty - h / 2 - t * 0.5, now - p.emote.at);
+  }
+
+  private drawEmote(kind: Emote, x: number, y: number, age: number) {
+    const { g, t } = this;
+    const pop = Math.min(1, age / 140);
+    const fade = age > 3000 ? 1 - (age - 3000) / 500 : 1;
+    const s = t * 0.42 * (0.6 + 0.4 * pop);
+    g.save();
+    g.globalAlpha = fade;
+    g.fillStyle = '#ffffff';
+    g.strokeStyle = INK;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.roundRect(x - s, y - s, s * 2, s * 1.7, s * 0.5);
+    g.fill();
+    g.stroke();
+    g.beginPath();
+    g.moveTo(x - s * 0.2, y + s * 0.7);
+    g.lineTo(x, y + s * 1.05);
+    g.lineTo(x + s * 0.25, y + s * 0.7);
+    g.fill();
+    g.stroke();
+    const cy = y - s * 0.15;
+    g.lineWidth = Math.max(2, s * 0.16);
+    g.lineCap = 'round';
+    switch (kind) {
+      case 'wave': {
+        // A raised hand.
+        g.fillStyle = '#ffcf6b';
+        g.beginPath();
+        g.roundRect(x - s * 0.35, cy - s * 0.15, s * 0.7, s * 0.6, s * 0.2);
+        g.fill();
+        g.lineWidth = 1.5;
+        g.stroke();
+        for (let i = 0; i < 4; i++) {
+          g.beginPath();
+          g.roundRect(x - s * 0.33 + i * s * 0.18, cy - s * 0.55, s * 0.14, s * 0.45, s * 0.07);
+          g.fill();
+          g.stroke();
+        }
+        break;
+      }
+      case 'laugh': {
+        g.strokeStyle = INK;
+        g.beginPath();
+        g.arc(x - s * 0.3, cy - s * 0.15, s * 0.16, Math.PI * 1.1, Math.PI * 1.9);
+        g.stroke();
+        g.beginPath();
+        g.arc(x + s * 0.3, cy - s * 0.15, s * 0.16, Math.PI * 1.1, Math.PI * 1.9);
+        g.stroke();
+        g.fillStyle = '#d83e7e';
+        g.beginPath();
+        g.arc(x, cy + s * 0.1, s * 0.4, 0, Math.PI);
+        g.closePath();
+        g.fill();
+        g.lineWidth = 1.5;
+        g.stroke();
+        break;
+      }
+      case 'angry': {
+        g.strokeStyle = '#c23a2b';
+        for (const r of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+          const ax = x + Math.cos(r + Math.PI / 4) * s * 0.3;
+          const ay = cy + Math.sin(r + Math.PI / 4) * s * 0.3;
+          g.beginPath();
+          g.moveTo(ax, ay);
+          g.lineTo(ax + Math.cos(r + Math.PI / 4) * s * 0.25, ay + Math.sin(r + Math.PI / 4) * s * 0.25);
+          g.stroke();
+        }
+        break;
+      }
+      case 'cash': {
+        g.fillStyle = '#2f7d4f';
+        g.font = `${Math.round(s * 1.2)}px ${this.font}`;
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText('$', x, cy + s * 0.05);
+        break;
+      }
+    }
+    g.restore();
+  }
+
+  // ---------- frame ----------
+
+  draw(
+    people: Person[],
+    now: number,
+    opts: { jailed: Person[]; target?: { x: number; y: number } | null; door?: Place | null },
+  ) {
+    const { g, t, dpr, view } = this;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.fillStyle = '#07060d';
+    g.fillRect(0, 0, view.w, view.h);
+    const x0 = Math.max(0, Math.floor(this.cam.x / t) - 1);
+    const y0 = Math.max(0, Math.floor(this.cam.y / t) - 1);
+    const x1 = Math.min(CITY.w - 1, Math.ceil((this.cam.x + view.w) / t) + 1);
+    const y1 = Math.min(CITY.h - 1, Math.ceil((this.cam.y + view.h) / t) + 1);
+    this.drawGround(x0, y0, x1, y1);
+
+    // Where you clicked to walk.
+    if (opts.target) {
+      const k = (now % 900) / 900;
+      g.strokeStyle = `rgba(255,210,63,${1 - k})`;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.ellipse(
+        this.sx(opts.target.x),
+        this.sy(opts.target.y),
+        t * (0.2 + k * 0.25),
+        t * (0.08 + k * 0.1),
+        0,
+        0,
+        Math.PI * 2,
+      );
+      g.stroke();
+    }
+
+    // Everything that stands up, drawn back to front.
+    type Thing = { y: number; draw: () => void };
+    const things: Thing[] = [];
+    const inView = (x: number, y: number, m: number) =>
+      x >= x0 - m && x <= x1 + m && y >= y0 - m && y <= y1 + m;
+    for (const p of CITY.places) {
+      if (!inView(p.x + p.w / 2, p.y + p.h / 2, p.w)) continue;
+      const look = this.places[p.id];
+      const sprite = this.buildingSprite(p, look, now);
+      things.push({
+        y: p.y + p.h,
+        draw: () => {
+          const lip = Math.round(t * 0.7);
+          g.drawImage(sprite, this.sx(p.x), this.sy(p.y) - lip, p.w * t, p.h * t + lip);
+          if (look?.alarm) this.drawAlarm(p, now);
+        },
+      });
+    }
+    for (const pr of CITY.props)
+      if (inView(pr.x, pr.y, 4)) things.push({ y: pr.y + 0.2, draw: () => this.drawProp(pr, now) });
+    for (const p of opts.jailed)
+      if (inView(p.x, p.y, 2)) things.push({ y: p.y, draw: () => this.drawPerson(p, now) });
+    for (const p of people)
+      if (inView(p.x, p.y, 2)) things.push({ y: p.y, draw: () => this.drawPerson(p, now) });
+    // The jail's fence goes in front of the yard.
+    const jail = CITY.places.find((p) => p.kind === 'jail')!;
+    things.push({ y: jail.y + jail.h + 3, draw: () => this.drawFence(jail) });
+    things.sort((a, b) => a.y - b.y);
+    for (const th of things) th.draw();
+
+    this.drawNight(x0, y0, x1, y1, now);
+
+    for (const p of opts.jailed) if (inView(p.x, p.y, 2)) this.drawTag(p, now);
+    // Your own name last, so it's never under someone else's.
+    for (const p of people) if (!p.me && inView(p.x, p.y, 2)) this.drawTag(p, now);
+    for (const p of people) if (p.me) this.drawTag(p, now);
+    if (opts.door) this.drawDoorHint(opts.door, now);
+  }
+
+  private drawFence(jail: Place) {
+    const { g, t } = this;
+    const x = this.sx(jail.x);
+    const y = this.sy(jail.y + jail.h);
+    const w = jail.w * t;
+    const h = 3 * t;
+    g.strokeStyle = 'rgba(200,200,220,0.55)';
+    g.lineWidth = 1;
+    const step = t * 0.22;
+    // Chain-link front and sides.
+    g.beginPath();
+    for (let i = 0; i <= w; i += step) {
+      g.moveTo(x + i, y + h - t * 0.9);
+      g.lineTo(x + i, y + h);
+    }
+    for (let k = 0; k < 4; k++) {
+      g.moveTo(x, y + h - t * 0.9 + k * t * 0.3);
+      g.lineTo(x + w, y + h - t * 0.9 + k * t * 0.3);
+    }
+    g.stroke();
+    g.strokeStyle = '#8a8aa0';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x, y + h);
+    g.lineTo(x + w, y + h);
+    g.lineTo(x + w, y);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(x, y + h - t * 0.9);
+    g.lineTo(x + w, y + h - t * 0.9);
+    g.stroke();
+    // Gate in the middle.
+    g.fillStyle = '#5a5a70';
+    g.fillRect(x + w / 2 - t * 0.7, y + h - t * 0.95, t * 1.4, t * 0.12);
+  }
+
+  private drawAlarm(p: Place, now: number) {
+    const { g, t } = this;
+    const on = Math.floor(now / 250) % 2 === 0;
+    const x = this.sx(p.x + p.w / 2);
+    const y = this.sy(p.y) - t * 0.2;
+    g.fillStyle = on ? '#ff2d55' : '#7a1020';
+    g.beginPath();
+    g.arc(x, y, t * 0.28, Math.PI, 0);
+    g.fill();
+    g.strokeStyle = INK;
+    g.lineWidth = 2;
+    g.stroke();
+  }
+
+  private drawDoorHint(p: Place, now: number) {
+    const { g, t } = this;
+    const x = this.sx(p.door.x);
+    const y = this.sy(p.door.y) + t * 0.55;
+    const k = (Math.sin(now / 200) + 1) / 2;
+    g.strokeStyle = `rgba(255,210,63,${0.5 + k * 0.5})`;
+    g.lineWidth = 3;
+    g.beginPath();
+    g.ellipse(x, y - t * 0.3, t * 0.75, t * 0.28, 0, 0, Math.PI * 2);
+    g.stroke();
+  }
+
+  /** Night: a dark layer with pools of light cut out under lamps, at shop windows, and around you. */
+  private drawNight(x0: number, y0: number, x1: number, y1: number, now: number) {
+    const { t, dpr } = this;
+    const d = this.dark.getContext('2d')!;
+    d.setTransform(dpr, 0, 0, dpr, 0, 0);
+    d.globalCompositeOperation = 'source-over';
+    d.clearRect(0, 0, this.view.w, this.view.h);
+    d.fillStyle = 'rgba(10,6,28,0.58)';
+    d.fillRect(0, 0, this.view.w, this.view.h);
+    d.globalCompositeOperation = 'destination-out';
+    const hole = (x: number, y: number, r: number, a = 1) => {
+      const gr = d.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, `rgba(0,0,0,${a})`);
+      gr.addColorStop(0.55, `rgba(0,0,0,${a * 0.6})`);
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      d.fillStyle = gr;
+      d.fillRect(x - r, y - r, r * 2, r * 2);
+    };
+    const vis = (x: number, y: number, m: number) => x >= x0 - m && x <= x1 + m && y >= y0 - m && y <= y1 + m;
+    for (const p of CITY.props) {
+      if (!vis(p.x, p.y, 4)) continue;
+      if (p.kind === 'lamp') hole(this.sx(p.x), this.sy(p.y) - t * 0.3, t * 2.6, 0.95);
+      if (p.kind === 'fountain') hole(this.sx(p.x), this.sy(p.y), t * 2.2, 0.6);
+      if (p.kind === 'screen') hole(this.sx(p.x), this.sy(p.y) - t, t * 3.6, 0.85);
+    }
+    for (const p of CITY.places) {
+      if (!vis(p.x + p.w / 2, p.y + p.h, p.w)) continue;
+      const fy = this.sy(p.y + p.h) - t * 0.4;
+      hole(this.sx(p.x + 2), fy, t * 2.4, 0.9);
+      hole(this.sx(p.x + p.w - 2), fy, t * 2.4, 0.9);
+      hole(this.sx(p.x + p.w / 2), this.sy(p.y + p.h - CityRenderer.WALL) + t * 0.4, t * 3, 0.8);
+      if (p.kind === 'jail') {
+        // The searchlight sweeping the yard.
+        const a = Math.sin(now / 1300) * 0.9;
+        hole(this.sx(p.x + p.w / 2 + Math.sin(a) * 4), this.sy(p.y + p.h + 1.5), t * 1.6, 0.9);
+      }
+    }
+    d.globalCompositeOperation = 'source-over';
+    this.g.setTransform(1, 0, 0, 1, 0, 0);
+    this.g.drawImage(this.dark, 0, 0);
+    this.g.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Coloured glow from the signs, added on top.
+    const g = this.g;
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    for (const p of CITY.places) {
+      if (!vis(p.x + p.w / 2, p.y + p.h, p.w)) continue;
+      const look = this.places[p.id];
+      const color =
+        p.kind === 'jail'
+          ? '#ff5a4f'
+          : p.kind === 'training'
+            ? '#7cf0c4'
+            : look?.color === '#141414'
+              ? '#e8b931'
+              : (look?.color ?? '#888888');
+      const flick =
+        0.85 + 0.15 * Math.sin(now / 90 + p.x) * (hash(p.x, Math.floor(now / 2000)) > 0.9 ? 1 : 0);
+      const x = this.sx(p.x + p.w / 2);
+      const y = this.sy(p.y + p.h - CityRenderer.WALL) + t * 0.4;
+      const r = t * 3.2;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, color);
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.globalAlpha = 0.16 * flick;
+      g.fillStyle = gr;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+      if (look?.alarm && Math.floor(now / 250) % 2 === 0) {
+        const ar = t * 5;
+        const ag = g.createRadialGradient(x, y - t, 0, x, y - t, ar);
+        ag.addColorStop(0, '#ff2d55');
+        ag.addColorStop(1, 'rgba(0,0,0,0)');
+        g.globalAlpha = 0.35;
+        g.fillStyle = ag;
+        g.fillRect(x - ar, y - t - ar, ar * 2, ar * 2);
+      }
+    }
+    g.restore();
+  }
+}

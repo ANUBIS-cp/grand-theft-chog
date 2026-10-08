@@ -1,6 +1,6 @@
-import { WarApp } from '@/components/war/war-app';
+import { CityApp } from '@/components/city/city-app';
 
-/** The home page is the city itself: what the game is, a way to practise, and every gang's vault, live. */
+/** The home page is the city itself: walk around, rob rival gangs, practise. */
 export default function Home() {
-  return <WarApp />;
+  return <CityApp />;
 }
