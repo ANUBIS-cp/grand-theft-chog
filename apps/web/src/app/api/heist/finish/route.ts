@@ -17,7 +17,10 @@ export async function POST(req: Request) {
   const body = Body.safeParse(await req.json().catch(() => null));
   if (!body.success) return error('bad-request');
   try {
-    return json({ ok: true, result: await finishRun(await db(), { address, ...body.data, now: Date.now() }) });
+    return json({
+      ok: true,
+      result: await finishRun(await db(), { address, ...body.data, now: Date.now() }),
+    });
   } catch (e) {
     if (e instanceof HeistRefused) return error(e.code, 409);
     throw e;

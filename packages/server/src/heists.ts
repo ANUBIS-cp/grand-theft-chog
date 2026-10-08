@@ -16,7 +16,7 @@ import {
   vaultFor,
   type PowerId,
 } from '@chog-city/game/heist';
-import { and, desc, eq, gt, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { gangVaults, heistChogs, heistRuns, type Db } from './db/index.ts';
 import { canControl } from './ownership.ts';
@@ -35,6 +35,9 @@ export type HeistError =
   | 'finished'
   | 'too-late'
   | 'bad-inputs';
+
+/** How long a building's alarm stays on without the robbery finishing. */
+const ALARM_MS = 3 * 60_000;
 
 export class HeistRefused extends Error {
   constructor(readonly code: HeistError) {
@@ -161,7 +164,35 @@ export async function startRun(
     guards: run.guards,
     startedAt: new Date(now),
   });
+  // Lights the alarm on the target's building for everyone in the city.
+  await db
+    .execute(
+      sql`select pg_notify('city', ${JSON.stringify({ alarm: target, gang: me.gang, chog: chogId, run: run.id })})`,
+    )
+    .catch(() => undefined);
   return run;
+}
+
+/** Vaults being robbed right now (runs started in the last few minutes and not finished). */
+export async function robbing(
+  db: Db,
+  now: number,
+): Promise<{ target: GangId; gang: GangId; chog: number; since: number }[]> {
+  const rows = await db
+    .select({
+      target: heistRuns.target,
+      gang: heistRuns.gang,
+      chog: heistRuns.chogId,
+      at: heistRuns.startedAt,
+    })
+    .from(heistRuns)
+    .where(and(isNull(heistRuns.finishedAt), gt(heistRuns.startedAt, new Date(now - ALARM_MS))));
+  return rows.map((r) => ({
+    target: r.target as GangId,
+    gang: r.gang as GangId,
+    chog: r.chog,
+    since: r.at.getTime(),
+  }));
 }
 
 export interface FinishedRun {
@@ -256,7 +287,9 @@ export async function finishRun(
       })
       .where(eq(heistRuns.id, run.id));
     await tx
-      .execute(sql`select pg_notify('city', ${JSON.stringify({ war: run.id })})`)
+      .execute(
+        sql`select pg_notify('city', ${JSON.stringify({ war: run.id, target: run.target, gang: run.gang })})`,
+      )
       .catch(() => undefined);
     return {
       result: escaped ? 'escaped' : 'busted',

@@ -8,7 +8,8 @@ const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrai
 
 export const metadata: Metadata = {
   title: 'Chog City',
-  description: 'Every gang has a vault full of cash. Sneak your Chog into a rival’s vault, grab what you can, get out.',
+  description:
+    'Every gang has a vault full of cash. Sneak your Chog into a rival’s vault, grab what you can, get out.',
 };
 
 export const viewport: Viewport = { themeColor: '#0b0918', width: 'device-width', initialScale: 1 };

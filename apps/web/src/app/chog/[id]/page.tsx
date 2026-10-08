@@ -36,7 +36,8 @@ export default async function ChogPage({ params }: Props) {
   const skills = chogInfo(id).skills;
   const powers = powersFor(skills);
   const gang = record?.gang ?? null;
-  const jailed = record?.jailedUntil && record.jailedUntil.getTime() > now ? record.jailedUntil.getTime() : null;
+  const jailed =
+    record?.jailedUntil && record.jailedUntil.getTime() > now ? record.jailedUntil.getTime() : null;
   const stats: [string, string][] = [
     ['Stolen', money(record?.stolen ?? 0)],
     ['Escapes', String(record?.escapes ?? 0)],
@@ -75,7 +76,11 @@ export default async function ChogPage({ params }: Props) {
             ) : (
               <span>No gang yet</span>
             )}
-            {owner && <span>Owner {owner.slice(0, 6)}…{owner.slice(-4)}</span>}
+            {owner && (
+              <span>
+                Owner {owner.slice(0, 6)}…{owner.slice(-4)}
+              </span>
+            )}
           </div>
           {jailed && (
             <p className="mt-3 inline-block rounded-[6px] bg-jail px-2 py-1 text-[13px] font-semibold">
@@ -123,12 +128,17 @@ export default async function ChogPage({ params }: Props) {
                 const skill = skills.find((s) => powersFor([s]).includes(p));
                 const from = skill ? skillSources(chog, skill) : [];
                 return (
-                  <li key={p} className="flex items-start gap-3 rounded-[10px] border-2 border-white/10 bg-[#1d1838] p-3">
+                  <li
+                    key={p}
+                    className="flex items-start gap-3 rounded-[10px] border-2 border-white/10 bg-[#1d1838] p-3"
+                  >
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[7px] border-2 border-ink bg-paper-raised text-ink">
                       {skill && <SkillIcon skill={skill} width={26} height={26} />}
                     </span>
                     <div>
-                      <strong className="font-display text-[20px] uppercase leading-none">{POWERS[p].name}</strong>
+                      <strong className="font-display text-[20px] uppercase leading-none">
+                        {POWERS[p].name}
+                      </strong>
                       <p className="text-[14px] text-white/80">{POWERS[p].does}</p>
                       {from.length > 0 && (
                         <p className="mt-0.5 text-[12px] text-white/50">
@@ -155,12 +165,11 @@ export default async function ChogPage({ params }: Props) {
                   <li key={h.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-[14px]">
                     <span>
                       {h.caughtBy === id && h.chogId !== id ? (
-                        <>
-                          Caught a {GANGS[h.gang].name} robber in its vault
-                        </>
+                        <>Caught a {GANGS[h.gang].name} robber in its vault</>
                       ) : h.result === 'escaped' ? (
                         <>
-                          Robbed {GANGS[h.target].name} of <strong className="text-[#ffd666]">{money(h.moved)}</strong>
+                          Robbed {GANGS[h.target].name} of{' '}
+                          <strong className="text-[#ffd666]">{money(h.moved)}</strong>
                           {h.revenge ? ' (revenge)' : ''}
                         </>
                       ) : (

@@ -69,6 +69,16 @@ interface Run {
   powers: PowerId[];
   guards: { id: number; name: string }[];
 }
+interface Robbing {
+  target: GangId;
+  gang: GangId;
+  chog: number;
+  since: number;
+}
+interface GangInfo {
+  members: { id: number; name: string; stolen: number; catches: number }[];
+  hits: Hit[];
+}
 interface CityData {
   strollers: Stroller[];
   jailed: Jailed[];
@@ -98,8 +108,10 @@ const START_ERRORS: Record<string, string> = {
   'slow-down': 'Too fast. Wait a few seconds.',
 };
 
-const DEFENCE = ['No guards on the roof', 'Light', 'Strong', 'Maximum'];
+const DEFENCE = ['Light', 'Guarded', 'Heavy', 'Fortress'];
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
+/** "Clowns are", "MCGA Gang is". */
+const verb = (g: GangId) => (GANGS[g].name.endsWith('s') ? 'are' : 'is');
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const GUEST = { color: '#8d89a6', ink: '#111111' };
@@ -120,7 +132,15 @@ const btn =
   'inline-flex h-12 items-center justify-center gap-2 rounded-[8px] border-2 border-ink px-4 font-display text-[20px] uppercase leading-none shadow-[3px_3px_0_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50';
 
 export function CityApp() {
-  const [board, setBoard] = useState<{ board: VaultRow[]; hits: Hit[]; resetAt: number } | null>(null);
+  const [board, setBoard] = useState<{
+    board: VaultRow[];
+    hits: Hit[];
+    robbing: Robbing[];
+    resetAt: number;
+  } | null>(null);
+  const [alarms, setAlarms] = useState<Record<string, Robbing>>({});
+  const [raid, setRaid] = useState<Robbing | null>(null);
+  const [gangInfo, setGangInfo] = useState<{ gang: GangId; data: GangInfo } | null>(null);
   const [me, setMe] = useState<{
     address: string | null;
     chogs: MyChog[];
@@ -168,15 +188,56 @@ export function CityApp() {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [loadBoard, loadMe, loadCity]);
-  useLive(() => {
+  useLive((e) => {
+    if (e?.alarm && e.gang && e.chog) {
+      const r: Robbing = {
+        target: e.alarm as GangId,
+        gang: e.gang as GangId,
+        chog: e.chog,
+        since: Date.now(),
+      };
+      setAlarms((a) => ({ ...a, [r.target]: r }));
+      if (r.target === myGang.current) setRaid(r);
+    }
+    if (e?.war && e.target) {
+      const t = e.target;
+      setAlarms((a) => {
+        const n = { ...a };
+        delete n[t];
+        return n;
+      });
+      setRaid((r) => (r?.target === t ? null : r));
+    }
     void loadBoard();
     void loadCity();
   });
+  useEffect(() => {
+    if (board) setAlarms(Object.fromEntries(board.robbing.map((r) => [r.target, r])));
+  }, [board]);
+  useEffect(() => {
+    if (!raid) return;
+    const t = setTimeout(() => setRaid(null), 25_000);
+    return () => clearTimeout(t);
+  }, [raid]);
+  // The card at a gang's door shows its best robbers and latest hits.
+  const doorGang = door?.gang ?? null;
+  useEffect(() => {
+    if (!doorGang) return;
+    let gone = false;
+    void fetch(`/api/gangs/${doorGang}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: GangInfo | null) => !gone && d && setGangInfo({ gang: doorGang, data: d }));
+    return () => {
+      gone = true;
+    };
+  }, [doorGang, board]);
 
   const chogs = me?.chogs ?? [];
   const chog = chogs.find((c) => c.id === picked) ?? chogs[0] ?? null;
   const revenge = chog?.gang ? (me?.revenge[chog.gang] ?? []) : [];
   const jailedNow = !!chog?.jailedUntil && chog.jailedUntil > now;
+  const myGang = useRef<GangId | null>(null);
+  myGang.current = chog?.gang ?? null;
 
   const looks = useMemo(() => {
     const out: Record<string, PlaceLook> = {};
@@ -188,12 +249,12 @@ export function CityApp() {
         tier: v.tier,
         cash: v.cash,
         rank: i + 1,
-        alarm: false,
+        alarm: !!alarms[v.gang] && alarms[v.gang]!.since > now - 180_000,
         mine: chog?.gang === v.gang,
       };
     });
     return out;
-  }, [board, chog?.gang]);
+  }, [board, chog?.gang, alarms, now]);
   const screen = useMemo(
     () => ({
       lines: (board?.board ?? [])
@@ -422,6 +483,46 @@ export function CityApp() {
         </div>
       )}
 
+      {jailedNow && chog && (
+        <div className="pointer-events-none absolute inset-x-0 top-[52px] z-20 flex justify-center px-3 md:top-14">
+          <div className="inline-flex items-center gap-2 rounded-full border-2 border-ink bg-jail px-3 py-1.5 text-[14px] font-semibold shadow-[2px_2px_0_0_#000]">
+            <Lock size={15} weight="fill" />
+            {chog.name} is in jail · out in {formatLeft(chog.jailedUntil! - now)}
+          </div>
+        </div>
+      )}
+
+      {raid && (
+        <div className="absolute inset-x-0 top-16 z-40 flex justify-center px-3">
+          <div className="flex max-w-[520px] items-center gap-3 rounded-[12px] border-2 border-ink bg-[#ff2d55] py-2 pl-2 pr-2 text-ink shadow-[3px_3px_0_0_#000]">
+            <img
+              src={chogImage(raid.chog, 96)}
+              alt=""
+              className="h-10 w-10 shrink-0 rounded-full border-2 border-ink"
+            />
+            <p className="text-[15px] font-semibold leading-snug">
+              {GANGS[raid.gang].name} {verb(raid.gang)} robbing your vault right now!
+            </p>
+            <button
+              onClick={() => {
+                view.current?.walkTo(raid.target);
+                setRaid(null);
+              }}
+              className="shrink-0 rounded-[8px] border-2 border-ink bg-white px-2.5 pb-1 pt-1.5 font-display text-[16px] uppercase leading-none"
+            >
+              Go there
+            </button>
+            <button
+              onClick={() => setRaid(null)}
+              aria-label="Close"
+              className="grid h-8 w-8 shrink-0 place-items-center"
+            >
+              <X size={16} weight="bold" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {notice && (
         <div className="absolute inset-x-0 top-16 z-40 flex justify-center px-4">
           <button
@@ -451,6 +552,8 @@ export function CityApp() {
             onRob={(g) => void rob(g)}
             onPractice={() => setPractice(true)}
             onConnect={() => setSheet('connect')}
+            info={gangInfo && gangInfo.gang === door.gang ? gangInfo.data : undefined}
+            robbing={door.gang ? alarms[door.gang] : undefined}
           />
         </Card>
       )}
@@ -828,6 +931,8 @@ function DoorCard(props: {
   onRob: (g: GangId) => void;
   onPractice: () => void;
   onConnect: () => void;
+  info?: GangInfo;
+  robbing?: Robbing;
 }) {
   const { place, row, chog } = props;
   if (place.kind === 'training')
@@ -916,10 +1021,15 @@ function DoorCard(props: {
       <p className="mt-2 inline-flex items-center gap-1.5 text-[13px] text-white/70">
         <ShieldCheck size={15} weight="fill" /> Defence: {DEFENCE[row?.tier ?? 0]}
       </p>
-      {mine ? (
-        <p className="mt-3 rounded-[8px] bg-white/5 px-3 py-2 text-[14px] text-white/80">
-          This is home. Rivals rob this vault; every escape you make from theirs adds to it.
+      {props.robbing && props.robbing.since > props.now - 180_000 && (
+        <p className="mt-2 flex items-center gap-2 rounded-[8px] bg-[#ff2d55] px-2.5 py-1.5 text-[13px] font-semibold text-ink">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-ink" />
+          {GANGS[props.robbing.gang].name} {verb(props.robbing.gang)} {mine ? 'robbing you' : 'inside'} right
+          now
         </p>
+      )}
+      {mine ? (
+        <HomeInfo gang={gang} info={props.info} now={props.now} />
       ) : block === 'connect' ? (
         <button onClick={props.onConnect} className={cn(btn, 'mt-4 w-full bg-[#ffd666] text-ink')}>
           <span className="pt-0.5">Connect wallet to rob it</span>
@@ -947,6 +1057,53 @@ function DoorCard(props: {
         </>
       )}
     </>
+  );
+}
+
+function HomeInfo({ gang, info, now }: { gang: GangId; info?: GangInfo; now: number }) {
+  if (!info) return <div className="mt-3 h-24 animate-pulse rounded-[8px] bg-white/5" />;
+  const robbed = info.hits.filter((h) => h.target === gang && h.result === 'escaped').slice(0, 3);
+  return (
+    <div className="mt-3 grid gap-3 text-[13px]">
+      <div>
+        <div className="text-[12px] uppercase tracking-wide text-white/50">Best robbers</div>
+        {info.members.length === 0 ? (
+          <p className="mt-1 text-white/70">Nobody has robbed for this gang yet. Be the first.</p>
+        ) : (
+          <ul className="mt-1 space-y-1">
+            {info.members.slice(0, 3).map((m) => (
+              <li key={m.id} className="flex items-center gap-2">
+                <img src={chogImage(m.id, 96)} alt="" className="h-6 w-6 rounded-full border border-ink" />
+                <span className="flex-1 truncate">{m.name}</span>
+                <span className="font-semibold text-[#ffd666]">{money(m.stolen)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <div>
+        <div className="text-[12px] uppercase tracking-wide text-white/50">Robbed lately</div>
+        {robbed.length === 0 ? (
+          <p className="mt-1 text-white/70">Nobody has got out of your vault with cash yet.</p>
+        ) : (
+          <ul className="mt-1 space-y-1">
+            {robbed.map((h) => (
+              <li key={h.id} className="flex items-center gap-2">
+                <img
+                  src={chogImage(h.chogId, 96)}
+                  alt=""
+                  className="h-6 w-6 rounded-full border border-ink"
+                />
+                <span className="flex-1 truncate">
+                  {GANGS[h.gang].name} took <strong className="text-[#ffd666]">{money(h.moved)}</strong>
+                </span>
+                <span className="text-white/50">{ago(h.at, now)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
   );
 }
 

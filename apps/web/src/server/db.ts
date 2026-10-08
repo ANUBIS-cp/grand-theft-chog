@@ -66,7 +66,9 @@ async function makeDevDb(dir: string): Promise<Db> {
 export async function db(): Promise<Db> {
   const url = process.env.DATABASE_URL ?? '';
   if (url.startsWith('pglite:')) {
-    if (process.env.NODE_ENV === 'production') throw new Error('pglite is for local development only');
+    // A local production build may use it for testing (LOCAL_BUILD_TEST=1); the server never sets either.
+    if (process.env.NODE_ENV === 'production' && process.env.LOCAL_BUILD_TEST !== '1')
+      throw new Error('pglite is for local development only');
     g.__chogCityDevDb ??= makeDevDb(url.slice('pglite:'.length));
     return g.__chogCityDevDb;
   }

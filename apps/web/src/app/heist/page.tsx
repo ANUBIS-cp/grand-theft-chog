@@ -1,4 +1,13 @@
-import { CHOGS, GANGS, canJoinGang, displayName, gangOptions, getChog, tokenIdFor, type GangId } from '@chog-city/data';
+import {
+  CHOGS,
+  GANGS,
+  canJoinGang,
+  displayName,
+  gangOptions,
+  getChog,
+  tokenIdFor,
+  type GangId,
+} from '@chog-city/data';
 import { chogInfo } from '@chog-city/game';
 import { FIRST_VAULT, powersFor } from '@chog-city/game/heist';
 import type { Metadata } from 'next';
@@ -47,13 +56,20 @@ export default async function HeistPage({ searchParams }: { searchParams: Promis
             defaultValue={chog.metadataId}
             className="h-7 w-16 rounded-[4px] border border-white/25 bg-white/10 px-1.5 font-mono text-[13px] text-white"
           />
-          <button className="h-7 rounded-[4px] bg-white/15 px-2 font-semibold text-white hover:bg-white/25">Go</button>
+          <button className="h-7 rounded-[4px] bg-white/15 px-2 font-semibold text-white hover:bg-white/25">
+            Go
+          </button>
         </form>
       </header>
       <div className="min-h-0 w-full flex-1">
         <HeistGame
           vault={FIRST_VAULT}
-          player={{ id: chog.id, name: displayName(chog), gang: mine ? GANGS[mine].name : null, powers: powersFor(chogInfo(chog.id).skills) }}
+          player={{
+            id: chog.id,
+            name: displayName(chog),
+            gang: mine ? GANGS[mine].name : null,
+            powers: powersFor(chogInfo(chog.id).skills),
+          }}
           guards={guards}
           owner={{ name: GANGS[owner].name, color: GANG_COLOR[owner].bg, ink: GANG_COLOR[owner].fg }}
         />

@@ -59,16 +59,14 @@ const job = (
 });
 
 async function addEvent(e: GameEvent, day = DAY) {
-  await db
-    .insert(events)
-    .values({
-      day,
-      at: new Date(NOW),
-      type: e.type,
-      chogId: e.chogId,
-      target: 'target' in e ? e.target : null,
-      data: e,
-    });
+  await db.insert(events).values({
+    day,
+    at: new Date(NOW),
+    type: e.type,
+    chogId: e.chogId,
+    target: 'target' in e ? e.target : null,
+    data: e,
+  });
 }
 
 beforeEach(async () => {
@@ -204,26 +202,22 @@ describe('inbox and crews', () => {
   });
 
   it('finds crews by member, with numeric slots', async () => {
-    await db
-      .insert(crews)
-      .values({
-        id: `${DAY}-7`,
-        day: DAY,
-        offerKey: 'con-whale@purple-hill',
-        leaderId: rich,
-        slots: [rich, null],
-        status: 'open',
-      });
-    await db
-      .insert(crews)
-      .values({
-        id: `${DAY}-8`,
-        day: DAY,
-        offerKey: 'con-whale@purple-hill',
-        leaderId: mine1,
-        slots: [mine1, poor],
-        status: 'done',
-      });
+    await db.insert(crews).values({
+      id: `${DAY}-7`,
+      day: DAY,
+      offerKey: 'con-whale@purple-hill',
+      leaderId: rich,
+      slots: [rich, null],
+      status: 'open',
+    });
+    await db.insert(crews).values({
+      id: `${DAY}-8`,
+      day: DAY,
+      offerKey: 'con-whale@purple-hill',
+      leaderId: mine1,
+      slots: [mine1, poor],
+      status: 'done',
+    });
     const c = await crewsFor(db, NOW, [mine1]);
     expect(c.open.map((x) => x.id)).toEqual([`${DAY}-7`]);
     expect(c.mine.map((x) => x.id)).toEqual([`${DAY}-8`]);

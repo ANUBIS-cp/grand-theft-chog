@@ -10,11 +10,30 @@ export function VaultDoor({ color, tier, size = 64 }: { color: string; tier: num
         <circle key={a} cx={32 + Math.cos(a) * 22} cy={32 + Math.sin(a) * 22} r="1.8" fill="#111" />
       ))}
       {[0, 60, 120].map((deg) => (
-        <rect key={deg} x="30.5" y="16" width="3" height="32" rx="1.5" fill="#55536a" stroke="#111" strokeWidth="1" transform={`rotate(${deg} 32 32)`} />
+        <rect
+          key={deg}
+          x="30.5"
+          y="16"
+          width="3"
+          height="32"
+          rx="1.5"
+          fill="#55536a"
+          stroke="#111"
+          strokeWidth="1"
+          transform={`rotate(${deg} 32 32)`}
+        />
       ))}
       <circle cx="32" cy="32" r="6" fill="#8c94ab" stroke="#111" strokeWidth="2" />
       {[0, 1, 2].map((i) => (
-        <circle key={i} cx={22 + i * 10} cy="58" r="3" fill={i < tier ? '#ff3b3b' : '#3a3946'} stroke="#111" strokeWidth="1.2" />
+        <circle
+          key={i}
+          cx={22 + i * 10}
+          cy="58"
+          r="3"
+          fill={i < tier ? '#ff3b3b' : '#3a3946'}
+          stroke="#111"
+          strokeWidth="1.2"
+        />
       ))}
     </svg>
   );

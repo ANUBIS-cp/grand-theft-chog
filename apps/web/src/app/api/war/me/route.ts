@@ -22,7 +22,9 @@ export async function GET() {
   const byId = new Map(records.map((r) => [r.id, r]));
   const hit = await hitToday(d, ids, now);
   const gangs = [...new Set(records.map((r) => r.gang).filter((g) => g !== null))];
-  const revenge = Object.fromEntries(await Promise.all(gangs.map(async (g) => [g, await revengeTargets(d, g, now)])));
+  const revenge = Object.fromEntries(
+    await Promise.all(gangs.map(async (g) => [g, await revengeTargets(d, g, now)])),
+  );
   return json({
     address,
     revenge,
@@ -38,7 +40,13 @@ export async function GET() {
         jailedUntil: r?.jailedUntil && r.jailedUntil.getTime() > now ? r.jailedUntil.getTime() : null,
         hitToday: hit.get(m.tokenId) ?? [],
         powers: powersFor(chogInfo(m.tokenId).skills),
-        record: { stolen: r?.stolen ?? 0, escapes: r?.escapes ?? 0, busts: r?.busts ?? 0, catches: r?.catches ?? 0, best: r?.best ?? 0 },
+        record: {
+          stolen: r?.stolen ?? 0,
+          escapes: r?.escapes ?? 0,
+          busts: r?.busts ?? 0,
+          catches: r?.catches ?? 0,
+          best: r?.best ?? 0,
+        },
       };
     }),
   });

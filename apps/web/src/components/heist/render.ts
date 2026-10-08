@@ -151,7 +151,8 @@ export class VaultRenderer {
   }
 
   private floorOf(x: number, y: number): Floor {
-    for (const r of this.level.rooms) if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return r.floor;
+    for (const r of this.level.rooms)
+      if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return r.floor;
     return 'tile';
   }
 
@@ -215,12 +216,12 @@ export class VaultRenderer {
       }
 
     // Walls, row by row so front faces sit over the floor below.
-    for (let y = 0; y < level.h; y++) for (let x = 0; x < level.w; x++) if (tileAt(level, x, y) === Tile.Wall) this.wall(g, x, y);
+    for (let y = 0; y < level.h; y++)
+      for (let x = 0; x < level.w; x++) if (tileAt(level, x, y) === Tile.Wall) this.wall(g, x, y);
     this.exitSign(g);
     for (const l of level.lasers) if (l.on > 0) this.laserPosts(g, l.x, l.y, l.across);
     for (const cam of level.cameras) this.cameraBody(g, cam.x, cam.y);
     this.base = c;
-
   }
 
   private floorTile(g: CanvasRenderingContext2D, x: number, y: number, floor: Floor | 'exit') {
@@ -290,7 +291,15 @@ export class VaultRenderer {
         for (let i = 0; i < 2; i++)
           for (let j = 0; j < 2; j++) {
             g.beginPath();
-            g.ellipse(px + t * (0.25 + i * 0.5), py + t * (0.25 + j * 0.5), t * 0.1, t * 0.035, Math.PI / 4, 0, Math.PI * 2);
+            g.ellipse(
+              px + t * (0.25 + i * 0.5),
+              py + t * (0.25 + j * 0.5),
+              t * 0.1,
+              t * 0.035,
+              Math.PI / 4,
+              0,
+              Math.PI * 2,
+            );
             g.fill();
           }
         g.strokeStyle = 'rgba(0, 0, 0, 0.3)';
@@ -309,7 +318,8 @@ export class VaultRenderer {
     g.lineWidth = 1;
     g.strokeRect(this.tx(x) + t * 0.22, this.ty(y) + t * 0.22, w * t - t * 0.44, h * t - t * 0.44);
     g.restore();
-    if (floor === 'gold') this.emblem(g, this.tx(x) + (w * t) / 2, this.ty(y) + (h * t) / 2, Math.min(w, h) * t * 0.42);
+    if (floor === 'gold')
+      this.emblem(g, this.tx(x) + (w * t) / 2, this.ty(y) + (h * t) / 2, Math.min(w, h) * t * 0.42);
   }
 
   /** The owning gang's mark on the vault floor. */
@@ -364,7 +374,13 @@ export class VaultRenderer {
     if (!isWall(0, 1)) g.fillRect(px, top + t - 1, t, lw);
     // Highlight just inside the top-left edges.
     g.fillStyle = 'rgba(160, 140, 255, 0.35)';
-    if (!isWall(0, -1)) g.fillRect(px + (isWall(-1, 0) ? 0 : lw), top + lw, t - (isWall(-1, 0) ? 0 : lw) - (isWall(1, 0) ? 0 : lw), 1.5);
+    if (!isWall(0, -1))
+      g.fillRect(
+        px + (isWall(-1, 0) ? 0 : lw),
+        top + lw,
+        t - (isWall(-1, 0) ? 0 : lw) - (isWall(1, 0) ? 0 : lw),
+        1.5,
+      );
     if (!isWall(-1, 0)) g.fillRect(px + lw, top + lw, 1.5, t - lw * 2);
   }
 
@@ -698,7 +714,13 @@ export class VaultRenderer {
     const guards = s.guards.map((gd, i) => {
       const p = prev.guards[i] ?? gd;
       const da = ((gd.a - p.a + 96) % 64) - 32;
-      return { gd, i, x: this.X(lerp(p.x, gd.x)), y: this.Y(lerp(p.y, gd.y)), a: (((p.a + da * alpha) % 64) + 64) % 64 };
+      return {
+        gd,
+        i,
+        x: this.X(lerp(p.x, gd.x)),
+        y: this.Y(lerp(p.y, gd.y)),
+        a: (((p.a + da * alpha) % 64) + 64) % 64,
+      };
     });
     const alarm = s.phase === 'alarm' || (s.phase === 'busted' && s.alarmBy !== null);
 
@@ -724,7 +746,7 @@ export class VaultRenderer {
       g.lineCap = 'round';
       g.lineJoin = 'round';
       for (let i = 0; i < 2; i++) {
-        const k = ((now / 700 + i / 2) % 1);
+        const k = (now / 700 + i / 2) % 1;
         g.globalAlpha = Math.sin(k * Math.PI) * (s.carried > 0 ? 1 : 0.35);
         const y0 = top + t * (0.2 + k * 0.5);
         g.beginPath();
@@ -766,18 +788,33 @@ export class VaultRenderer {
     };
     hole(px, py, t * 2.1, s.player.hide > 0 ? 0.4 : 0.9);
     hole(this.tx(level.exit[0]) + t / 2, this.ty(level.exit[1]), t * 1.6, 0.8);
-    level.safes.forEach((sf, i) => hole(this.tx(sf.x) + t / 2, this.ty(sf.y) + t / 2, t * 1.7, s.safes[i]!.open ? 0.5 : 0.75));
+    level.safes.forEach((sf, i) =>
+      hole(this.tx(sf.x) + t / 2, this.ty(sf.y) + t / 2, t * 1.7, s.safes[i]!.open ? 0.5 : 0.75),
+    );
     for (let y = 0; y < level.h; y++)
       for (let x = 0; x < level.w; x++)
-        if (tileAt(level, x, y) === Tile.Desk) hole(this.tx(x) + t * 0.7, this.ty(y) + t * 0.4, t * 1.1, 0.55);
+        if (tileAt(level, x, y) === Tile.Desk)
+          hole(this.tx(x) + t * 0.7, this.ty(y) + t * 0.4, t * 1.1, 0.55);
     for (const gu of guards) hole(gu.x, gu.y, t * 0.9, 0.6);
 
-    const cones: { x: number; y: number; a: number; range: number; tint: string; poly: [number, number][] }[] = [];
+    const cones: {
+      x: number;
+      y: number;
+      a: number;
+      range: number;
+      tint: string;
+      poly: [number, number][];
+    }[] = [];
     for (const gu of guards) {
       if (gu.gd.stun > 0) continue;
       const range = ((gu.gd.mode === 'chase' ? CHASE_RANGE : SEE_RANGE) / UNIT) * t;
       const k = gu.gd.sus / SPOT;
-      const tint = gu.gd.mode === 'chase' ? '255, 70, 70' : k > 0 ? `255, ${Math.round(226 - 120 * k)}, ${Math.round(122 - 80 * k)}` : '255, 226, 122';
+      const tint =
+        gu.gd.mode === 'chase'
+          ? '255, 70, 70'
+          : k > 0
+            ? `255, ${Math.round(226 - 120 * k)}, ${Math.round(122 - 80 * k)}`
+            : '255, 226, 122';
       cones.push({ x: gu.x, y: gu.y, a: gu.a, range, tint, poly: this.cone(gu.x, gu.y, gu.a, range) });
     }
     if (s.hacked === 0 && s.phase === 'play')
@@ -788,7 +825,14 @@ export class VaultRenderer {
         const y = this.Y(v.y) - this.lift * 0.4;
         const range = (CAMERA_RANGE / UNIT) * t;
         const k = s.cameras[i]!.sus / SPOT;
-        cones.push({ x, y, a: v.a, range, tint: k > 0 ? '255, 140, 120' : '170, 210, 255', poly: this.cone(x, y, v.a, range) });
+        cones.push({
+          x,
+          y,
+          a: v.a,
+          range,
+          tint: k > 0 ? '255, 140, 120' : '170, 210, 255',
+          poly: this.cone(x, y, v.a, range),
+        });
       });
     for (const c of cones) {
       const gr = d.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.range);
@@ -826,7 +870,8 @@ export class VaultRenderer {
       const bob = Math.sin(now / 320 + l.x * 1.7 + l.y) * t * 0.04;
       const sp = this.sprites[l.kind]!;
       g.drawImage(sp, this.tx(l.x), this.ty(l.y) + bob, t, t);
-      if (l.kind !== 'coin' || (now / 900 + l.x * 0.37 + l.y * 0.61) % 3 < 0.12) this.glint(g, this.tx(l.x) + t * 0.62, this.ty(l.y) + t * 0.36 + bob, t * 0.12, now);
+      if (l.kind !== 'coin' || (now / 900 + l.x * 0.37 + l.y * 0.61) % 3 < 0.12)
+        this.glint(g, this.tx(l.x) + t * 0.62, this.ty(l.y) + t * 0.36 + bob, t * 0.12, now);
     });
 
     // Lasers.
@@ -898,7 +943,15 @@ export class VaultRenderer {
     s.cameras.forEach((c, i) => {
       if (c.sus <= 0 || s.hacked > 0) return;
       const cam = level.cameras[i]!;
-      this.bubble(g, this.tx(cam.x) + t / 2, this.ty(cam.y) - this.lift - t * 0.35, '?', c.sus / SPOT, '#ff9f1c', now);
+      this.bubble(
+        g,
+        this.tx(cam.x) + t / 2,
+        this.ty(cam.y) - this.lift - t * 0.35,
+        '?',
+        c.sus / SPOT,
+        '#ff9f1c',
+        now,
+      );
     });
     if (s.noise) {
       const nx = this.tx(s.noise.x) + t / 2;
@@ -926,7 +979,10 @@ export class VaultRenderer {
         const cx = SW / 2;
         const cy = SH / 2;
         const ang = Math.atan2(ey - cy, ex - cx);
-        const k = Math.min(Math.abs((SW / 2 - m) / Math.cos(ang) || Infinity), Math.abs((SH / 2 - m) / Math.sin(ang) || Infinity));
+        const k = Math.min(
+          Math.abs((SW / 2 - m) / Math.cos(ang) || Infinity),
+          Math.abs((SH / 2 - m) / Math.sin(ang) || Infinity),
+        );
         const ax = cx + Math.cos(ang) * k;
         const ay = cy + Math.sin(ang) * k;
         const pulse = 1 + 0.12 * Math.sin(now / 120);
@@ -962,7 +1018,14 @@ export class VaultRenderer {
     }
     if (alarm) {
       const pulse = 0.5 + 0.5 * Math.sin(now / 160);
-      const gr = g.createRadialGradient(SW / 2, SH / 2, Math.min(SW, SH) * 0.3, SW / 2, SH / 2, Math.max(SW, SH) * 0.75);
+      const gr = g.createRadialGradient(
+        SW / 2,
+        SH / 2,
+        Math.min(SW, SH) * 0.3,
+        SW / 2,
+        SH / 2,
+        Math.max(SW, SH) * 0.75,
+      );
       gr.addColorStop(0, 'rgba(255, 30, 60, 0)');
       gr.addColorStop(1, `rgba(255, 30, 60, ${0.25 + 0.25 * pulse})`);
       g.fillStyle = gr;
@@ -1014,7 +1077,8 @@ export class VaultRenderer {
     g.globalAlpha = s.player.hide > 0 ? 0.35 + 0.1 * Math.sin(now / 60) : 1;
     g.translate(x, y - bob);
     g.scale(squash, 2 - squash);
-    if (face) g.drawImage(face.c, -face.cx, -face.cy, face.w, face.h); else {
+    if (face) g.drawImage(face.c, -face.cx, -face.cy, face.w, face.h);
+    else {
       g.fillStyle = '#ff4f9a';
       g.beginPath();
       g.arc(0, 0, t * 0.44, 0, Math.PI * 2);
@@ -1044,7 +1108,8 @@ export class VaultRenderer {
     g.save();
     g.translate(x, y);
     g.rotate(sway);
-    if (face) g.drawImage(face.c, -face.cx, -face.cy, face.w, face.h); else {
+    if (face) g.drawImage(face.c, -face.cx, -face.cy, face.w, face.h);
+    else {
       g.fillStyle = '#3b5bdb';
       g.beginPath();
       g.arc(0, 0, t * 0.44, 0, Math.PI * 2);
@@ -1104,7 +1169,8 @@ export class VaultRenderer {
       roundRect(g, px + w * 0.16, top + h * 0.2, w * 0.68, h * 0.6, 3);
       g.fill();
       g.fillStyle = '#ffd666';
-      for (let i = 0; i < 3; i++) this.glint(g, px + w * (0.3 + i * 0.2), top + h * 0.45, t * 0.06, now + i * 300);
+      for (let i = 0; i < 3; i++)
+        this.glint(g, px + w * (0.3 + i * 0.2), top + h * 0.45, t * 0.06, now + i * 300);
     }
   }
 
@@ -1127,7 +1193,15 @@ export class VaultRenderer {
     g.restore();
   }
 
-  private bubble(g: CanvasRenderingContext2D, x: number, y: number, mark: string, fill: number, color: string, now: number) {
+  private bubble(
+    g: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    mark: string,
+    fill: number,
+    color: string,
+    now: number,
+  ) {
     const { t } = this;
     const r = t * 0.26;
     const pop = mark === '!' ? 1 + 0.08 * Math.sin(now / 60) : 1;

@@ -12,7 +12,9 @@ export class Sound {
       if (this.ac.state === 'suspended') void this.ac.resume();
       return;
     }
-    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const Ctx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctx) return;
     this.ac = new Ctx();
     this.master = this.ac.createGain();
