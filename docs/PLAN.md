@@ -1,5 +1,19 @@
 # Chog City: build plan
 
+> **Revised 8 Oct 2026 (after checkpoint 2):** the jobs/crews/turf game failed the play test and was replaced.
+> The game is now **the heist + the gang war**: every gang has a vault with real cash; you sneak your Chog into a
+> rival's vault (a 90-second stealth arcade run: flashlights, cameras, lasers, a safe, trait powers), and what you
+> escape with moves into your gang's vault. Caught = 30 min jail and a fine to the vault. Guards are the target
+> gang's real Chogs. One hit per rival vault per Chog per day; revenge +25%. Richer vaults defend harder.
+> Parts of this plan about jobs, crews, districts, turf, moves and the nightly turf flip are obsolete.
+> Remaining days, in order:
+> - Day 8: $CHOG on-chain: bail out of jail early (burn), gang banners; contracts + fork tests; mainnet only with the user's OK.
+> - Day 9: closed test with holders; more vault layouts (aim 4); first-run guided practice.
+> - Day 10: fixes, balance from real runs (route bot + run logs), performance, accessibility.
+> - Day 11: public launch (wipe test data first), Discord posts of big hits.
+> - Day 12: events (gang war weekend, Halloween vault). Day 13: video, README, numbers. Day 14: submit.
+
+
 Solo entry for Chogathon 2026. Version 1, written 8 October 2026, before the hackathon starts.
 
 The plan has nine parts. Part 1 is the short version. The rest is the spec I build from.
