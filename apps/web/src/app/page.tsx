@@ -21,24 +21,15 @@ export default function Home() {
         {CHOGS.map((c) => (
           <li key={c.id}>
             <figure className="overflow-hidden rounded-sm border-2 border-ink bg-paper-raised">
-              <picture>
-                <source
-                  type="image/avif"
-                  srcSet={`${chogImage(c.id, 96, 'avif')} 96w, ${chogImage(c.id, 256, 'avif')} 256w`}
-                  sizes="(min-width: 640px) 120px, 30vw"
-                />
-                <img
-                  src={chogImage(c.id, 256)}
-                  srcSet={`${chogImage(c.id, 96)} 96w, ${chogImage(c.id, 256)} 256w`}
-                  sizes="(min-width: 640px) 120px, 30vw"
-                  width={256}
-                  height={256}
-                  alt={displayName(c)}
-                  loading="lazy"
-                  decoding="async"
-                  className="aspect-square w-full"
-                />
-              </picture>
+              <img
+                src={chogImage(c.id, 256)}
+                width={256}
+                height={256}
+                alt={displayName(c)}
+                loading="lazy"
+                decoding="async"
+                className="aspect-square w-full"
+              />
               <figcaption className="truncate border-t-2 border-ink px-1.5 py-0.5 font-mono text-[11px]">
                 {c.title ?? `#${c.metadataId}`}
               </figcaption>

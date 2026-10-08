@@ -31,7 +31,7 @@ if [ "${1:-}" = "--config" ]; then "${SSH[@]}" "sudo bash $REL/deploy/install-co
   sudo ln -sfn $REL /opt/chog-city/current
   sudo systemctl enable --quiet chog-city-web
   sudo systemctl restart chog-city-web
-  for i in \$(seq 1 30); do curl -fsS -o /dev/null http://127.0.0.1:3000/ && break; sleep 1; done
+  for i in \$(seq 1 30); do curl -fs -o /dev/null http://127.0.0.1:3000/ && break; sleep 1; done
   curl -fsS -o /dev/null http://127.0.0.1:3000/ && echo 'healthy'
   cd /opt/chog-city/releases && ls -1t | tail -n +6 | xargs -r sudo rm -rf
 "

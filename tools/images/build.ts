@@ -1,5 +1,6 @@
 // Fetches every Chog image from IPFS once, checks it, and writes resized copies keyed by TOKEN ID:
-//   <out>/orig/<id>.webp, <out>/<size>/<id>.webp and .avif for size in 96, 256, 640.
+//   <out>/orig/<id>.webp and <out>/<size>/<id>.webp for size in 96, 256, 640.
+// WebP only: AVIF took ~10x the CPU on the e2-medium for a small size gain.
 // Usage: node build.ts <chogs.json> <out-dir>   (re-runnable: skips finished tokens)
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -55,8 +56,7 @@ async function worker() {
     writeFileSync(join(out, 'orig', `${c.id}.webp`), buf);
     for (const s of SIZES) {
       const img = sharp(buf).resize(s, s, { kernel: 'lanczos3' });
-      writeFileSync(join(out, String(s), `${c.id}.webp`), await img.clone().webp({ quality: 82 }).toBuffer());
-      writeFileSync(join(out, String(s), `${c.id}.avif`), await img.clone().avif({ quality: 55 }).toBuffer());
+      writeFileSync(join(out, String(s), `${c.id}.webp`), await img.webp({ quality: 82 }).toBuffer());
     }
     manifest[c.id] = sha(buf);
     if (++done % 100 === 0) {
@@ -65,7 +65,7 @@ async function worker() {
     }
   }
 }
-await Promise.all(Array.from({ length: 4 }, worker));
+await Promise.all(Array.from({ length: 3 }, worker));
 writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest));
 
 // Cross-check a sample against a second gateway: the bytes must be identical.
