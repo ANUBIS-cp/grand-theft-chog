@@ -12,8 +12,8 @@
   },
   "scripts": {
     "dev": "npm run dev -w @chog-city/web",
-    "build": "npm run build -w @chog-city/web && npm run build -w @chog-city/worker",
-    "typecheck": "tsc -p packages/data --noEmit && tsc -p packages/game --noEmit && tsc -p packages/server --noEmit && tsc -p apps/worker --noEmit && npm run typecheck -w @chog-city/web",
+    "build": "npm run build -w @chog-city/web && npm run build -w @chog-city/worker && npm run build -w @chog-city/live",
+    "typecheck": "tsc -p packages/data --noEmit && tsc -p packages/game --noEmit && tsc -p packages/server --noEmit && tsc -p apps/worker --noEmit && tsc -p apps/live --noEmit && npm run typecheck -w @chog-city/web",
     "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --write .",

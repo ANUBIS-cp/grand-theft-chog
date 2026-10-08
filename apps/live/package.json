@@ -1,0 +1,20 @@
+{
+  "name": "@chog-city/live",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/live.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "dev": "tsx watch src/main.ts"
+  },
+  "dependencies": {
+    "@chog-city/data": "*",
+    "@chog-city/game": "*",
+    "@chog-city/server": "*",
+    "ws": "8.18.3"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.1",
+    "esbuild": "^0.25.0"
+  }
+}

@@ -1,3 +1,5 @@
+import { CHOGS, gangOptions, type GangId } from '@chog-city/data';
+import { dayOf } from '../time.ts';
 import { CITY, Ground, groundAt, route, smooth, type City } from './map.ts';
 
 // Chogs nobody is playing right now, strolling between spots so the city never looks empty.
@@ -88,4 +90,18 @@ export function stepWalker(w: Walker, dt: number, rand: () => number, c: City = 
   }
   w.moving = true;
   if (!w.path.length) w.wait = 2 + rand() * 6;
+}
+
+/** Chogs strolling round the city today: a fixed pick per day, each walking for its gang. */
+export function strollers(now: number, n = 36): { id: number; gang: GangId }[] {
+  const day = dayOf(now);
+  const out: { id: number; gang: GangId }[] = [];
+  let seed = day * 2654435761;
+  for (let tries = 0; out.length < n && tries < n * 20; tries++) {
+    seed = (Math.imul(seed ^ (seed >>> 15), 2246822519) + 3266489917) >>> 0;
+    const c = CHOGS[seed % CHOGS.length]!;
+    const gang = gangOptions(c).born[0];
+    if (gang && !out.some((o) => o.id === c.id)) out.push({ id: c.id, gang });
+  }
+  return out;
 }

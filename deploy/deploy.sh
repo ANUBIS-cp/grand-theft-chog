@@ -31,10 +31,12 @@ if [ "${1:-}" = "--config" ]; then "${SSH[@]}" "sudo bash $REL/deploy/install-co
 "${SSH[@]}" "
   set -e
   sudo ln -sfn $REL /opt/chog-city/current
-  sudo systemctl enable --quiet chog-city-web chog-city-worker
-  sudo systemctl restart chog-city-web chog-city-worker
+  sudo systemctl enable --quiet chog-city-web chog-city-worker chog-city-live
+  sudo systemctl restart chog-city-web chog-city-worker chog-city-live
   for i in \$(seq 1 30); do curl -fs -o /dev/null http://127.0.0.1:3000/api/health && break; sleep 1; done
   curl -fsS -o /dev/null http://127.0.0.1:3000/api/health && echo 'healthy'
+  for i in \$(seq 1 10); do curl -fs -o /dev/null http://127.0.0.1:3001/health && break; sleep 1; done
+  curl -fsS -o /dev/null http://127.0.0.1:3001/health && echo 'live server up'
   cd /opt/chog-city/releases && ls -1t | tail -n +6 | xargs -r sudo rm -rf
 "
 echo "live: https://chogcity.35-212-31-75.sslip.io/"

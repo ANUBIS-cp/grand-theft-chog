@@ -16,6 +16,11 @@ chogcity.35-212-31-75.sslip.io {
 		file_server
 	}
 
+	# The live city (WebSocket).
+	handle /ws {
+		reverse_proxy 127.0.0.1:3001
+	}
+
 	handle {
 		reverse_proxy 127.0.0.1:3000
 	}

@@ -1,0 +1,21 @@
+[Unit]
+Description=Chog City live server (everyone's position in the city)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=chogcity
+Group=chogcity
+WorkingDirectory=/opt/chog-city/current/apps/live
+EnvironmentFile=/etc/chog-city/app.env
+Environment=NODE_ENV=production LIVE_PORT=3001 LIVE_HOST=127.0.0.1
+ExecStart=/usr/bin/node dist/live.mjs
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

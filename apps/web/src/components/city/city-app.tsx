@@ -28,7 +28,8 @@ import { GANG_COLOR } from '@/lib/theme';
 import { ago, formatLeft } from '@/lib/time';
 import { logOut } from '@/lib/wallet';
 import type { Emote, PlaceLook } from './city-render';
-import { CityView, type CityHandle, type Jailed, type Stroller } from './city-view';
+import { CityView, type CityHandle, type Jailed, type Stroller, type Tapped } from './city-view';
+import type { LiveStatus } from './live-city';
 
 interface VaultRow {
   gang: GangId;
@@ -131,7 +132,11 @@ export function CityApp() {
   const [practice, setPractice] = useState(false);
   const [door, setDoor] = useState<Place | null>(null);
   const [sheet, setSheet] = useState<'gangs' | 'me' | 'connect' | null>(null);
-  const [peek, setPeek] = useState<number | null>(null);
+  const [peek, setPeek] = useState<Tapped | null>(null);
+  const [live, setLive] = useState<{ status: LiveStatus; online: number }>({
+    status: 'connecting',
+    online: 0,
+  });
   const [welcome, setWelcome] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -202,11 +207,12 @@ export function CityApp() {
       chog
         ? {
             chog: chog.id,
+            jail: chog.jailedUntil,
             name: chog.name,
             color: chog.gang ? GANG_COLOR[chog.gang].bg : GUEST.color,
             ink: chog.gang ? GANG_COLOR[chog.gang].fg : GUEST.ink,
           }
-        : { chog: null, name: 'Guest', ...GUEST },
+        : { chog: null, name: 'Guest', jail: null, ...GUEST },
     [chog],
   );
 
@@ -319,6 +325,9 @@ export function CityApp() {
         paused={!!sheet || !!peek || (!!chog && !chog.gang)}
         onDoor={setDoor}
         onPerson={setPeek}
+        onLive={(status, online) =>
+          setLive((l) => (l.status === status && l.online === online ? l : { status, online }))
+        }
       />
 
       {/* Top bar */}
@@ -330,6 +339,23 @@ export function CityApp() {
           >
             Chog City
           </Link>
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-black/50 px-2 py-0.5 text-[12px] font-semibold text-white/85">
+            <span
+              className={cn(
+                'h-2 w-2 rounded-full',
+                live.status === 'live'
+                  ? 'bg-[#3ddc84]'
+                  : live.status === 'elsewhere'
+                    ? 'bg-jail'
+                    : 'bg-white/40',
+              )}
+            />
+            {live.status === 'live'
+              ? `${live.online} playing now`
+              : live.status === 'elsewhere'
+                ? 'Open in another window'
+                : 'Connecting…'}
+          </span>
         </div>
         {latest && (
           <button
@@ -484,7 +510,7 @@ export function CityApp() {
 
       {peek !== null && (
         <Card onClose={() => setPeek(null)}>
-          <Peek id={peek} strollers={city?.strollers ?? []} jailed={city?.jailed ?? []} now={now} />
+          <Peek who={peek} jailed={city?.jailed ?? []} now={now} />
         </Card>
       )}
 
@@ -924,38 +950,35 @@ function DoorCard(props: {
   );
 }
 
-function Peek({
-  id,
-  strollers,
-  jailed,
-  now,
-}: {
-  id: number;
-  strollers: Stroller[];
-  jailed: Jailed[];
-  now: number;
-}) {
-  const s = strollers.find((x) => x.id === id) ?? jailed.find((x) => x.id === id);
-  if (!s) return null;
-  const j = jailed.find((x) => x.id === id);
+function Peek({ who, jailed, now }: { who: Tapped; jailed: Jailed[]; now: number }) {
+  const j = jailed.find((x) => x.id === who.chog && x.until > now);
   return (
     <div className="flex items-center gap-3 pr-8">
       <img
-        src={chogImage(id, 256)}
+        src={chogImage(who.chog, 256)}
         alt=""
         className="h-20 w-20 shrink-0 rounded-[10px] border-2 border-ink"
       />
       <div className="min-w-0">
-        <div className="truncate font-display text-[24px] uppercase leading-none">{s.name}</div>
-        <div
-          className="mt-1 inline-block rounded-[5px] border-2 border-ink px-1.5 pt-1 font-display text-[13px] uppercase leading-none"
-          style={{ background: GANG_COLOR[s.gang].bg, color: GANG_COLOR[s.gang].fg }}
-        >
-          {GANGS[s.gang].name}
+        <div className="truncate font-display text-[24px] uppercase leading-none">{who.name}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          {who.gang && (
+            <span
+              className="rounded-[5px] border-2 border-ink px-1.5 pt-1 font-display text-[13px] uppercase leading-none"
+              style={{ background: GANG_COLOR[who.gang].bg, color: GANG_COLOR[who.gang].fg }}
+            >
+              {GANGS[who.gang].name}
+            </span>
+          )}
+          {who.player && (
+            <span className="rounded-full bg-[#3ddc84] px-1.5 py-0.5 text-[11px] font-bold uppercase text-ink">
+              Playing now
+            </span>
+          )}
         </div>
         {j && <p className="mt-1 text-[13px] text-[#ff8a80]">In jail, out in {formatLeft(j.until - now)}</p>}
         <Link
-          href={`/chog/${id}`}
+          href={`/chog/${who.chog}`}
           className="mt-2 flex items-center gap-1 text-[14px] font-semibold underline"
         >
           See its record <ArrowSquareOut size={14} />

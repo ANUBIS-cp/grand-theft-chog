@@ -310,3 +310,26 @@ export const placeOf = (id: string, c: City = CITY) => c.places.find((p) => p.id
 export function doorAt(x: number, y: number, c: City = CITY): Place | undefined {
   return c.places.find((p) => Math.abs(p.door.x - x) < 1.6 && Math.abs(p.door.y - y) < 1.3);
 }
+
+/** Inside the jail yard (where a jailed Chog walks until it's let out). */
+export function inPen(x: number, y: number, c: City = CITY): boolean {
+  const pen = (px: number, py: number) => groundAt(Math.floor(px), Math.floor(py), c) === Ground.Pen;
+  return (
+    pen(x - BODY, y - BODY) && pen(x + BODY, y - BODY) && pen(x - BODY, y + BODY) && pen(x + BODY, y + BODY)
+  );
+}
+
+/** Moves within the jail yard only. */
+export function slideInPen(
+  x: number,
+  y: number,
+  dx: number,
+  dy: number,
+  c: City = CITY,
+): { x: number; y: number } {
+  let nx = x;
+  let ny = y;
+  if (dx && inPen(x + dx, y, c)) nx = x + dx;
+  if (dy && inPen(nx, y + dy, c)) ny = y + dy;
+  return { x: nx, y: ny };
+}

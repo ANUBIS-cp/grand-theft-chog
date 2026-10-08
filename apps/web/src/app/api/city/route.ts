@@ -1,7 +1,8 @@
 import { displayName, getChog, tokenIdFor } from '@chog-city/data';
 import { chogInfo } from '@chog-city/game';
 import { powersFor } from '@chog-city/game/heist';
-import { jailed, strollers } from '@chog-city/server';
+import { strollers } from '@chog-city/game/city';
+import { jailed } from '@chog-city/server';
 import { db } from '@/server/db';
 import { json } from '@/server/http';
 

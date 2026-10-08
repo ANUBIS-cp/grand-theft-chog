@@ -386,17 +386,3 @@ export async function jailed(db: Db, now: number, limit = 40) {
     .limit(limit);
   return rows.map((r) => ({ id: r.id, gang: r.gang as GangId, until: r.until!.getTime() }));
 }
-
-/** Chogs strolling round the city today: a fixed pick per day from every gang. */
-export function strollers(now: number, n = 36): { id: number; gang: GangId }[] {
-  const day = dayOf(now);
-  const out: { id: number; gang: GangId }[] = [];
-  let seed = day * 2654435761;
-  for (let tries = 0; out.length < n && tries < n * 20; tries++) {
-    seed = (Math.imul(seed ^ (seed >>> 15), 2246822519) + 3266489917) >>> 0;
-    const c = CHOGS[seed % CHOGS.length]!;
-    const gang = gangOptions(c).born[0];
-    if (gang && !out.some((o) => o.id === c.id)) out.push({ id: c.id, gang });
-  }
-  return out;
-}
