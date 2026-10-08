@@ -27,10 +27,10 @@ export default async function GangPage({ params }: Props) {
   if (!GANG_IDS.includes(gang)) notFound();
   const d = await db();
   const [vs, members, hits] = await Promise.all([vaults(d), gangMembers(d, gang), recentHits(d, 30, gang)]);
-  const ranked = [...GANG_IDS].sort((a, b) => cash[b] - cash[a]);
-  const rank = ranked.indexOf(gang) + 1;
   const now = Date.now();
   const cash = Object.fromEntries(GANG_IDS.map((g) => [g, vs[g].cash])) as Record<GangId, number>;
+  const ranked = [...GANG_IDS].sort((a, b) => cash[b] - cash[a]);
+  const rank = ranked.indexOf(gang) + 1;
   const tier = tierNow(vs[gang].cash, vs[gang], now);
   const traits = GANGS[gang].from.map(([, v]) => v);
 
