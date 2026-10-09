@@ -39,6 +39,11 @@ const SIZE: Record<string, number> = {
   lamp: 384,
   bench: 320,
   hydrant: 192,
+  stall: 448,
+  'car-0': 512,
+  'car-1': 512,
+  'car-2': 512,
+  'car-3': 512,
 };
 
 /** Turns a flat magenta (#FF00FF) background transparent, softening the edge and removing magenta fringe. */

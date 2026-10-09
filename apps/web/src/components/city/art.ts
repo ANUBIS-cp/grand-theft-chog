@@ -13,6 +13,11 @@ export const ART_NAMES = [
   'bench',
   'hydrant',
   'fountain',
+  'stall',
+  'car-0',
+  'car-1',
+  'car-2',
+  'car-3',
 ] as const;
 export type ArtName = (typeof ART_NAMES)[number];
 

@@ -1,6 +1,6 @@
 # City art: prompts to make in ChatGPT
 
-23 pictures turn the code-drawn city into drawn art: the 16 gang buildings, the jail, the practice vault and 5 street things. The game uses each picture as soon as it's in, and keeps the code drawing for anything not made yet, so you can do them a few at a time.
+28 pictures turn the code-drawn city into drawn art: the 16 gang buildings, the jail, the practice vault and 10 street things. The game uses each picture as soon as it's in, and keeps the code drawing for anything not made yet, so you can do them a few at a time.
 
 ## How to
 
@@ -105,3 +105,9 @@ Each one says: "A wide, shallow building, about twice as wide as it is deep, fil
 
 **`fountain.png`**
 > One round stone plaza fountain with blue water and a small spout in the middle, for a game city map, seen from the front and above at 45 degrees so the water pool shows as an oval. It fills about 85% of the picture's width. [STYLE]
+
+**`stall.png`**
+> One street food cart for a game city map: a wooden counter with fruit and snacks on it and a red-and-white striped canopy on two poles, seen from the front and above. It fills about 80% of the picture's width. [STYLE]
+
+**`car-0.png`, `car-1.png`, `car-2.png`, `car-3.png`** (four pictures: a red hatchback, a blue sedan, a yellow taxi, a green van)
+> One parked [red hatchback car] for a game city map, seen from the side and slightly above, facing right, with round chunky wheels and glowing headlights. It fills about 85% of the picture's width. [STYLE]

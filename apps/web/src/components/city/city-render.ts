@@ -80,6 +80,30 @@ function shade(hex: string, f: number) {
   return `rgb(${ch(n >> 16)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
 }
 
+/** How big a prop's drawn art is, in tiles: by width where that's set, else by height. */
+const ART_TALL: Record<Prop['kind'], number> = {
+  lamp: 2.3,
+  tree: 2.2,
+  bench: 0.9,
+  hydrant: 0.7,
+  fountain: 2.2,
+  screen: 0,
+  car: 0,
+  stall: 0,
+  post: 0,
+};
+const ART_WIDE: Record<Prop['kind'], number> = {
+  lamp: 0,
+  tree: 0,
+  bench: 1.2,
+  hydrant: 0,
+  fountain: 2.8,
+  screen: 0,
+  car: 1.8,
+  stall: 1.5,
+  post: 0,
+};
+
 // Fixed parts of the map that never change: road markings depend only on where a tile sits.
 const PERIOD_X = BW + ROAD;
 const PERIOD_Y = BH + ROAD;
@@ -783,12 +807,12 @@ export class CityRenderer {
     const y = this.sy(p.y);
     // Drawn art stands on the prop's spot; trees in a gang's yard keep their code-drawn gang look.
     const art =
-      p.kind === 'screen' || (p.kind === 'tree' && this.yardGang(p.x, p.y))
+      p.kind === 'screen' || p.kind === 'post' || (p.kind === 'tree' && this.yardGang(p.x, p.y))
         ? undefined
-        : this.art.get(p.kind);
+        : this.art.get(p.kind === 'car' ? `car-${(p.n ?? 0) % 4}` : p.kind);
     if (art) {
-      const tall = { lamp: 2.3, tree: 2.2, bench: 0.9, hydrant: 0.7, fountain: 2.2, screen: 0 }[p.kind] * t;
-      const wide = { lamp: 0, tree: 0, bench: 1.2, hydrant: 0, fountain: 2.8, screen: 0 }[p.kind] * t;
+      const tall = ART_TALL[p.kind] * t;
+      const wide = ART_WIDE[p.kind] * t;
       const k = wide ? wide / art.naturalWidth : tall / art.naturalHeight;
       const w = art.naturalWidth * k;
       const h = art.naturalHeight * k;
@@ -803,6 +827,16 @@ export class CityRenderer {
     g.lineWidth = 2;
     g.strokeStyle = INK;
     switch (p.kind) {
+      case 'post':
+        return;
+      case 'car': {
+        this.drawCar(x, y, p.n ?? 0, p.x);
+        return;
+      }
+      case 'stall': {
+        this.drawStall(x, y, p.n ?? 0, now);
+        return;
+      }
       case 'lamp': {
         g.fillStyle = 'rgba(0,0,0,0.35)';
         g.beginPath();
@@ -950,6 +984,145 @@ export class CityRenderer {
   }
 
   /** The plaza's big screen: the three richest gangs. */
+  /** A parked car seen from the side and above, facing left or right. */
+  private drawCar(x: number, y: number, n: number, seed: number) {
+    const { g, t } = this;
+    const COLORS = ['#e63946', '#3a86ff', '#ffd23f', '#2a9d8f', '#f4f1de', '#8338ec', '#fb8500', '#1d3557'];
+    const body = COLORS[n % COLORS.length]!;
+    const taxi = n % 5 === 2;
+    const color = taxi ? '#ffcc00' : body;
+    const dir = hash(seed, n) > 0.5 ? 1 : -1;
+    const L = t * 1.7;
+    const H = t * 0.62;
+    const top = y - H * 0.9;
+    g.save();
+    g.translate(x, 0);
+    g.scale(dir, 1);
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.beginPath();
+    g.ellipse(0, y + t * 0.18, L * 0.55, t * 0.2, 0, 0, Math.PI * 2);
+    g.fill();
+    g.lineWidth = 2;
+    g.strokeStyle = INK;
+    // Roof and windows.
+    g.fillStyle = shade(color, -0.15);
+    g.beginPath();
+    g.moveTo(-L * 0.28, top);
+    g.lineTo(-L * 0.18, top - H * 0.55);
+    g.lineTo(L * 0.2, top - H * 0.55);
+    g.lineTo(L * 0.34, top);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#9fd3ff';
+    g.beginPath();
+    g.moveTo(-L * 0.22, top - 2);
+    g.lineTo(-L * 0.15, top - H * 0.45);
+    g.lineTo(L * 0.0, top - H * 0.45);
+    g.lineTo(L * 0.0, top - 2);
+    g.closePath();
+    g.fill();
+    g.beginPath();
+    g.moveTo(L * 0.04, top - 2);
+    g.lineTo(L * 0.04, top - H * 0.45);
+    g.lineTo(L * 0.18, top - H * 0.45);
+    g.lineTo(L * 0.28, top - 2);
+    g.closePath();
+    g.fill();
+    // Body.
+    g.fillStyle = color;
+    g.beginPath();
+    g.roundRect(-L / 2, top, L, H, H * 0.38);
+    g.fill();
+    g.stroke();
+    g.fillStyle = 'rgba(255,255,255,0.25)';
+    g.fillRect(-L / 2 + H * 0.3, top + H * 0.12, L - H * 0.6, H * 0.12);
+    if (taxi) {
+      g.fillStyle = '#1a1622';
+      for (let i = 0; i < 6; i++) g.fillRect(-L * 0.3 + i * L * 0.1, top + H * 0.45, L * 0.05, H * 0.14);
+      g.fillStyle = '#fff3b0';
+      g.fillRect(-L * 0.08, top - H * 0.75, L * 0.16, H * 0.2);
+      g.strokeRect(-L * 0.08, top - H * 0.75, L * 0.16, H * 0.2);
+    }
+    // Lights and wheels.
+    g.fillStyle = '#fff3b0';
+    g.fillRect(L / 2 - H * 0.22, top + H * 0.25, H * 0.16, H * 0.2);
+    g.fillStyle = '#ff4d4d';
+    g.fillRect(-L / 2 + H * 0.06, top + H * 0.25, H * 0.14, H * 0.2);
+    for (const wx of [-L * 0.3, L * 0.3]) {
+      g.fillStyle = '#1a1622';
+      g.beginPath();
+      g.arc(wx, top + H, H * 0.3, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#8a8aa0';
+      g.beginPath();
+      g.arc(wx, top + H, H * 0.12, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.restore();
+  }
+
+  /** A food stall: a cart with a striped canopy. */
+  private drawStall(x: number, y: number, n: number, now: number) {
+    const { g, t } = this;
+    const LOOKS = [
+      ['#e63946', '#ffffff', '#ffd23f'],
+      ['#2a9d8f', '#f4f1de', '#ff8fab'],
+      ['#3a86ff', '#ffffff', '#ffb703'],
+      ['#ffb703', '#7a3f00', '#e63946'],
+    ];
+    const [a, b, goods] = LOOKS[n % LOOKS.length]!;
+    const W = t * 1.3;
+    g.lineWidth = 2;
+    g.strokeStyle = INK;
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.beginPath();
+    g.ellipse(x, y + t * 0.18, W * 0.6, t * 0.2, 0, 0, Math.PI * 2);
+    g.fill();
+    // Counter.
+    g.fillStyle = '#8b5a2b';
+    g.beginPath();
+    g.roundRect(x - W / 2, y - t * 0.55, W, t * 0.6, 4);
+    g.fill();
+    g.stroke();
+    g.fillStyle = '#6b4220';
+    g.fillRect(x - W / 2 + 3, y - t * 0.2, W - 6, t * 0.06);
+    // Goods on the counter.
+    for (let i = 0; i < 4; i++) {
+      g.fillStyle = i % 2 ? goods! : shade(goods!, -0.2);
+      g.beginPath();
+      g.arc(x - W * 0.3 + i * W * 0.2, y - t * 0.6, t * 0.09, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+    }
+    // Poles and the canopy.
+    g.strokeStyle = INK;
+    g.lineWidth = 3;
+    for (const px of [x - W * 0.42, x + W * 0.42]) {
+      g.beginPath();
+      g.moveTo(px, y - t * 0.55);
+      g.lineTo(px, y - t * 1.35);
+      g.stroke();
+    }
+    g.lineWidth = 2;
+    const cy = y - t * 1.45;
+    const flap = Math.sin(now / 500 + x) * t * 0.02;
+    for (let i = 0; i < 6; i++) {
+      const x0 = x - W * 0.6 + (W * 1.2 * i) / 6;
+      const x1 = x0 + (W * 1.2) / 6;
+      g.fillStyle = i % 2 ? a! : b!;
+      g.beginPath();
+      g.moveTo(x0 + W * 0.05, cy - t * 0.25);
+      g.lineTo(x1 + W * 0.05, cy - t * 0.25);
+      g.lineTo(x1, cy + t * 0.18 + flap);
+      g.quadraticCurveTo((x0 + x1) / 2, cy + t * 0.32 + flap, x0, cy + t * 0.18 + flap);
+      g.closePath();
+      g.fill();
+      g.stroke();
+    }
+  }
+
   private drawScreen(p: Prop, now: number) {
     const { g, t } = this;
     const w = t * 6.4;

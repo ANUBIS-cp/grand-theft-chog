@@ -35,9 +35,12 @@ export interface Place {
 }
 
 export interface Prop {
-  kind: 'lamp' | 'tree' | 'bench' | 'hydrant' | 'fountain' | 'screen';
+  /** `post` is an unseen bumper: a parked car is two of them under one drawn car. */
+  kind: 'lamp' | 'tree' | 'bench' | 'hydrant' | 'fountain' | 'screen' | 'car' | 'stall' | 'post';
   x: number;
   y: number;
+  /** Which look (colour) a car or stall has. */
+  n?: number;
 }
 
 export interface City {
@@ -57,6 +60,9 @@ export const PROP_RADIUS: Record<Prop['kind'], number> = {
   hydrant: 0.12,
   bench: 0,
   screen: 0,
+  car: 0,
+  stall: 0.5,
+  post: 0.38,
 };
 
 export const COLS = 5;
@@ -200,6 +206,35 @@ function build(): City {
           props.push({ kind: 'lamp', x: o.x + dx, y: o.y + dy });
       if ((r + c) % 2 === 0 && c !== 2) props.push({ kind: 'hydrant', x: o.x + 3.5, y: o.y + BH - 0.5 });
     }
+
+  // Parked cars along the kerbs, about one per stretch of road between crossings, never in the plaza.
+  const roll = (a: number, b: number) => {
+    let h = (a * 374761393 + b * 668265263) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  let cars = 0;
+  for (let r = 0; r <= ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      if (roll(r, c) < 0.3) continue;
+      const roadY = r * (BH + ROAD);
+      const lane = roll(c, r + 9) < 0.5 ? roadY + 0.5 : roadY + ROAD - 0.5;
+      const x0 = ROAD + c * (BW + ROAD);
+      const x = x0 + 2.5 + Math.floor(roll(r + 3, c + 5) * 7);
+      if ([x - 1, x, x + 1].some((tx) => ground[Math.floor(lane) * w + Math.floor(tx)] !== Ground.Road))
+        continue;
+      props.push({ kind: 'car', x, y: lane, n: cars++ });
+      props.push({ kind: 'post', x: x - 0.42, y: lane }, { kind: 'post', x: x + 0.42, y: lane });
+    }
+
+  // Food stalls in the plaza.
+  for (const [dx, dy, n] of [
+    [-3, -6, 0],
+    [3, -6, 1],
+    [-2.5, 7.5, 2],
+    [2.5, 7.5, 3],
+  ] as const)
+    props.push({ kind: 'stall', x: cx + dx, y: cy + dy, n });
 
   // Routes go round trees and the fountain. (Walking itself bumps into props as circles: see PROP_RADIUS.)
   for (const p of props) {
