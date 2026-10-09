@@ -1,9 +1,10 @@
 import { BH, BW, CITY, Ground, ROAD, groundAt, type Place, type Prop } from '@chog-city/game/city';
 import { chogImage } from '@/lib/images';
 import { drawPiece, hopHeight, makePiece, type Piece } from '../chog/piece';
+import { FACADE, LANDMARK_RISE, paintLandmark, paintWall, paintYard, treeOf } from './landmarks';
 
 // Draws the city at night in the same 3/4 view as the vaults: ground tiles, buildings (roof at the back, front
-// wall at the bottom of the footprint, so nobody is ever hidden behind one), lamps, trees, and the Chogs on the
+// wall at the bottom of the footprint; only a gang's rooftop landmark stands taller), lamps, trees, and the Chogs on the
 // street. A dark layer with light pools cut out of it goes on top, then names and speech bubbles.
 
 const INK = '#0d0b1a';
@@ -117,6 +118,7 @@ export class CityRenderer {
     this.dark = makeCanvas(this.cv.width, this.cv.height);
     this.tiles = {};
     this.buildings.clear();
+    this.yards.clear();
     this.faces.clear();
     this.buildTiles();
   }
@@ -343,7 +345,7 @@ export class CityRenderer {
     const have = this.buildings.get(p.id);
     if (have && have.key === key) return have.c;
     const { t, dpr } = this;
-    const lip = Math.round(t * 0.7);
+    const lip = this.lipOf(p);
     const c = makeCanvas(p.w * t * dpr, (p.h * t + lip) * dpr);
     const g = c.getContext('2d')!;
     g.scale(dpr, dpr);
@@ -354,6 +356,34 @@ export class CityRenderer {
     void now;
     this.buildings.set(p.id, { c, key });
     return c;
+  }
+
+  /** The gang whose front yard (x, y) is in, or null. */
+  private yardGang(x: number, y: number) {
+    for (const p of CITY.places)
+      if (p.kind === 'gang' && x >= p.x - 1 && x <= p.x + p.w + 1 && y >= p.y + p.h && y <= p.y + p.h + 3.5)
+        return p.gang ?? null;
+    return null;
+  }
+
+  private yards = new Map<string, HTMLCanvasElement>();
+
+  /** A gang's front yard decoration, drawn flat on the ground. */
+  private yardSprite(p: Place) {
+    const have = this.yards.get(p.id);
+    if (have) return have;
+    const { t, dpr } = this;
+    const c = makeCanvas(p.w * t * dpr, 3 * t * dpr);
+    const g = c.getContext('2d')!;
+    g.scale(dpr, dpr);
+    paintYard(g, p.gang!, p.w * t, 3 * t, t);
+    this.yards.set(p.id, c);
+    return c;
+  }
+
+  /** How far a building's sprite reaches above its footprint (a gang's landmark stands up off the roof). */
+  private lipOf(p: Place) {
+    return Math.round(this.t * (p.kind === 'gang' ? LANDMARK_RISE : 0.7));
   }
 
   private paintRoof(g: CanvasRenderingContext2D, p: Place, roof: string, edge: string) {
@@ -388,45 +418,10 @@ export class CityRenderer {
     const Hw = CityRenderer.WALL * t;
     const color = look?.color ?? '#888888';
     const seed = p.x * 31 + p.y;
-    const wall = ['#3b2f4f', '#40354f', '#352c48', '#463650'][Math.floor(hash(seed, 1) * 4)]!;
-    this.paintRoof(g, p, '#231c33', '#3a3150');
-
-    // Roof furniture: air-con boxes and a water tank, placed per building.
-    const box = (x: number, y: number, w: number, h: number) => {
-      g.fillStyle = '#4a4560';
-      g.fillRect(x, y, w, h);
-      g.fillStyle = '#5c5776';
-      g.fillRect(x, y, w, h * 0.35);
-      g.strokeStyle = INK;
-      g.lineWidth = 1.5;
-      g.strokeRect(x, y, w, h);
-    };
-    box(t * (1 + hash(seed, 2) * 2), t * 0.6, t * 1.1, t * 0.8);
-    box(t * (6.5 + hash(seed, 3) * 1.5), t * 1.2, t * 0.8, t * 0.6);
-    // Water tank.
-    const tx = t * (4 + hash(seed, 4) * 1.5);
-    g.fillStyle = '#5a4030';
-    g.fillRect(tx - t * 0.45, t * 0.5, t * 0.9, t * 1.1);
-    g.fillStyle = '#6c4c38';
-    g.beginPath();
-    g.ellipse(tx, t * 0.5, t * 0.45, t * 0.16, 0, 0, Math.PI * 2);
-    g.fill();
-    g.strokeStyle = INK;
-    g.lineWidth = 1.5;
-    g.stroke();
-    g.strokeRect(tx - t * 0.45, t * 0.5, t * 0.9, t * 1.1);
-
-    // The gang's mark painted on the roof.
-    g.save();
-    g.globalAlpha = 0.85;
-    g.fillStyle = color;
-    g.beginPath();
-    g.arc(W - t * 1.4, R * 0.55, t * 0.55, 0, Math.PI * 2);
-    g.fill();
-    g.strokeStyle = INK;
-    g.lineWidth = 2;
-    g.stroke();
-    g.restore();
+    const gang = p.gang!;
+    const f = FACADE[gang];
+    this.paintRoof(g, p, f.roof, shade(f.roof, 0.18));
+    paintLandmark(g, gang, W, R, t, color, this.font);
 
     // Defences on the roof edge: wire from level 2, cameras from 1, a searchlight base at 3.
     const tier = look?.tier ?? 0;
@@ -460,9 +455,9 @@ export class CityRenderer {
     }
     // The richest gang has a gold crown on the roof.
     if (look?.rank === 1) {
-      const cx = W / 2;
-      const cy = R * 0.5;
-      const s = t * 0.6;
+      const cx = t * 0.9;
+      const cy = R * 0.45;
+      const s = t * 0.5;
       g.fillStyle = '#ffd23f';
       g.strokeStyle = INK;
       g.lineWidth = 2;
@@ -479,25 +474,8 @@ export class CityRenderer {
       g.stroke();
     }
 
-    // The front wall: brick, a door in the middle, lit shop windows, an awning in the gang's colour.
-    g.fillStyle = wall;
-    g.fillRect(0, R, W, Hw);
-    g.strokeStyle = 'rgba(0,0,0,0.16)';
-    g.lineWidth = 1;
-    const brick = t * 0.22;
-    for (let y = R + brick; y < R + Hw; y += brick) {
-      g.beginPath();
-      g.moveTo(0, y);
-      g.lineTo(W, y);
-      g.stroke();
-      const off = Math.round((y - R) / brick) % 2 ? brick : 0;
-      for (let x = off; x < W; x += brick * 2) {
-        g.beginPath();
-        g.moveTo(x, y - brick);
-        g.lineTo(x, y);
-        g.stroke();
-      }
-    }
+    // The front wall in the gang's own material, a door in the middle, lit windows, an awning in its colour.
+    paintWall(g, f, 0, R, W, Hw, t);
     // Sign board across the top of the wall.
     const signH = t * 0.62;
     g.fillStyle = '#16121f';
@@ -529,6 +507,16 @@ export class CityRenderer {
       g.strokeRect(wx, R + t * 0.92, t * 0.95, t * 0.62);
       g.fillStyle = '#2a2236';
       g.fillRect(wx - t * 0.06, R + t * 1.54, t * 1.07, t * 0.08);
+      if (f.bars) {
+        g.strokeStyle = '#1a1622';
+        g.lineWidth = Math.max(1.5, t * 0.05);
+        for (let k = 1; k < 4; k++) {
+          g.beginPath();
+          g.moveTo(wx + (t * 0.95 * k) / 4, R + t * 0.92);
+          g.lineTo(wx + (t * 0.95 * k) / 4, R + t * 1.54);
+          g.stroke();
+        }
+      }
     }
 
     // Awning.
@@ -737,16 +725,71 @@ export class CityRenderer {
         g.beginPath();
         g.ellipse(x, y + t * 0.15, t * 0.5, t * 0.17, 0, 0, Math.PI * 2);
         g.fill();
-        g.fillStyle = '#4a3222';
+        const look = treeOf(this.yardGang(p.x, p.y));
+        const sway = Math.sin(now / 1400 + p.x) * t * 0.03;
+        g.fillStyle = look.trunk;
+        if (look.kind === 'dead') {
+          // Bare, crooked branches.
+          g.lineWidth = t * 0.12;
+          g.strokeStyle = INK;
+          g.lineCap = 'round';
+          const branch = (x0: number, y0: number, x1: number, y1: number) => {
+            g.lineWidth = t * 0.14;
+            g.strokeStyle = INK;
+            g.beginPath();
+            g.moveTo(x0, y0);
+            g.lineTo(x1, y1);
+            g.stroke();
+            g.lineWidth = t * 0.08;
+            g.strokeStyle = look.trunk;
+            g.stroke();
+          };
+          branch(x, y + t * 0.1, x + sway, y - t * 1.0);
+          branch(x + sway * 0.5, y - t * 0.5, x - t * 0.35, y - t * 0.95);
+          branch(x + sway, y - t * 0.75, x + t * 0.4, y - t * 1.2);
+          branch(x - t * 0.2, y - t * 0.8, x - t * 0.3, y - t * 1.25);
+          g.lineWidth = 1.5;
+          break;
+        }
         g.fillRect(x - t * 0.08, y - t * 0.6, t * 0.16, t * 0.75);
         g.strokeRect(x - t * 0.08, y - t * 0.6, t * 0.16, t * 0.75);
-        const sway = Math.sin(now / 1400 + p.x) * t * 0.03;
-        for (const [dx, dy, r, c] of [
-          [0, -1.0, 0.55, '#1f5a3f'],
-          [-0.25, -0.85, 0.35, '#246548'],
-          [0.22, -1.2, 0.3, '#2b7553'],
+        if (look.kind === 'balloon') {
+          for (const [dx, dy, i] of [
+            [-0.25, -1.05, 0],
+            [0.25, -1.1, 1],
+            [0, -1.4, 2],
+          ] as const) {
+            g.fillStyle = look.leaves[i];
+            g.beginPath();
+            g.ellipse(x + dx * t + sway, y + dy * t, t * 0.26, t * 0.32, 0, 0, Math.PI * 2);
+            g.fill();
+            g.stroke();
+          }
+          break;
+        }
+        if (look.kind === 'cone') {
+          for (const [w, top, bot, i] of [
+            [0.5, -1.7, -0.5, 0],
+            [0.38, -1.75, -0.85, 1],
+            [0.24, -1.8, -1.2, 2],
+          ] as const) {
+            g.fillStyle = look.leaves[i];
+            g.beginPath();
+            g.moveTo(x + sway, y + top * t);
+            g.lineTo(x + w * t, y + bot * t);
+            g.lineTo(x - w * t, y + bot * t);
+            g.closePath();
+            g.fill();
+            g.stroke();
+          }
+          break;
+        }
+        for (const [dx, dy, r, i] of [
+          [0, -1.0, 0.55, 0],
+          [-0.25, -0.85, 0.35, 1],
+          [0.22, -1.2, 0.3, 2],
         ] as const) {
-          g.fillStyle = c;
+          g.fillStyle = look.leaves[i];
           g.beginPath();
           g.arc(x + dx * t + sway, y + dy * t, r * t, 0, Math.PI * 2);
           g.fill();
@@ -917,7 +960,8 @@ export class CityRenderer {
     const piece = this.piece(p);
     const seed = keySeed(p.key);
     const x = this.sx(p.x);
-    const top = this.sy(p.y) + t * 0.12 - piece.top - hopHeight(piece, { moving: p.moving, seed, face: p.face }, now);
+    const top =
+      this.sy(p.y) + t * 0.12 - piece.top - hopHeight(piece, { moving: p.moving, seed, face: p.face }, now);
     const size = Math.max(11, Math.round(t * (p.me ? 0.25 : 0.22)));
     g.font = `700 ${size}px ${this.bodyFont}`;
     g.textAlign = 'center';
@@ -1042,6 +1086,9 @@ export class CityRenderer {
     const x1 = Math.min(CITY.w - 1, Math.ceil((this.cam.x + view.w) / t) + 1);
     const y1 = Math.min(CITY.h - 1, Math.ceil((this.cam.y + view.h) / t) + 1);
     this.drawGround(x0, y0, x1, y1);
+    for (const p of CITY.places)
+      if (p.kind === 'gang' && p.x + p.w >= x0 && p.x <= x1 && p.y + p.h + 3 >= y0 && p.y + p.h <= y1)
+        g.drawImage(this.yardSprite(p), this.sx(p.x), this.sy(p.y + p.h), p.w * t, 3 * t);
 
     // Where you clicked to walk.
     if (opts.target) {
@@ -1073,7 +1120,7 @@ export class CityRenderer {
       things.push({
         y: p.y + p.h,
         draw: () => {
-          const lip = Math.round(t * 0.7);
+          const lip = this.lipOf(p);
           g.drawImage(sprite, this.sx(p.x), this.sy(p.y) - lip, p.w * t, p.h * t + lip);
           if (look?.alarm) this.drawAlarm(p, now);
         },
@@ -1216,6 +1263,8 @@ export class CityRenderer {
       hole(this.sx(p.x + 2), fy, t * 2.4, 0.9);
       hole(this.sx(p.x + p.w - 2), fy, t * 2.4, 0.9);
       hole(this.sx(p.x + p.w / 2), this.sy(p.y + p.h - CityRenderer.WALL) + t * 0.4, t * 3, 0.8);
+      // Floodlights on the gang's landmark so it reads from across the city.
+      if (p.kind === 'gang') hole(this.sx(p.x + p.w / 2), this.sy(p.y) - t * 0.2, t * 3.6, 0.85);
       if (p.kind === 'jail') {
         // The searchlight sweeping the yard.
         const a = Math.sin(now / 1300) * 0.9;
