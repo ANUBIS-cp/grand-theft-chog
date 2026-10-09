@@ -9,22 +9,29 @@ import {
   type GangId,
 } from '@chog-city/data';
 import { chogInfo } from '@chog-city/game';
-import { FIRST_VAULT, powersFor } from '@chog-city/game/heist';
+import { powersFor } from '@chog-city/game/heist';
+import { RUSH_BANK, RUSH_CASINO, rushRules } from '@chog-city/game/rush';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { HeistGame } from '@/components/heist/heist-game';
+import { RushGame } from '@/components/rush/rush-game';
 import { GANG_COLOR } from '@/lib/theme';
 
 export const metadata: Metadata = {
   title: 'Heist · Chog City',
-  description: 'Sneak your Chog into a rival gang’s vault, grab the cash, get out.',
+  description: 'Rob a rival gang’s vault: grab the cash, crack the safe, dodge the guards, get out.',
 };
 
 /** Shown when nobody picked a Chog: a Lazoor Gang Chog with laser eyes and a mask. */
 const DEFAULT_CHOG = 1595;
 
-export default async function HeistPage({ searchParams }: { searchParams: Promise<{ chog?: string }> }) {
-  const { chog: asked } = await searchParams;
+export default async function HeistPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ chog?: string; map?: string; tier?: string }>;
+}) {
+  const { chog: asked, map, tier } = await searchParams;
+  const mapId = map === 'casino' ? RUSH_CASINO.id : RUSH_BANK.id;
+  const level = Math.max(0, Math.min(3, Number(tier) || 1));
   const number = Number(asked);
   const valid = Number.isInteger(number) && number >= 1 && number <= CHOGS.length;
   const chog = getChog(tokenIdFor(valid ? number : DEFAULT_CHOG))!;
@@ -32,7 +39,8 @@ export default async function HeistPage({ searchParams }: { searchParams: Promis
   const mine: GangId | null = canJoinGang(chog, 'lazoor') ? 'lazoor' : (opts.born[0] ?? null);
   const owner: GangId = mine === 'lazoor' ? 'mcga' : 'lazoor';
   const crew = CHOGS.filter((c) => c.id !== chog.id && gangOptions(c).born.includes(owner));
-  const guards = [crew[0], crew[Math.floor(crew.length / 3)], crew[Math.floor((crew.length * 2) / 3)]]
+  const guards = [0, 1, 2, 3]
+    .map((k) => crew[Math.floor((crew.length * k) / 4)])
     .filter((c) => !!c)
     .map((c) => ({ id: c.id, name: displayName(c) }));
 
@@ -62,8 +70,10 @@ export default async function HeistPage({ searchParams }: { searchParams: Promis
         </form>
       </header>
       <div className="min-h-0 w-full flex-1">
-        <HeistGame
-          vault={FIRST_VAULT}
+        <RushGame
+          mapId={mapId}
+          rules={rushRules(level)}
+          coach
           player={{
             id: chog.id,
             name: displayName(chog),

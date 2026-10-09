@@ -1,6 +1,7 @@
 import { CHOGS, gangOptions } from '@chog-city/data';
 import { HOUR, dayStart } from '@chog-city/game';
-import { BUST_FINE, START_CASH, encodeInputs, type Input } from '@chog-city/game/heist';
+import { BUST_FINE, START_CASH } from '@chog-city/game/heist';
+import { encodeRushInputs, type RushInput } from '@chog-city/game/rush';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   defend,
@@ -27,8 +28,9 @@ const born = (g: 'lazoor' | 'mcga') =>
 const lazoorChog = born('lazoor')[0]!.id;
 const mcgaChog = born('mcga')[0]!.id;
 
-const go = (d: 0 | 2, n: number): Input[] => Array.from({ length: n }, () => ({ d, p: -1 }));
-const grabAndGo = encodeInputs([...go(0, 16), ...go(2, 16), ...go(2, 8)]);
+const go = (d: 0 | 1 | 2 | 3, n: number): RushInput[] => Array.from({ length: n }, () => ({ d }));
+// Cash Rush: two tiles left for a coin, back, and down out of the door before any guard is near.
+const grabAndGo = encodeRushInputs([...go(3, 12), ...go(1, 12), ...go(2, 10)]);
 
 let db: Db;
 beforeEach(async () => {
@@ -136,13 +138,9 @@ describe('the gang war', () => {
     await setGang(db, B, mate, 'mcga');
     const before = await vaultCash(db);
     const run = await startBreakout(db, { address: B, chogId: mate, prisoner: mcgaChog, now: NOW + 3000 });
-    expect(run.vault).toBe('jail');
-    // Straight up to the cell, crack it, straight back down and out.
-    const route = encodeInputs([
-      ...go(0, 13 * 8),
-      ...Array.from({ length: 60 }, () => ({ d: 0 as const, p: -1 })),
-      ...go(2, 14 * 8),
-    ]);
+    expect(run.vault).toBe('rush-jail');
+    // Up into the jail and back: whether it frees them or not, no cash moves.
+    const route = encodeRushInputs([...go(0, 60), ...go(2, 60)]);
     const done = await finishRun(db, { address: B, runId: run.id, inputs: route, now: NOW + 60_000 });
     expect(await vaultCash(db)).toEqual(before);
     if (done.result === 'escaped') {

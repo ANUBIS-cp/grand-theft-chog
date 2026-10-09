@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./heist": "./src/heist/index.ts",
-    "./city": "./src/city/index.ts"
+    "./city": "./src/city/index.ts",
+    "./rush": "./src/rush/index.ts"
   },
   "dependencies": {
     "@chog-city/data": "*",

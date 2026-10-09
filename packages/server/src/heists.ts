@@ -1,7 +1,6 @@
 import { CHOGS, GANG_IDS, canJoinGang, gangOptions, getChog, type GangId } from '@chog-city/data';
 import { chogInfo, dayOf } from '@chog-city/game';
 import {
-  JAIL,
   JAIL_MS,
   JAIL_TIER,
   REVENGE_MS,
@@ -9,7 +8,6 @@ import {
   START_CASH,
   buildLevel,
   decodeInputs,
-  levelFor,
   maxTicks,
   powersFor,
   settle,
@@ -18,9 +16,18 @@ import {
   GUARD_MS,
   GUARD_PRICE,
   vaultDef,
-  vaultFor,
   type PowerId,
 } from '@chog-city/game/heist';
+import {
+  RUSH_JAIL_ID,
+  decodeRushInputs,
+  rushMap,
+  rushMapFor,
+  rushMaxSteps,
+  rushRules,
+  rushSeed,
+  settleRush,
+} from '@chog-city/game/rush';
 import { and, desc, eq, gt, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { gangVaults, heistChogs, heistRuns, type Db } from './db/index.ts';
@@ -170,15 +177,15 @@ export async function startRun(
   if (target === me.gang || !GANG_IDS.includes(target)) throw new HeistRefused('own-gang');
   if ((await hitToday(db, [chogId], now)).get(chogId)?.includes(target)) throw new HeistRefused('done-today');
   const v = (await vaults(db))[target];
-  const { level, tier } = levelFor(target, tierNow(v.cash, v, now));
+  const tier = tierNow(v.cash, v, now);
   const run: StartedRun = {
     id: randomBytes(12).toString('base64url'),
-    vault: vaultFor(target).id,
+    vault: rushMapFor(target).id,
     tier,
     target,
     revenge: (await revengeTargets(db, me.gang, now)).includes(target),
     powers: powersFor(chogInfo(chogId).skills),
-    guards: await guardsFor(db, target, level.guards.length),
+    guards: await guardsFor(db, target, rushRules(tier).guards),
   };
   await db.insert(heistRuns).values({
     id: run.id,
@@ -242,12 +249,43 @@ export interface FinishedRun {
   target: GangId;
 }
 
+/**
+ * Replays a run from its key presses: Cash Rush runs (map ids "rush-...") with the run's seed, and the old
+ * stealth runs that were started before the switch with their own rules.
+ */
+function replayRun(
+  run: {
+    vault: string;
+    tier: number;
+    powers: unknown;
+    prisoner: number | null;
+    revenge: boolean;
+    id: string;
+  },
+  text: string,
+  vaultHas: number,
+  robberHas: number,
+): { state: { phase: string; carried: number; score: number; caughtBy: number | null }; moved: number } {
+  const powers = run.powers as PowerId[];
+  const map = rushMap(run.vault);
+  if (map) {
+    const inputs = decodeRushInputs(text);
+    if (!inputs || inputs.length > rushMaxSteps(map)) throw new HeistRefused('bad-inputs');
+    const rules = rushRules(run.tier, run.prisoner !== null);
+    return settleRush(map, rules, powers, inputs, rushSeed(run.id), vaultHas, robberHas, run.revenge);
+  }
+  const def = vaultDef(run.vault);
+  if (!def) throw new HeistRefused('no-run');
+  const inputs = decodeInputs(text);
+  const built = buildLevel(def, run.tier);
+  if (!inputs || inputs.length > maxTicks(built)) throw new HeistRefused('bad-inputs');
+  return settle(built, powers, inputs, vaultHas, robberHas, run.revenge);
+}
+
 export async function finishRun(
   db: Db,
   { address, runId, inputs: text, now }: { address: string; runId: string; inputs: string; now: number },
 ): Promise<FinishedRun> {
-  const inputs = decodeInputs(text);
-  if (!inputs) throw new HeistRefused('bad-inputs');
   return db.transaction(async (tx) => {
     const [run] = await tx.select().from(heistRuns).where(eq(heistRuns.id, runId)).for('update');
     if (!run || run.player !== address.toLowerCase()) throw new HeistRefused('no-run');
@@ -262,20 +300,11 @@ export async function finishRun(
       .orderBy(gangVaults.gang)
       .for('update');
     const cash = Object.fromEntries(vaults.map((v) => [v.gang, v.cash])) as Record<string, number>;
-    const def = vaultDef(run.vault);
-    if (!def) throw new HeistRefused('no-run');
-    const built = buildLevel(def, run.tier);
-    if (inputs.length > maxTicks(built)) throw new HeistRefused('bad-inputs');
     // A break-out moves no cash: it's settled as if both vaults were empty.
     const breakout = run.prisoner !== null;
-    const { state, moved } = settle(
-      built,
-      run.powers as PowerId[],
-      inputs,
-      breakout ? 0 : (cash[run.target] ?? 0),
-      breakout ? 0 : (cash[run.gang] ?? 0),
-      run.revenge,
-    );
+    const vaultHas = breakout ? 0 : (cash[run.target] ?? 0);
+    const robberHas = breakout ? 0 : (cash[run.gang] ?? 0);
+    const { state, moved } = replayRun(run, text, vaultHas, robberHas);
     const escaped = state.phase === 'escaped';
     const [from, to] = escaped ? [run.target, run.gang] : [run.gang, run.target];
     if (moved > 0) {
@@ -417,7 +446,7 @@ export async function warBoard(db: Db, now = Date.now()): Promise<VaultRow[]> {
         v[gang].until !== null && v[gang].until! > now && v[gang].level > tierFor(v[gang].cash)
           ? v[gang].until
           : null,
-      vault: vaultFor(gang).id,
+      vault: rushMapFor(gang).id,
       members: members[gang] ?? 0,
       guards: await guardsFor(db, gang, 3),
     })),
@@ -571,15 +600,14 @@ export async function startBreakout(
     .where(and(eq(heistRuns.chogId, chogId), eq(heistRuns.day, dayOf(now)), isNotNull(heistRuns.prisoner)))
     .limit(1);
   if (tried) throw new HeistRefused('done-today');
-  const level = buildLevel(JAIL, JAIL_TIER);
   const run = {
     id: randomBytes(12).toString('base64url'),
-    vault: JAIL.id,
+    vault: RUSH_JAIL_ID,
     tier: JAIL_TIER,
     target: me.gang as GangId,
     revenge: false,
     powers: powersFor(chogInfo(chogId).skills),
-    guards: await jailGuards(db, level.guards.length),
+    guards: await jailGuards(db, rushRules(JAIL_TIER, true).guards),
     prisoner,
   };
   await db.insert(heistRuns).values({

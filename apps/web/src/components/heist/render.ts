@@ -70,7 +70,8 @@ export class VaultRenderer {
   dpr = 1;
   font = 'Impact, sans-serif';
   private g: CanvasRenderingContext2D;
-  private base!: HTMLCanvasElement;
+  /** The vault's floors, walls and furniture, drawn once. */
+  base!: HTMLCanvasElement;
   private dark!: HTMLCanvasElement;
   private sprites: Record<string, HTMLCanvasElement> = {};
   private faces: { player?: Piece; guards: (Piece | undefined)[] } = { guards: [] };
@@ -140,6 +141,13 @@ export class VaultRenderer {
 
   faceReady() {
     this.buildFaces();
+  }
+
+  /** The game piece for your Chog, or for guard i. */
+  pieceOf(who: 'player' | number) {
+    return who === 'player'
+      ? this.faces.player
+      : this.faces.guards[who % Math.max(1, this.faces.guards.length)];
   }
 
   private floorOf(x: number, y: number): Floor {
@@ -1081,7 +1089,7 @@ export class VaultRenderer {
     }
   }
 
-  private safe(g: CanvasRenderingContext2D, x: number, y: number, open: boolean, now: number) {
+  safe(g: CanvasRenderingContext2D, x: number, y: number, open: boolean, now: number) {
     const { t, lift } = this;
     const px = this.tx(x) + t * 0.05;
     const w = t * 0.9;
@@ -1150,7 +1158,7 @@ export class VaultRenderer {
     g.restore();
   }
 
-  private bubble(
+  bubble(
     g: CanvasRenderingContext2D,
     x: number,
     y: number,
@@ -1189,7 +1197,7 @@ export class VaultRenderer {
     g.restore();
   }
 
-  private stars(g: CanvasRenderingContext2D, x: number, y: number, now: number) {
+  stars(g: CanvasRenderingContext2D, x: number, y: number, now: number) {
     const { t } = this;
     for (let i = 0; i < 3; i++) {
       const a = now / 300 + (i * Math.PI * 2) / 3;

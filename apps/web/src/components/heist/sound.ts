@@ -102,6 +102,33 @@ export class Sound {
     this.tone(urgent ? 1400 : 1000, 0, 0.05, 'square', urgent ? 0.06 : 0.035);
   }
 
+  /** The combo went up: a rising chord, higher for bigger combos. */
+  combo(mult: number) {
+    const base = 523 * 2 ** ((mult - 2) / 4);
+    [1, 1.26, 1.5, 2].forEach((k, i) => this.tone(base * k, i * 0.05, 0.12, 'square', 0.05));
+  }
+
+  /** A loudspeaker blast: the guards run. */
+  flip() {
+    this.noise(0, 0.35, 0.25, 200, 2500);
+    [262, 392, 523, 784].forEach((f, i) => this.tone(f, i * 0.06, 0.2, 'sawtooth', 0.05));
+  }
+
+  /** A dial hit and a dial miss. */
+  hit(n: number) {
+    this.tone(880 + n * 220, 0, 0.09, 'triangle', 0.12);
+    this.tone(1320 + n * 220, 0.06, 0.12, 'triangle', 0.1);
+  }
+  miss() {
+    this.tone(200, 0, 0.25, 'sawtooth', 0.12, 90);
+  }
+
+  /** Tagged by a guard. */
+  tag() {
+    this.thud();
+    this.tone(523, 0.05, 0.12, 'square', 0.06, 262);
+  }
+
   suspect() {
     this.tone(660, 0, 0.09, 'sine', 0.08, 880);
   }

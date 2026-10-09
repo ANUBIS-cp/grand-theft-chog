@@ -1,12 +1,14 @@
 // Plays one real heist as a test wallet against a running server (local dev or staging):
 //   npx tsx tools/smoke/war.ts <base> <keyfile> <target-gang> [inputs]
 // Logs in, picks a gang for the first Chog if it has none, starts a run on the target vault and finishes it
-// with the given inputs (default: grab the lobby cash and leave). The key file holds a throwaway test key.
+// with the given inputs (default: grab a coin and leave). The key file holds a throwaway test key.
 import { readFileSync } from 'node:fs';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createSiweMessage } from 'viem/siwe';
 
-const [base, keyFile, target, inputs = '1'.repeat(16) + '3'.repeat(24)] = process.argv.slice(2);
+// Default: Cash Rush, two tiles left for a coin, back, and out of the door.
+const [base, keyFile, target, inputs = 'E'.repeat(12) + 'C'.repeat(12) + 'D'.repeat(10)] =
+  process.argv.slice(2);
 if (!base || !keyFile || !target) throw new Error('usage: war.ts <base> <keyfile> <target-gang> [inputs]');
 const account = privateKeyToAccount(readFileSync(keyFile, 'utf8').trim() as `0x${string}`);
 let cookie = '';

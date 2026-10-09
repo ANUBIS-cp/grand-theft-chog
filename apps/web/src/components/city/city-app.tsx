@@ -1,15 +1,8 @@
 'use client';
 import { GANGS, type GangId } from '@chog-city/data';
 import { EMOTES, type Emote, type Place } from '@chog-city/game/city';
-import {
-  BUST_FINE,
-  FIRST_VAULT,
-  GUARD_PRICE,
-  POWERS,
-  SAFE_BY_TIER,
-  vaultDef,
-  type PowerId,
-} from '@chog-city/game/heist';
+import { RUSH_BANK, rushRules, rushSeed } from '@chog-city/game/rush';
+import { BUST_FINE, GUARD_PRICE, POWERS, SAFE_BY_TIER, type PowerId } from '@chog-city/game/heist';
 import {
   ArrowBendUpLeft,
   ArrowSquareOut,
@@ -26,7 +19,8 @@ import {
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ConnectPanel } from '@/components/connect-panel';
-import { HeistGame, type RealResult } from '@/components/heist/heist-game';
+import type { RealResult } from '@/components/heist/heist-game';
+import { RushGame } from '@/components/rush/rush-game';
 import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
 import { chogImage } from '@/lib/images';
@@ -560,13 +554,13 @@ export function CityApp() {
   };
 
   if (run && chog) {
-    const def = vaultDef(run.vault)!;
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0918]">
-        <HeistGame
+        <RushGame
           key={run.id}
-          vault={def}
-          tier={run.tier}
+          mapId={run.vault}
+          rules={rushRules(run.tier, !!run.prisoner)}
+          seed={rushSeed(run.id)}
           player={{
             id: chog.id,
             name: chog.name,
@@ -610,11 +604,13 @@ export function CityApp() {
 
   if (practice && city) {
     const player = chog ? { id: chog.id, name: chog.name, powers: chog.powers } : city.practice;
-    const guards = city.strollers.slice(0, 3).map((s) => ({ id: s.id, name: s.name }));
+    const guards = city.strollers.slice(0, 4).map((s) => ({ id: s.id, name: s.name }));
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0918]">
-        <HeistGame
-          vault={FIRST_VAULT}
+        <RushGame
+          mapId={RUSH_BANK.id}
+          rules={rushRules(1)}
+          coach
           player={{ ...player, gang: chog?.gang ? GANGS[chog.gang].name : null }}
           guards={guards}
           owner={{ name: 'Practice vault', color: '#7cf0c4', ink: '#111111' }}
