@@ -4,6 +4,7 @@ import {
   CITY,
   WALK_SPEED,
   inPen,
+  isEmote,
   newWalker,
   placeOf,
   rng,
@@ -26,7 +27,6 @@ const ORIGIN = process.env.PUBLIC_HOST ? `https://${process.env.PUBLIC_HOST}` : 
 const TICK_MS = 100;
 const MAX_PLAYERS = 600;
 const MAX_PER_IP = 8;
-const EMOTES = new Set(['wave', 'laugh', 'angry', 'cash']);
 
 interface Player {
   id: number;
@@ -209,7 +209,7 @@ wss.on('connection', (ws, req) => {
       me.face = msg.f === -1 ? -1 : 1;
       me.moving = msg.m === 1;
       me.lastMove = now;
-    } else if (msg.t === 'em' && typeof msg.k === 'string' && EMOTES.has(msg.k) && now - me.lastEmote > 900) {
+    } else if (msg.t === 'em' && isEmote(msg.k) && now - me.lastEmote > 900) {
       me.lastEmote = now;
       broadcast({ t: 'em', id: me.id, k: msg.k });
     }

@@ -27,7 +27,8 @@ export interface Person {
   emote?: { kind: Emote; at: number };
 }
 
-export type Emote = 'wave' | 'laugh' | 'angry' | 'cash';
+export type { Emote } from '@chog-city/game/city';
+import type { Emote } from '@chog-city/game/city';
 
 export interface PlaceLook {
   name: string;
@@ -989,84 +990,45 @@ export class CityRenderer {
       this.drawEmote(p.emote.kind, x, ty - h / 2 - t * 0.5, now - p.emote.at);
   }
 
+  private emoteImages = new Map<Emote, Img>();
+
+  private emoteImage(kind: Emote) {
+    let img = this.emoteImages.get(kind);
+    if (!img) {
+      img = new Image();
+      img.decoding = 'async';
+      img.src = `/emotes/${kind}.webp`;
+      this.emoteImages.set(kind, img);
+    }
+    return img.complete && img.naturalWidth ? img : undefined;
+  }
+
+  /** An emote: the emoji pops up in a bubble over the Chog's head, bounces, then fades. */
   private drawEmote(kind: Emote, x: number, y: number, age: number) {
     const { g, t } = this;
-    const pop = Math.min(1, age / 140);
+    const pop = age < 160 ? age / 160 : age < 260 ? 1 + 0.15 * Math.sin(((age - 160) / 100) * Math.PI) : 1;
     const fade = age > 3000 ? 1 - (age - 3000) / 500 : 1;
-    const s = t * 0.42 * (0.6 + 0.4 * pop);
+    const bob = Math.sin(age / 180) * t * 0.04;
+    const s = t * 0.5 * pop;
     g.save();
-    g.globalAlpha = fade;
+    g.globalAlpha = Math.max(0, fade);
     g.fillStyle = '#ffffff';
     g.strokeStyle = INK;
-    g.lineWidth = 2;
+    g.lineWidth = 2.5;
     g.beginPath();
-    g.roundRect(x - s, y - s, s * 2, s * 1.7, s * 0.5);
+    g.arc(x, y + bob, s, 0, Math.PI * 2);
     g.fill();
     g.stroke();
     g.beginPath();
-    g.moveTo(x - s * 0.2, y + s * 0.7);
-    g.lineTo(x, y + s * 1.05);
-    g.lineTo(x + s * 0.25, y + s * 0.7);
+    g.moveTo(x - s * 0.22, y + bob + s * 0.9);
+    g.lineTo(x, y + bob + s * 1.3);
+    g.lineTo(x + s * 0.22, y + bob + s * 0.9);
     g.fill();
     g.stroke();
-    const cy = y - s * 0.15;
-    g.lineWidth = Math.max(2, s * 0.16);
-    g.lineCap = 'round';
-    switch (kind) {
-      case 'wave': {
-        // A raised hand.
-        g.fillStyle = '#ffcf6b';
-        g.beginPath();
-        g.roundRect(x - s * 0.35, cy - s * 0.15, s * 0.7, s * 0.6, s * 0.2);
-        g.fill();
-        g.lineWidth = 1.5;
-        g.stroke();
-        for (let i = 0; i < 4; i++) {
-          g.beginPath();
-          g.roundRect(x - s * 0.33 + i * s * 0.18, cy - s * 0.55, s * 0.14, s * 0.45, s * 0.07);
-          g.fill();
-          g.stroke();
-        }
-        break;
-      }
-      case 'laugh': {
-        g.strokeStyle = INK;
-        g.beginPath();
-        g.arc(x - s * 0.3, cy - s * 0.15, s * 0.16, Math.PI * 1.1, Math.PI * 1.9);
-        g.stroke();
-        g.beginPath();
-        g.arc(x + s * 0.3, cy - s * 0.15, s * 0.16, Math.PI * 1.1, Math.PI * 1.9);
-        g.stroke();
-        g.fillStyle = '#d83e7e';
-        g.beginPath();
-        g.arc(x, cy + s * 0.1, s * 0.4, 0, Math.PI);
-        g.closePath();
-        g.fill();
-        g.lineWidth = 1.5;
-        g.stroke();
-        break;
-      }
-      case 'angry': {
-        g.strokeStyle = '#c23a2b';
-        for (const r of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
-          const ax = x + Math.cos(r + Math.PI / 4) * s * 0.3;
-          const ay = cy + Math.sin(r + Math.PI / 4) * s * 0.3;
-          g.beginPath();
-          g.moveTo(ax, ay);
-          g.lineTo(ax + Math.cos(r + Math.PI / 4) * s * 0.25, ay + Math.sin(r + Math.PI / 4) * s * 0.25);
-          g.stroke();
-        }
-        break;
-      }
-      case 'cash': {
-        g.fillStyle = '#2f7d4f';
-        g.font = `${Math.round(s * 1.2)}px ${this.font}`;
-        g.textAlign = 'center';
-        g.textBaseline = 'middle';
-        g.fillText('$', x, cy + s * 0.05);
-        break;
-      }
-    }
+    g.fillStyle = '#ffffff';
+    g.fillRect(x - s * 0.2, y + bob + s * 0.78, s * 0.4, s * 0.2);
+    const img = this.emoteImage(kind);
+    if (img) g.drawImage(img, x - s * 0.82, y + bob - s * 0.82, s * 1.64, s * 1.64);
     g.restore();
   }
 

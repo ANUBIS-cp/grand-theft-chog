@@ -1,6 +1,6 @@
 'use client';
 import { GANGS, type GangId } from '@chog-city/data';
-import type { Place } from '@chog-city/game/city';
+import { EMOTES, type Emote, type Place } from '@chog-city/game/city';
 import {
   BUST_FINE,
   FIRST_VAULT,
@@ -13,17 +13,13 @@ import {
 import {
   ArrowBendUpLeft,
   ArrowSquareOut,
-  CurrencyDollarSimple,
   DoorOpen,
   HandGrabbing,
-  HandWaving,
   Lock,
   LockKeyOpen,
   Play,
   ShieldCheck,
   SignOut,
-  SmileyAngry,
-  SmileyWink,
   Vault,
   X,
 } from '@phosphor-icons/react';
@@ -38,7 +34,7 @@ import { useLive } from '@/lib/live';
 import { GANG_COLOR } from '@/lib/theme';
 import { ago, formatLeft } from '@/lib/time';
 import { logOut } from '@/lib/wallet';
-import type { Emote, PlaceLook } from './city-render';
+import type { PlaceLook } from './city-render';
 import { CityView, type CityHandle, type Jailed, type Stroller, type Tapped } from './city-view';
 import {
   Banner,
@@ -518,7 +514,7 @@ export function CityApp() {
           : { icon: DoorOpen, label: 'Rob', tone: '#ff5a4f' };
   const openDoor = () => door && setDoorOpen(true);
 
-  // Keys: E / Space use a door, G gangs, M map, T emotes, 1-4 an emote, Esc closes things.
+  // Keys: E / Space use a door, G gangs, M map, T emotes, 1-8 an emote, Esc closes things.
   const keyState = useRef({ door, doorOpen, sheet, peek, mapOpen, inHeist: !!run || practice });
   keyState.current = { door, doorOpen, sheet, peek, mapOpen, inHeist: !!run || practice };
   useEffect(() => {
@@ -544,9 +540,11 @@ export function CityApp() {
       }
       if (e.code === 'KeyG') return setSheet('gangs');
       if (e.code === 'KeyT') return setEmoteOpen((o) => !o);
-      const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
+      const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8'].indexOf(
+        e.code,
+      );
       if (i >= 0) {
-        view.current?.emote(EMOTES[i]!.kind);
+        view.current?.emote(EMOTES[i]!);
         setEmoteOpen(false);
       }
     };
@@ -723,28 +721,28 @@ export function CityApp() {
       {/* Bottom right: action buttons */}
       {!anyCard && (
         <div className="pointer-events-none absolute bottom-4 right-3 z-20 flex items-end gap-3 sm:bottom-5 sm:right-5 sm:gap-4">
+          {emoteOpen && (
+            <div className="pointer-events-auto absolute bottom-[calc(100%+14px)] right-0 z-30 grid w-max grid-cols-4 gap-2 rounded-[18px] border-[3px] border-ink bg-[#17132b]/95 p-2.5 shadow-[0_5px_0_0_#000] animate-[sheet-in_160ms_ease-out]">
+              {EMOTES.map((k, i) => (
+                <button
+                  key={k}
+                  onClick={() => {
+                    view.current?.emote(k);
+                    setEmoteOpen(false);
+                  }}
+                  aria-label={EMOTE_LABEL[k]}
+                  title={`${EMOTE_LABEL[k]} (${i + 1})`}
+                  className="relative grid h-14 w-14 place-items-center rounded-full border-[3px] border-ink bg-white shadow-[0_4px_0_0_#000] transition hover:-translate-y-0.5 active:translate-y-[2px] active:shadow-[0_2px_0_0_#000]"
+                >
+                  <img src={`/emotes/${k}.webp`} alt="" className="h-10 w-10" />
+                  <span className="absolute -left-1 -top-1 grid h-5 w-5 place-items-center rounded-[5px] border-2 border-ink bg-[#17132b] font-display text-[11px] leading-none text-white">
+                    {i + 1}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="relative flex flex-col items-center gap-3">
-            {emoteOpen && (
-              <div className="pointer-events-auto absolute bottom-[calc(100%+8px)] flex flex-col gap-2">
-                {EMOTES.map((e, i) => (
-                  <button
-                    key={e.kind}
-                    onClick={() => {
-                      view.current?.emote(e.kind);
-                      setEmoteOpen(false);
-                    }}
-                    aria-label={e.label}
-                    title={`${e.label} (${i + 1})`}
-                    className="relative grid h-12 w-12 place-items-center rounded-full border-[3px] border-ink bg-white text-ink shadow-[0_4px_0_0_#000] active:translate-y-[2px] active:shadow-[0_2px_0_0_#000]"
-                  >
-                    <e.Icon size={22} weight="fill" />
-                    <span className="absolute -left-1 -top-1 grid h-5 w-5 place-items-center rounded-[5px] border-2 border-ink bg-[#17132b] font-display text-[11px] leading-none text-white">
-                      {i + 1}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
             <EmoteButton onClick={() => setEmoteOpen((o) => !o)} />
           </div>
           <div className="flex flex-col items-center gap-3">
@@ -1082,12 +1080,16 @@ function HitLine({ h }: { h: Hit }) {
   );
 }
 
-const EMOTES: { kind: Emote; label: string; Icon: typeof HandWaving }[] = [
-  { kind: 'wave', label: 'Wave', Icon: HandWaving },
-  { kind: 'laugh', label: 'Laugh', Icon: SmileyWink },
-  { kind: 'angry', label: 'Angry', Icon: SmileyAngry },
-  { kind: 'cash', label: 'Show the cash', Icon: CurrencyDollarSimple },
-];
+const EMOTE_LABEL: Record<Emote, string> = {
+  wave: 'Wave',
+  laugh: 'Laugh',
+  angry: 'Angry',
+  cash: 'Money',
+  cool: 'Cool',
+  scream: 'Scared',
+  cry: 'Cry',
+  fire: 'Fire',
+};
 
 /** A card at the bottom of the screen (phones) or bottom left (wider screens). */
 function Card({ children, onClose }: { children: React.ReactNode; onClose?: () => void }) {

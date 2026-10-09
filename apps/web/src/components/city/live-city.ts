@@ -1,5 +1,5 @@
 import type { GangId } from '@chog-city/data';
-import type { Emote } from './city-render';
+import { isEmote, type Emote } from '@chog-city/game/city';
 
 // The browser's side of the live city: one WebSocket, everyone's positions ten times a second, smoothed
 // between updates. Reconnects by itself, with a fresh ticket each time.
@@ -146,7 +146,7 @@ export class LiveCity {
         break;
       case 'em': {
         const p = this.people.get(m.id as number);
-        if (p) p.emote = { kind: m.k as Emote, at: now };
+        if (p && isEmote(m.k)) p.emote = { kind: m.k, at: now };
         break;
       }
       case 's': {
