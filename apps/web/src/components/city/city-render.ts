@@ -1,6 +1,7 @@
 import { BH, BW, CITY, Ground, ROAD, groundAt, type Place, type Prop } from '@chog-city/game/city';
 import { chogImage } from '@/lib/images';
 import { drawPiece, hopHeight, makePiece, type Piece } from '../chog/piece';
+import { CityArt } from './art';
 import { FACADE, LANDMARK_RISE, paintLandmark, paintWall, paintYard, treeOf } from './landmarks';
 
 // Draws the city at night in the same 3/4 view as the vaults: ground tiles, buildings (roof at the back, front
@@ -106,6 +107,16 @@ export class CityRenderer {
     private onImage: () => void,
   ) {
     this.g = cv.getContext('2d')!;
+    this.art = new CityArt(() => {
+      this.buildings.clear();
+      this.onImage();
+    });
+  }
+
+  /** Drawn art, where there is some (see art.ts). */
+  private art: CityArt;
+  private artOf(p: Place) {
+    return this.art.get(p.kind === 'gang' ? `gang-${p.gang}` : p.kind === 'jail' ? 'jail' : 'practice');
   }
 
   resize(w: number, h: number) {
@@ -342,7 +353,8 @@ export class CityRenderer {
   private static WALL = 3;
 
   private buildingSprite(p: Place, look: PlaceLook | undefined, now: number): HTMLCanvasElement {
-    const key = `${p.id}:${look?.tier ?? 0}:${look?.rank ?? 0}:${look?.mine ? 1 : 0}`;
+    const art = this.artOf(p);
+    const key = `${p.id}:${look?.tier ?? 0}:${look?.rank ?? 0}:${look?.mine ? 1 : 0}:${art ? 1 : 0}`;
     const have = this.buildings.get(p.id);
     if (have && have.key === key) return have.c;
     const { t, dpr } = this;
@@ -351,7 +363,8 @@ export class CityRenderer {
     const g = c.getContext('2d')!;
     g.scale(dpr, dpr);
     g.translate(0, lip);
-    if (p.kind === 'gang') this.paintHideout(g, p, look);
+    if (art) this.paintArt(g, p, look, art);
+    else if (p.kind === 'gang') this.paintHideout(g, p, look);
     else if (p.kind === 'jail') this.paintJail(g, p);
     else this.paintWarehouse(g, p);
     void now;
@@ -384,7 +397,72 @@ export class CityRenderer {
 
   /** How far a building's sprite reaches above its footprint (a gang's landmark stands up off the roof). */
   private lipOf(p: Place) {
-    return Math.round(this.t * (p.kind === 'gang' ? LANDMARK_RISE : 0.7));
+    return Math.round(this.t * (p.kind === 'gang' || this.artOf(p) ? LANDMARK_RISE : 0.7));
+  }
+
+  /**
+   * A building from drawn art: the picture fills the footprint's width and stands on its front edge, with the
+   * gang's name on a ribbon and its rank and defence on top.
+   */
+  private paintArt(
+    g: CanvasRenderingContext2D,
+    p: Place,
+    look: PlaceLook | undefined,
+    img: HTMLImageElement,
+  ) {
+    const { t } = this;
+    const W = p.w * t;
+    const H = p.h * t;
+    const lip = this.lipOf(p);
+    const k = Math.min(W / img.naturalWidth, (H + lip) / img.naturalHeight);
+    const w = img.naturalWidth * k;
+    const h = img.naturalHeight * k;
+    g.drawImage(img, (W - w) / 2, H - h, w, h);
+    if (p.kind !== 'gang' || !look) return;
+    // Name ribbon over the front, in the gang's colour.
+    const size = Math.round(t * 0.46);
+    g.font = `${size}px ${this.font}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    const name = look.name.toUpperCase();
+    const rw = Math.min(W * 0.9, g.measureText(name).width + size * 1.6);
+    const ry = H - CityRenderer.WALL * t - t * 0.15;
+    g.fillStyle = look.color;
+    g.strokeStyle = INK;
+    g.lineWidth = 2.5;
+    g.beginPath();
+    g.roundRect(W / 2 - rw / 2, ry - size * 0.75, rw, size * 1.5, size * 0.4);
+    g.fill();
+    g.stroke();
+    g.fillStyle = look.ink;
+    g.fillText(name, W / 2, ry + 1, rw - size);
+    // Rank badge, gold for the richest.
+    const bx = W / 2 + rw / 2;
+    g.fillStyle = look.rank === 1 ? '#ffd23f' : '#ffffff';
+    g.beginPath();
+    g.arc(bx, ry - size * 0.6, size * 0.62, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+    g.fillStyle = INK;
+    g.font = `${Math.round(size * 0.75)}px ${this.font}`;
+    g.fillText(`#${look.rank}`, bx, ry - size * 0.56);
+    // Defence: one shield pip per level.
+    for (let i = 0; i < look.tier; i++) {
+      const sx = W / 2 - rw / 2 + size * 0.5 + i * size * 0.7;
+      const sy = ry + size * 0.95;
+      g.fillStyle = '#9fd3ff';
+      g.beginPath();
+      g.moveTo(sx, sy - size * 0.3);
+      g.lineTo(sx + size * 0.26, sy - size * 0.2);
+      g.lineTo(sx + size * 0.2, sy + size * 0.18);
+      g.lineTo(sx, sy + size * 0.32);
+      g.lineTo(sx - size * 0.2, sy + size * 0.18);
+      g.lineTo(sx - size * 0.26, sy - size * 0.2);
+      g.closePath();
+      g.fill();
+      g.lineWidth = 1.5;
+      g.stroke();
+    }
   }
 
   private paintRoof(g: CanvasRenderingContext2D, p: Place, roof: string, edge: string) {
@@ -703,6 +781,25 @@ export class CityRenderer {
     const { g, t } = this;
     const x = this.sx(p.x);
     const y = this.sy(p.y);
+    // Drawn art stands on the prop's spot; trees in a gang's yard keep their code-drawn gang look.
+    const art =
+      p.kind === 'screen' || (p.kind === 'tree' && this.yardGang(p.x, p.y))
+        ? undefined
+        : this.art.get(p.kind);
+    if (art) {
+      const tall = { lamp: 2.3, tree: 2.2, bench: 0.9, hydrant: 0.7, fountain: 2.2, screen: 0 }[p.kind] * t;
+      const wide = { lamp: 0, tree: 0, bench: 1.2, hydrant: 0, fountain: 2.8, screen: 0 }[p.kind] * t;
+      const k = wide ? wide / art.naturalWidth : tall / art.naturalHeight;
+      const w = art.naturalWidth * k;
+      const h = art.naturalHeight * k;
+      const foot = p.kind === 'fountain' ? h * 0.5 : t * 0.15;
+      g.fillStyle = 'rgba(0,0,0,0.3)';
+      g.beginPath();
+      g.ellipse(x, y + t * 0.12, Math.max(w * 0.35, t * 0.2), t * 0.14, 0, 0, Math.PI * 2);
+      g.fill();
+      g.drawImage(art, x - w / 2, y + foot - h, w, h);
+      return;
+    }
     g.lineWidth = 2;
     g.strokeStyle = INK;
     switch (p.kind) {
