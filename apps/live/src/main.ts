@@ -85,9 +85,13 @@ const info = (p: Player | Stroller) => ({
   jail: 'jail' in p ? p.jail : null,
 });
 const playing = () => new Set([...players.values()].map((p) => p.chog).filter((c) => c !== null));
+// Visitors without a wallet (guests) walk around but nobody else sees them: they have no Chog to show.
+const seen = () => [...players.values()].filter((p) => p.chog !== null);
 function everyone() {
   const busy = playing();
-  return [...players.values()].map(info).concat(strolling.filter((s) => !busy.has(s.chog)).map(info));
+  return seen()
+    .map(info)
+    .concat(strolling.filter((s) => !busy.has(s.chog)).map(info));
 }
 
 function send(ws: WebSocket, msg: unknown) {
@@ -198,7 +202,7 @@ wss.on('connection', (ws, req) => {
       players.set(p.id, p);
       send(ws, { t: 'you', id: p.id, x: p.x, y: p.y });
       send(ws, { t: 'all', people: everyone() });
-      broadcast({ t: 'join', p: info(p) }, p.id);
+      if (p.chog !== null) broadcast({ t: 'join', p: info(p) }, p.id);
       // A stroller that is now being played leaves the street.
       if (p.chog !== null && strolling.some((s) => s.chog === p.chog)) broadcast({ t: 'leave', id: -p.chog });
       return;
@@ -221,7 +225,7 @@ wss.on('connection', (ws, req) => {
       me.lastMove = now;
     } else if (msg.t === 'em' && isEmote(msg.k) && now - me.lastEmote > 900) {
       me.lastEmote = now;
-      broadcast({ t: 'em', id: me.id, k: msg.k });
+      if (me.chog !== null) broadcast({ t: 'em', id: me.id, k: msg.k });
     }
   });
 
@@ -257,10 +261,11 @@ setInterval(() => {
     );
   }
   for (const p of players.values()) {
-    d.push(p.id, Math.round(p.x * 100), Math.round(p.y * 100), (p.face < 0 ? 1 : 0) | (p.moving ? 2 : 0));
     p.burst = 0;
+    if (p.chog === null) continue;
+    d.push(p.id, Math.round(p.x * 100), Math.round(p.y * 100), (p.face < 0 ? 1 : 0) | (p.moving ? 2 : 0));
   }
-  if (players.size) broadcast({ t: 's', n: players.size, d });
+  if (players.size) broadcast({ t: 's', n: seen().length, d });
 }, TICK_MS);
 
 // Drop connections that stopped answering.
