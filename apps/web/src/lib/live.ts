@@ -8,6 +8,8 @@ export interface LiveEvent {
   target?: string;
   gang?: string;
   chog?: number;
+  /** The run id of a robbery that just started (to defend it or watch it live). */
+  run?: string;
 }
 
 /** Calls `onChange` whenever something happens in the city (server-sent events), so the page can refresh. */

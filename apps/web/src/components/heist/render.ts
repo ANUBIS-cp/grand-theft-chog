@@ -143,6 +143,13 @@ export class VaultRenderer {
     this.buildFaces();
   }
 
+  /** Swap guard i's picture (a defender who took it over plays as their own Chog). */
+  setGuardImage(i: number, img: HTMLImageElement) {
+    this.images.guards[i] = img;
+    if (img.complete && img.naturalWidth) this.buildFaces();
+    else img.addEventListener('load', () => this.buildFaces(), { once: true });
+  }
+
   /** The game piece for your Chog, or for guard i. */
   pieceOf(who: 'player' | number) {
     return who === 'player'

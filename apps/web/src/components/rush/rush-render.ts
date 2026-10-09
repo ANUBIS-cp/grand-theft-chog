@@ -153,7 +153,7 @@ export class RushRenderer {
     alpha: number,
     fx: Fx,
     now: number,
-    opts: { defenders?: Set<number> } = {},
+    opts: { defenders?: Set<number>; follow?: { x: number; y: number } } = {},
   ) {
     const { g, map } = this;
     const v = this.v;
@@ -173,7 +173,10 @@ export class RushRenderer {
     const H = map.h * t + v.lift;
     const axis = (world: number, screen: number, at: number) =>
       world <= screen ? (world - screen) / 2 : Math.max(0, Math.min(world - screen, at - screen / 2));
-    const aim = { x: axis(W, SW, mx), y: axis(H, SH, my) };
+    // The camera follows you, or the guard you steer when defending.
+    const fx0 = opts.follow ? this.X(opts.follow.x) : mx;
+    const fy0 = opts.follow ? this.Y(opts.follow.y) : my;
+    const aim = { x: axis(W, SW, fx0), y: axis(H, SH, fy0) };
     if (!this.cam.ready) Object.assign(this.cam, aim, { ready: true });
     else {
       this.cam.x += (aim.x - this.cam.x) * 0.16;

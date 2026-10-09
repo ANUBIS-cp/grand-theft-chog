@@ -6,7 +6,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   defend,
   startBreakout,
+  finishLiveRun,
   finishRun,
+  joinRaid,
   heistRecord,
   recentHits,
   revengeTargets,
@@ -151,5 +153,33 @@ describe('the gang war', () => {
     expect(
       await refused(startBreakout(db, { address: B, chogId: mate, prisoner: mcgaChog, now: NOW + 70_000 })),
     ).not.toBe('ok');
+  });
+
+  it('a gang-mate can jump into a raid on their vault; then only the live server can finish it', async () => {
+    const run = await startRun(db, { address: A, chogId: lazoorChog, target: 'mcga', now: NOW });
+    // Not your gang's vault, or not your Chog: no.
+    expect(await refused(joinRaid(db, { address: A, chogId: lazoorChog, runId: run.id, now: NOW + 1000 }))).toBe(
+      'own-gang',
+    );
+    expect(await refused(joinRaid(db, { address: A, chogId: mcgaChog, runId: run.id, now: NOW + 1000 }))).toBe(
+      'not-yours',
+    );
+    expect(await joinRaid(db, { address: B, chogId: mcgaChog, runId: run.id, now: NOW + 1000 })).toEqual({
+      run: run.id,
+      target: 'mcga',
+    });
+    // The robber's own browser can't settle it now (it could leave the defender out).
+    expect(await refused(finishRun(db, { address: A, runId: run.id, inputs: grabAndGo, now: NOW + 5000 }))).toBe(
+      'live',
+    );
+    // The live server's record, with the defender standing still on guard 0, settles it.
+    const out = await finishLiveRun(db, {
+      runId: run.id,
+      inputs: grabAndGo,
+      defenders: [{ guard: 0, name: `d${mcgaChog}`, chog: mcgaChog, at: 30, moves: 'A'.repeat(4) }],
+      now: NOW + 6000,
+    });
+    expect(out.result).toBe('escaped');
+    expect((await vaultCash(db)).lazoor).toBe(START_CASH + out.moved);
   });
 });

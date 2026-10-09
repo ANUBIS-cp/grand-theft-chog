@@ -221,3 +221,47 @@ describe('replays and settling', () => {
     expect(settled.moved).toBe(s.phase === 'escaped' ? s.score : s.carried + 250);
   });
 });
+
+describe('the robber’s screen in a live raid', () => {
+  it('rewinding for late defender moves ends exactly where the server is', async () => {
+    const { RushTimeline } = await import('./timeline.ts');
+    const { replayRush, encodeDefender } = await import('./war.ts');
+    const { rushMap } = await import('./rules.ts');
+    const m = rushMap('rush-bank')!;
+    const rules = rushRules(1);
+    const t = new RushTimeline(m, rules, [], 42);
+    const robber = (i: number): RushInput => ({
+      d: ([LEFT, UP, RIGHT, UP, LEFT, DOWN] as const)[Math.floor(i / 20) % 6]!,
+    });
+    // The server's truth: a defender joins at step 30 on guard 1 and changes direction every 15 steps.
+    const moves: string[] = [];
+    const dirAt = (k: number) => ([UP, RIGHT, DOWN, LEFT] as const)[Math.floor(k / 15) % 4]!;
+    for (let k = 30; k < 600; k++) moves.push(encodeDefender({ d: dirAt(k) }));
+    // The robber hears about each change 6 steps late.
+    for (let i = 0; t.s.phase === 'play' && i < 600; i++) {
+      t.step(robber(i));
+      const heard = i - 6;
+      if (heard === 30) t.join({ guard: 1, name: 'd1', at: 30 });
+      if (heard >= 30 && (heard - 30) % 15 === 0) t.change('d1', heard, encodeDefender({ d: dirAt(heard) }));
+      t.catchUp();
+    }
+    // Let the last late messages land.
+    for (let heard = t.s.tick - 6; heard < t.s.tick; heard++)
+      if (heard >= 30 && (heard - 30) % 15 === 0) t.change('d1', heard, encodeDefender({ d: dirAt(heard) }));
+    t.catchUp();
+    const n = t.s.tick;
+    // The server: the same steps, with every defender move on the step it really landed.
+    const truth = startRush(m, rules, [], 42);
+    for (let k = 0; k < n && truth.phase === 'play'; k++) {
+      if (k === 30) truth.guards[1]!.human = 'd1';
+      stepRush(truth, m, rules, t.inputs[k]!, k >= 30 ? { d1: { d: dirAt(k) } } : {});
+    }
+    expect(n).toBeGreaterThan(100);
+    expect(truth.tick).toBe(n);
+    expect(t.s.phase).toBe(truth.phase);
+    expect(t.s.me).toEqual(truth.me);
+    expect(t.s.guards.map((g) => [g.x, g.y, g.mode])).toEqual(truth.guards.map((g) => [g.x, g.y, g.mode]));
+    expect(t.s.carried).toBe(truth.carried);
+    void replayRush;
+  });
+});

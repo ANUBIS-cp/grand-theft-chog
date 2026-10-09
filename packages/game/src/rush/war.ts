@@ -1,7 +1,15 @@
 import { BUST_FINE, REVENGE_PERCENT } from '../heist/war.ts';
 import type { PowerId } from '../heist/powers.ts';
 import type { RushMap } from './map.ts';
-import { TPS, startRush, stepRush, type RushInput, type RushRules, type RushState } from './sim.ts';
+import {
+  TPS,
+  startRush,
+  stepRush,
+  type DefenderInput,
+  type RushInput,
+  type RushRules,
+  type RushState,
+} from './sim.ts';
 
 // Cash Rush in the gang war: a run's key presses travel as one short string, and the server replays them
 // with the run's own seed to see what really happened before any cash moves.
@@ -35,6 +43,23 @@ export function rushSeed(runId: string): number {
   return h | 0;
 }
 
+/** A defender who took over a guard at step `at`, and their moves from then on (one letter a step). */
+export interface DefenderLog {
+  guard: number;
+  name: string;
+  chog: number;
+  at: number;
+  moves: string;
+}
+
+/** A defender's step: which way and whether they dash, as one letter. */
+export const encodeDefender = (i: DefenderInput) => ABC[i.d + 1 + (i.dash ? 5 : 0)]!;
+export function decodeDefender(ch: string | undefined): DefenderInput {
+  const v = ch === undefined ? 0 : ABC.indexOf(ch);
+  if (v < 0 || v >= 10) return { d: -1 };
+  return { d: ((v % 5) - 1) as DefenderInput['d'], ...(v >= 5 ? { dash: true } : {}) };
+}
+
 /** The most steps a run can take: the clock, plus a little. */
 export const rushMaxSteps = (m: RushMap) => (m.seconds + 2) * TPS;
 
@@ -45,13 +70,21 @@ export function replayRush(
   powers: readonly PowerId[],
   inputs: readonly RushInput[],
   seed: number,
+  defenders: readonly DefenderLog[] = [],
 ): RushState {
   const s = startRush(m, rules, powers, seed);
-  for (const input of inputs.slice(0, rushMaxSteps(m))) {
-    stepRush(s, m, rules, input);
-    if (s.phase !== 'play') return s;
+  const max = rushMaxSteps(m);
+  for (let k = 0; s.phase === 'play' && k < max + 1; k++) {
+    // A defender takes over their guard at the step they joined.
+    const moves: Record<string, DefenderInput> = {};
+    for (const d of defenders) {
+      if (k < d.at) continue;
+      const g = s.guards[d.guard];
+      if (g && k === d.at) g.human = d.name;
+      moves[d.name] = decodeDefender(d.moves[k - d.at]);
+    }
+    stepRush(s, m, rules, inputs[k] ?? { d: -1 }, moves);
   }
-  while (s.phase === 'play') stepRush(s, m, rules, { d: -1 });
   return s;
 }
 
@@ -65,8 +98,9 @@ export function settleRush(
   vaultCash: number,
   robberCash: number,
   revenge: boolean,
+  defenders: readonly DefenderLog[] = [],
 ): { state: RushState; moved: number } {
-  const state = replayRush(m, rules, powers, inputs, seed);
+  const state = replayRush(m, rules, powers, inputs, seed, defenders);
   if (state.phase === 'escaped') {
     const worth = Math.floor((state.score * (100 + (revenge ? REVENGE_PERCENT : 0))) / 100);
     return { state, moved: Math.max(0, Math.min(worth, vaultCash)) };

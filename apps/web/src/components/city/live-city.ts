@@ -34,7 +34,7 @@ export type LiveStatus = 'connecting' | 'live' | 'offline' | 'elsewhere';
 
 const TICK = 100;
 
-function liveUrl() {
+export function liveUrl() {
   const { protocol, hostname, host, port } = window.location;
   // Local development runs the live server on its own port; the real site serves it at /ws.
   if (port === '3000') return `ws://${hostname}:3001`;

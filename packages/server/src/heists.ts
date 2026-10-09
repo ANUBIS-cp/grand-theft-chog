@@ -27,6 +27,7 @@ import {
   rushRules,
   rushSeed,
   settleRush,
+  type DefenderLog,
 } from '@chog-city/game/rush';
 import { and, desc, eq, gt, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
@@ -50,7 +51,12 @@ export type HeistError =
   | 'bad-level'
   | 'already'
   | 'too-poor'
-  | 'not-in-jail';
+  | 'not-in-jail'
+  | 'not-your-gang'
+  | 'live';
+
+/** Marks a run that defenders joined: only the live server can finish it. */
+const LIVE = 'live';
 
 /** How long a building's alarm stays on without the robbery finishing. */
 const ALARM_MS = 3 * 60_000;
@@ -214,9 +220,10 @@ export async function startRun(
 export async function robbing(
   db: Db,
   now: number,
-): Promise<{ target: GangId; gang: GangId; chog: number; since: number }[]> {
+): Promise<{ target: GangId; gang: GangId; chog: number; since: number; run: string }[]> {
   const rows = await db
     .select({
+      run: heistRuns.id,
       target: heistRuns.target,
       gang: heistRuns.gang,
       chog: heistRuns.chogId,
@@ -235,6 +242,7 @@ export async function robbing(
     gang: r.gang as GangId,
     chog: r.chog,
     since: r.at.getTime(),
+    run: r.run,
   }));
 }
 
@@ -265,6 +273,7 @@ function replayRun(
   text: string,
   vaultHas: number,
   robberHas: number,
+  defenders: DefenderLog[] = [],
 ): { state: { phase: string; carried: number; score: number; caughtBy: number | null }; moved: number } {
   const powers = run.powers as PowerId[];
   const map = rushMap(run.vault);
@@ -272,7 +281,17 @@ function replayRun(
     const inputs = decodeRushInputs(text);
     if (!inputs || inputs.length > rushMaxSteps(map)) throw new HeistRefused('bad-inputs');
     const rules = rushRules(run.tier, run.prisoner !== null);
-    return settleRush(map, rules, powers, inputs, rushSeed(run.id), vaultHas, robberHas, run.revenge);
+    return settleRush(
+      map,
+      rules,
+      powers,
+      inputs,
+      rushSeed(run.id),
+      vaultHas,
+      robberHas,
+      run.revenge,
+      defenders,
+    );
   }
   const def = vaultDef(run.vault);
   if (!def) throw new HeistRefused('no-run');
@@ -282,14 +301,33 @@ function replayRun(
   return settle(built, powers, inputs, vaultHas, robberHas, run.revenge);
 }
 
+/**
+ * Settles a raid the live server ran, with real defenders in it. The live server's message is signed (the
+ * web app checks that before calling this), and the run is still replayed here from its key presses.
+ */
+export function finishLiveRun(
+  db: Db,
+  args: { runId: string; inputs: string; defenders: DefenderLog[]; now: number },
+): Promise<FinishedRun> {
+  return finishRun(db, { address: null, ...args });
+}
+
 export async function finishRun(
   db: Db,
-  { address, runId, inputs: text, now }: { address: string; runId: string; inputs: string; now: number },
+  {
+    address,
+    runId,
+    inputs: text,
+    now,
+    defenders = [],
+  }: { address: string | null; runId: string; inputs: string; now: number; defenders?: DefenderLog[] },
 ): Promise<FinishedRun> {
   return db.transaction(async (tx) => {
     const [run] = await tx.select().from(heistRuns).where(eq(heistRuns.id, runId)).for('update');
-    if (!run || run.player !== address.toLowerCase()) throw new HeistRefused('no-run');
+    // address null: the signed live server, which may finish anyone's raid.
+    if (!run || (address !== null && run.player !== address.toLowerCase())) throw new HeistRefused('no-run');
     if (run.finishedAt) throw new HeistRefused('finished');
+    if (address !== null && run.inputs === LIVE) throw new HeistRefused('live');
     if (now - run.startedAt.getTime() > RUN_MAX_MS) throw new HeistRefused('too-late');
     // Lock both vaults in a fixed order so two runs settling at once can't deadlock.
     const pair = [run.gang, run.target].sort();
@@ -304,7 +342,7 @@ export async function finishRun(
     const breakout = run.prisoner !== null;
     const vaultHas = breakout ? 0 : (cash[run.target] ?? 0);
     const robberHas = breakout ? 0 : (cash[run.gang] ?? 0);
-    const { state, moved } = replayRun(run, text, vaultHas, robberHas);
+    const { state, moved } = replayRun(run, text, vaultHas, robberHas, defenders);
     const escaped = state.phase === 'escaped';
     const [from, to] = escaped ? [run.target, run.gang] : [run.gang, run.target];
     if (moved > 0) {
@@ -317,7 +355,10 @@ export async function finishRun(
         .set({ cash: sql`${gangVaults.cash} + ${moved}`, updatedAt: new Date(now) })
         .where(eq(gangVaults.gang, to));
     }
-    const caughtBy = !escaped && state.caughtBy !== null ? (run.guards[state.caughtBy] ?? null) : null;
+    // A guard steered by a real defender: the catch is theirs.
+    const human = defenders.find((d) => d.guard === state.caughtBy);
+    const caughtBy =
+      !escaped && state.caughtBy !== null ? (human?.chog ?? run.guards[state.caughtBy] ?? null) : null;
     if (breakout && escaped)
       await tx
         .update(heistChogs)
@@ -355,7 +396,8 @@ export async function finishRun(
         score: state.score,
         moved,
         caughtBy,
-        inputs: text,
+        // Defenders' moves are kept after the robber's, so the replay plays them too.
+        inputs: defenders.length ? `${text}\n${JSON.stringify(defenders)}` : text,
       })
       .where(eq(heistRuns.id, run.id));
     await tx
@@ -558,7 +600,8 @@ export async function runForReplay(db: Db, id: string) {
     tier: r.tier,
     powers: r.powers as PowerId[],
     guards: r.guards as number[],
-    inputs: r.inputs,
+    inputs: r.inputs.split('\n')[0]!,
+    defenders: r.inputs.includes('\n') ? (JSON.parse(r.inputs.split('\n')[1]!) as DefenderLog[]) : [],
     result: r.result!,
     moved: r.moved ?? 0,
     revenge: r.revenge,
@@ -631,4 +674,29 @@ export async function startBreakout(
     )
     .catch(() => undefined);
   return run;
+}
+
+/**
+ * Can this Chog jump into a raid on its own gang's vault as a defender? The raid must still be running, and
+ * the Chog must be yours, in the gang being robbed, and not in jail.
+ */
+export async function joinRaid(
+  db: Db,
+  { address, chogId, runId, now }: { address: string; chogId: number; runId: string; now: number },
+): Promise<{ run: string; target: GangId }> {
+  if (!(await canControl(db, address, chogId))) throw new HeistRefused('not-yours');
+  const [run] = await db.select().from(heistRuns).where(eq(heistRuns.id, runId));
+  if (!run || run.finishedAt || now - run.startedAt.getTime() > RUN_MAX_MS) throw new HeistRefused('no-run');
+  if (run.prisoner !== null) throw new HeistRefused('no-run');
+  if (run.chogId === chogId) throw new HeistRefused('own-gang');
+  const me = await heistRecord(db, chogId);
+  if (me?.gang !== run.target) throw new HeistRefused('not-your-gang');
+  if (me.jailedUntil && me.jailedUntil.getTime() > now) throw new HeistRefused('jailed');
+  // From now on only the live server may finish this run: the robber's own browser can't leave the
+  // defenders out of it.
+  await db
+    .update(heistRuns)
+    .set({ inputs: LIVE })
+    .where(and(eq(heistRuns.id, run.id), isNull(heistRuns.finishedAt)));
+  return { run: run.id, target: run.target as GangId };
 }

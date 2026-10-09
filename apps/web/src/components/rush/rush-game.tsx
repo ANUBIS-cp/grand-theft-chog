@@ -8,6 +8,10 @@ import {
   TPS,
   decodeRushInputs,
   encodeRushInputs,
+  RushTimeline,
+  decodeDefender,
+  type DefenderInput,
+  type DefenderLog,
   rushMap,
   startRush,
   stepRush,
@@ -24,6 +28,7 @@ import { cn } from '@/lib/cn';
 import { chogImage } from '@/lib/images';
 import { Fx } from '../heist/fx';
 import { Sound } from '../heist/sound';
+import type { RaidLink, RaidResult } from './raid-link';
 import { RushRenderer, rushSnapshot, type RushPrev } from './rush-render';
 
 // Cash Rush on screen: the maze, the controls (keys, a drag stick, buttons), the safe dial, and the cards at
@@ -35,16 +40,6 @@ export interface RushChog {
   name: string;
 }
 
-/** A real raid: the live server runs it; this sends your input and gets everyone's positions back. */
-export interface RushNet {
-  /** Send this step's input; the server answers through `onState`. */
-  send(input: RushInput): void;
-  /** Replace the local state with the server's (positions are blended in by the screen). */
-  latest(): { s: RushState; ev: RushEvent[] } | null;
-  defenders: Set<number>;
-  result: { moved: number; jailedUntil: number | null; error?: string } | null;
-}
-
 export interface RushGameProps {
   mapId: string;
   rules: RushRules;
@@ -53,8 +48,8 @@ export interface RushGameProps {
   owner: { name: string; color: string; ink: string };
   /** Practice: a way back to the city. */
   onLeave?: () => void;
-  /** A raid run live on the server (with defenders). */
-  net?: RushNet;
+  /** A live raid on the server: you rob it (defenders can join), defend it, or watch it. */
+  link?: RaidLink;
   /** The run's dice (real runs and replays use the run's own, so the server sees the same run). */
   seed?: number;
   /** A real robbery: the key presses go to the server when it ends, and the card offers a way back. */
@@ -65,10 +60,12 @@ export interface RushGameProps {
     replayHref?: string;
   };
   /** Watching a run that already happened. */
-  replay?: { inputs: string; moved: number; robbers: string };
+  replay?: { inputs: string; moved: number; robbers: string; defenders?: (DefenderLog & { who?: string })[] };
   rescue?: RushChog;
   /** Walk a new player through it step by step. */
   coach?: boolean;
+  /** Defending or watching: who's robbing. */
+  robber?: RushChog;
 }
 
 const ICON: Record<PowerId, SkillId> = {
@@ -124,8 +121,10 @@ interface Hud {
 }
 
 export function RushGame(props: RushGameProps) {
-  const { mapId, rules, player, guards, owner, onLeave, net, real, rescue, coach, seed, replay } = props;
+  const { mapId, rules, player, guards, owner, onLeave, link, real, rescue, coach, seed, replay } = props;
   const script = useMemo(() => (replay ? (decodeRushInputs(replay.inputs) ?? []) : null), [replay]);
+  const replayRef = useRef(replay);
+  replayRef.current = replay;
   const scriptRef = useRef(script);
   scriptRef.current = script;
   const realRef = useRef(real);
@@ -145,8 +144,9 @@ export function RushGame(props: RushGameProps) {
   const [muted, setMuted] = useState(false);
   const [showEnd, setShowEnd] = useState(false);
   const [joy, setJoy] = useState<{ x: number; y: number; dx: number; dy: number } | null>(null);
-  const netRef = useRef(net);
-  netRef.current = net;
+  const linkRef = useRef(link);
+  linkRef.current = link;
+  const netRef = linkRef;
   const rulesKey = JSON.stringify(rules);
   const powersKey = player.powers.join(',');
   const guardsKey = guards.map((g) => g.id).join(',');
@@ -164,6 +164,12 @@ export function RushGame(props: RushGameProps) {
     r: RushRenderer | null;
     started: boolean;
     inputs: RushInput[];
+    /** A live raid's rewindable run (the robber's screen). */
+    tl: RushTimeline | null;
+    snapAt: number;
+    tapUntil: number;
+    /** Defenders whose own Chog is already on their guard. */
+    faces: Set<string>;
     held: Dir[];
     tap: { d: Dir; until: number } | null;
     use: boolean;
@@ -186,6 +192,10 @@ export function RushGame(props: RushGameProps) {
       fx: new Fx(),
       started: !!scriptRef.current,
       inputs: [] as RushInput[],
+      tl: null as RushTimeline | null,
+      snapAt: 0,
+      tapUntil: 0,
+      faces: new Set<string>(),
       held: [] as Dir[],
       tap: null,
       use: false,
@@ -249,41 +259,105 @@ export function RushGame(props: RushGameProps) {
       const st = game.current!;
       const elapsed = Math.min(250, now - last);
       last = now;
-      const n = netRef.current;
-      if (n) {
-        // A real raid: the server's state, with this step's input sent up.
-        if (st.started && st.s.phase === 'play') {
-          acc += elapsed;
-          while (acc >= DT * 1000) {
-            n.send(readInput(st));
-            acc -= DT * 1000;
-          }
+      const link = linkRef.current;
+      const viewing = link && link.role !== 'rob' && link.status !== 'failed';
+      if (viewing) {
+        // Defending or watching: draw the server's picture, eased between its last two.
+        st.started = true;
+        if (link.role === 'defend') {
+          link.move(st.held.at(-1) ?? st.tap?.d ?? -1, st.use);
+          st.use = false;
+          if (st.tap && performance.now() > st.tapUntil) st.tap = null;
         }
-        const got = n.latest();
-        if (got) {
-          st.prev = rushSnapshot(st.s);
-          st.s = got.s;
-          react(st, got.ev);
-          acc = 0;
+        const sn = link.snap;
+        if (sn && sn.s !== st.s) {
+          st.prev = rushSnapshot(st.s.tick ? st.s : sn.s);
+          st.s = sn.s;
+          react(st, sn.ev);
+          st.snapAt = sn.at;
+          if (sn.s.phase !== 'play' && !st.endAt) st.endAt = now + 900;
         }
+        acc = Math.min(1, (now - (st.snapAt || now)) / 66) * DT * 1000;
       } else if (st.started && st.s.phase === 'play') {
+        const live = !!link && link.status === 'live' && link.role === 'rob';
+        if (live) {
+          // The run plays here at once; defenders' moves arrive a little late, so rewind and replay to them.
+          st.tl ??= new RushTimeline(map, rulesRef.current, powersRef.current, seedRef.current ?? 0);
+          const tl = st.tl;
+          if (tl.s.tick === 0 && st.s.tick > 0) tl.adopt(st.s);
+          if (link.resync) {
+            const srv = link.resync.s;
+            link.resync = null;
+            if (srv.tick > 0 && srv.tick !== tl.s.tick) tl.adopt(srv);
+          }
+          for (const d of link.defenders.values()) {
+            if (!tl.defenders.has(d.name)) tl.join(d);
+            const seen = tl.defenders.get(d.name)!.changes.length;
+            for (const c of d.changes.slice(seen)) tl.change(d.name, c.k, c.v);
+          }
+          link.rewindFrom = null;
+          const again = tl.catchUp();
+          // Only the big moments from replayed steps count again (a catch that now happened).
+          react(
+            st,
+            again.filter((e) => e.t === 'busted' || e.t === 'tag' || e.t === 'escaped'),
+          );
+          st.s = tl.s;
+        }
         acc += elapsed;
         while (acc >= DT * 1000 && st.s.phase === 'play') {
           st.prev = rushSnapshot(st.s);
           const input = readInput(st);
-          st.inputs.push(input);
-          const ev = stepRush(st.s, map, rulesRef.current, input);
+          const k = st.s.tick;
+          st.inputs[k] = input;
+          let ev;
+          if (live && st.tl) {
+            link.push(input);
+            ev = st.tl.step(input);
+            st.s = st.tl.s;
+          } else {
+            // A replay plays the defenders who were in it, from the step each joined.
+            const moves: Record<string, DefenderInput> = {};
+            for (const d of replayRef.current?.defenders ?? []) {
+              if (k < d.at) continue;
+              if (k === d.at && st.s.guards[d.guard]) st.s.guards[d.guard]!.human = d.name;
+              moves[d.name] = decodeDefender(d.moves[k - d.at]);
+            }
+            ev = stepRush(st.s, map, rulesRef.current, input, moves);
+          }
           react(st, ev);
           acc -= DT * 1000;
         }
+        if (live) link.flush();
       } else acc = 0;
       fxAcc += elapsed;
       while (fxAcc >= 1000 / 60) {
         st.fx.tick();
         fxAcc -= 1000 / 60;
       }
-      st.r?.draw(st.s, st.prev, n ? 1 : Math.min(1, acc / (DT * 1000)), st.fx, now, {
-        defenders: n?.defenders,
+      const humans = new Set(st.s.guards.flatMap((x, i) => (x.human ? [i] : [])));
+      // A defender plays as their own Chog.
+      if (link)
+        for (const d of link.defenders.values())
+          if (!st.faces.has(d.name)) {
+            st.faces.add(d.name);
+            const img = new Image();
+            img.decoding = 'async';
+            img.src = chogImage(d.chog, 256);
+            st.r?.v.setGuardImage(d.guard, img);
+            if (d.who)
+              st.fx.float(
+                st.r!.X(st.s.guards[d.guard]?.x ?? 0),
+                st.r!.Y(st.s.guards[d.guard]?.y ?? 0) - 30,
+                `${d.who.toUpperCase()} JOINED!`,
+                '#ffd23f',
+                true,
+              );
+          }
+      const mine = linkRef.current?.role === 'defend' ? linkRef.current.you : -1;
+      st.r?.draw(st.s, st.prev, Math.min(1, acc / (DT * 1000)), st.fx, now, {
+        defenders: humans,
+        follow: mine >= 0 ? st.s.guards[mine] : undefined,
       });
       // The dial's needle turns every frame, outside React.
       const safe = st.s.safe;
@@ -292,7 +366,10 @@ export function RushGame(props: RushGameProps) {
         st.endAt = 0;
         setShowEnd(true);
       }
-      if (realRef.current && !sentRef.current && st.s.phase !== 'play') {
+      // A live raid is saved by the live server; otherwise (or if the link dropped) by this screen.
+      const lk = linkRef.current;
+      const serverSaves = !!lk && lk.role === 'rob' && lk.status !== 'failed';
+      if (realRef.current && !sentRef.current && st.s.phase !== 'play' && !serverSaves) {
         sentRef.current = true;
         realRef.current
           .finish(encodeRushInputs(st.inputs))
@@ -503,6 +580,7 @@ export function RushGame(props: RushGameProps) {
         g.started = true;
         if (!g.held.includes(d)) g.held.push(d);
         g.tap = { d, until: g.s.tick + 5 };
+        g.tapUntil = performance.now() + 170;
       } else if (USE_KEYS.has(e.code)) {
         if (!e.repeat) g.use = true;
         g.started = true;
@@ -561,6 +639,7 @@ export function RushGame(props: RushGameProps) {
         g.started = true;
         g.held = [d];
         g.tap = { d, until: g.s.tick + 5 };
+        g.tapUntil = performance.now() + 170;
       }
     }
     setJoy({ x: dr.ax - dr.ox, y: dr.ay - dr.oy, dx, dy });
@@ -592,9 +671,32 @@ export function RushGame(props: RushGameProps) {
     } catch {}
   };
 
+  const [, setLinkSeen] = useState(0);
+  useEffect(() => {
+    if (!link) return;
+    const stop = link.listen(() => setLinkSeen((n) => n + 1));
+    return () => {
+      stop();
+    };
+  }, [link]);
+  const role = link && link.status !== 'failed' ? link.role : null;
+  const viewer = role === 'defend' || role === 'watch';
+  const robberName = props.robber?.name ?? 'the robber';
+
   const phase = hud?.phase ?? 'play';
   const over = phase !== 'play';
-  const caughtBy = hud?.caughtBy != null ? guards[hud.caughtBy % Math.max(1, guards.length)] : null;
+  // Caught by a guard a real defender was steering: it was them.
+  const catcher =
+    hud?.caughtBy != null
+      ? [...(link?.defenders.values() ?? []), ...(replay?.defenders ?? [])].find(
+          (d) => d.guard === hud.caughtBy,
+        )
+      : undefined;
+  const caughtBy = catcher
+    ? { id: catcher.chog, name: ('who' in catcher && catcher.who) || 'A defender' }
+    : hud?.caughtBy != null
+      ? guards[hud.caughtBy % Math.max(1, guards.length)]
+      : null;
   const hurry = !!hud && hud.seconds <= RUSH.hurry && !over;
   const safeState = game.current?.s.safe;
   const nearSafe =
@@ -683,7 +785,15 @@ export function RushGame(props: RushGameProps) {
         <canvas ref={canvasRef} className="absolute inset-0" />
         {hud?.started && !over && (
           <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center px-3">
-            <Goal hud={hud} rescue={rescue} safeValue={rules.safeValue} />
+            {viewer ? (
+              <div className="flex items-center gap-2 rounded-[10px] border-[3px] border-ink bg-[#3b5bdb] px-3 pb-1 pt-1.5 font-display text-[17px] uppercase leading-none text-white shadow-[0_4px_0_0_#000] sm:text-[19px]">
+                {role === 'defend'
+                  ? `You're a guard: catch ${robberName}!`
+                  : `Watching live: ${robberName} robbing ${owner.name}`}
+              </div>
+            ) : (
+              <Goal hud={hud} rescue={rescue} safeValue={rules.safeValue} />
+            )}
           </div>
         )}
         {hud?.dialing && safeState && (
@@ -704,11 +814,32 @@ export function RushGame(props: RushGameProps) {
             />
           </div>
         )}
-        {coach && hud && !over && <Coach hud={hud} />}
+        {coach && !viewer && hud && !over && <Coach hud={hud} />}
+        {link && <Crowd link={link} canSend={viewer} />}
+        {role === 'rob' && hud && !over && link && link.defenders.size > 0 && (
+          <div className="pointer-events-none absolute right-3 top-14 flex flex-col items-end gap-1.5">
+            {[...link.defenders.values()].map((d) => (
+              <span
+                key={d.name}
+                className="flex items-center gap-1.5 rounded-[8px] border-2 border-ink bg-[#ffd23f] py-0.5 pl-0.5 pr-2 text-[12px] font-bold uppercase text-ink shadow-[0_3px_0_0_#000]"
+              >
+                <img src={chogImage(d.chog, 96)} alt="" className="h-6 w-6 rounded-[5px] border border-ink" />
+                {d.who ?? 'A defender'} is guarding
+              </span>
+            ))}
+          </div>
+        )}
         {hud && !hud.started && !over && (
           <StartCard player={player} rescue={rescue} safeValue={rules.safeValue} />
         )}
-        {over && showEnd && hud && (
+        {over && showEnd && hud && viewer && (
+          <ViewerEnd
+            escaped={phase === 'escaped'}
+            onLeave={onLeave}
+            viewer={{ role: role!, robber: robberName, result: link?.result ?? null }}
+          />
+        )}
+        {over && showEnd && hud && !viewer && (
           <EndCard
             escaped={phase === 'escaped'}
             hud={hud}
@@ -716,78 +847,90 @@ export function RushGame(props: RushGameProps) {
             caughtBy={caughtBy}
             onAgain={restart}
             onLeave={onLeave}
-            real={real ? { ...real, result: net?.result ?? saved } : undefined}
+            real={real ? { ...real, result: link?.result ?? saved } : undefined}
             replay={replay}
             rescue={rescue}
           />
         )}
       </div>
 
-      {/* Buttons: your powers, and Use (the safe) */}
-      <div className="flex items-stretch gap-2 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 sm:px-4">
+      {/* Buttons: your powers, and Use (the safe), or Dash for a defender */}
+      <div
+        className={cn(
+          'flex items-stretch gap-2 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 sm:px-4',
+          role === 'watch' && 'hidden',
+        )}
+      >
         <div className="grid min-w-0 flex-1 auto-cols-fr grid-flow-col gap-2">
-          {player.powers.map((id, i) => {
-            const def = RUSH_POWERS[id];
-            const wait = hud?.wait[i] ?? 0;
-            const active = hud?.active[i] ?? 0;
-            if (def.passive)
+          {role === 'defend' && (
+            <p className="self-center text-[13px] leading-snug text-white/70">
+              Steer with the arrow keys or drag. Touch the robber to catch them. Dash (E) gives a burst of
+              speed.
+            </p>
+          )}
+          {!viewer &&
+            player.powers.map((id, i) => {
+              const def = RUSH_POWERS[id];
+              const wait = hud?.wait[i] ?? 0;
+              const active = hud?.active[i] ?? 0;
+              if (def.passive)
+                return (
+                  <div
+                    key={id}
+                    className="flex min-w-0 items-center gap-2 rounded-[12px] border-2 border-white/15 p-1.5 pr-2 text-white/75"
+                    title={def.does}
+                  >
+                    <SkillIcon skill={ICON[id]} width={26} height={26} />
+                    <span className="min-w-0">
+                      <span className="block truncate font-display text-[16px] uppercase leading-none">
+                        {def.name}
+                      </span>
+                      <span className="line-clamp-2 text-[11px] leading-[1.2] opacity-80">{def.does}</span>
+                    </span>
+                  </div>
+                );
+              const off = !active && wait > 0;
               return (
-                <div
+                <button
                   key={id}
-                  className="flex min-w-0 items-center gap-2 rounded-[12px] border-2 border-white/15 p-1.5 pr-2 text-white/75"
+                  onPointerDown={() => press(i)}
+                  onClick={(e) => e.detail === 0 && press(i)}
+                  disabled={off || over}
                   title={def.does}
-                >
-                  <SkillIcon skill={ICON[id]} width={26} height={26} />
-                  <span className="min-w-0">
-                    <span className="block truncate font-display text-[16px] uppercase leading-none">
-                      {def.name}
-                    </span>
-                    <span className="line-clamp-2 text-[11px] leading-[1.2] opacity-80">{def.does}</span>
-                  </span>
-                </div>
-              );
-            const off = !active && wait > 0;
-            return (
-              <button
-                key={id}
-                onPointerDown={() => press(i)}
-                onClick={(e) => e.detail === 0 && press(i)}
-                disabled={off || over}
-                title={def.does}
-                className={cn(
-                  'relative flex min-w-0 items-center gap-2 overflow-hidden rounded-[12px] border-[3px] border-ink p-1.5 pr-2 text-left transition active:translate-y-[2px]',
-                  off ? 'bg-white/10 text-white/50' : 'bg-pink text-ink shadow-[0_4px_0_0_#000]',
-                  active > 0 && 'bg-[#ffd666]',
-                )}
-              >
-                <span className="relative grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border-2 border-ink bg-paper-raised">
-                  <SkillIcon skill={ICON[id]} width={26} height={26} className={cn(off && 'opacity-30')} />
-                  {off && (
-                    <span className="absolute inset-0 grid place-items-center font-display text-[22px] leading-none text-ink">
-                      {wait}
-                    </span>
+                  className={cn(
+                    'relative flex min-w-0 items-center gap-2 overflow-hidden rounded-[12px] border-[3px] border-ink p-1.5 pr-2 text-left transition active:translate-y-[2px]',
+                    off ? 'bg-white/10 text-white/50' : 'bg-pink text-ink shadow-[0_4px_0_0_#000]',
+                    active > 0 && 'bg-[#ffd666]',
                   )}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-baseline justify-between gap-1">
-                    <span className="truncate pt-0.5 font-display text-[18px] uppercase leading-none">
-                      {def.name}
+                >
+                  <span className="relative grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border-2 border-ink bg-paper-raised">
+                    <SkillIcon skill={ICON[id]} width={26} height={26} className={cn(off && 'opacity-30')} />
+                    {off && (
+                      <span className="absolute inset-0 grid place-items-center font-display text-[22px] leading-none text-ink">
+                        {wait}
+                      </span>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-1">
+                      <span className="truncate pt-0.5 font-display text-[18px] uppercase leading-none">
+                        {def.name}
+                      </span>
+                      <kbd className="hidden font-mono text-[10px] opacity-60 sm:inline">{i + 1}</kbd>
                     </span>
-                    <kbd className="hidden font-mono text-[10px] opacity-60 sm:inline">{i + 1}</kbd>
+                    <span className="mt-0.5 line-clamp-2 text-[11px] leading-[1.2] opacity-80">
+                      {active > 0 ? 'On!' : def.does}
+                    </span>
                   </span>
-                  <span className="mt-0.5 line-clamp-2 text-[11px] leading-[1.2] opacity-80">
-                    {active > 0 ? 'On!' : def.does}
-                  </span>
-                </span>
-                {active > 0 && (
-                  <span
-                    className="absolute bottom-0 left-0 h-1.5 bg-ink"
-                    style={{ width: `${active * 100}%` }}
-                  />
-                )}
-              </button>
-            );
-          })}
+                  {active > 0 && (
+                    <span
+                      className="absolute bottom-0 left-0 h-1.5 bg-ink"
+                      style={{ width: `${active * 100}%` }}
+                    />
+                  )}
+                </button>
+              );
+            })}
         </div>
         <button
           onPointerDown={() => press('use')}
@@ -799,15 +942,57 @@ export function RushGame(props: RushGameProps) {
               ? 'animate-[pulse-ring_1.4s_ease-out_infinite] bg-[#ffd666]'
               : 'bg-white/90',
           )}
-          aria-label={hud?.dialing ? 'Crack' : 'Use'}
+          aria-label={role === 'defend' ? 'Dash' : hud?.dialing ? 'Crack' : 'Use'}
         >
-          <span className="pt-0.5">{hud?.dialing ? 'Crack' : 'Use'}</span>
+          <span className="pt-0.5">{role === 'defend' ? 'Dash' : hud?.dialing ? 'Crack' : 'Use'}</span>
           <span className="absolute -right-1 -top-1 grid h-6 min-w-6 place-items-center rounded-[6px] border-2 border-ink bg-[#17132b] px-1 font-display text-[11px] leading-none text-white">
             E
           </span>
         </button>
       </div>
     </div>
+  );
+}
+
+const CROWD = ['laugh', 'scream', 'fire', 'cash', 'angry', 'cool'] as const;
+
+/** Watchers' emotes float up the side of the raid; watchers and defenders get buttons to send them. */
+function Crowd({ link, canSend }: { link: RaidLink; canSend: boolean }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 500);
+    return () => clearInterval(t);
+  }, []);
+  const now = performance.now();
+  const live = link.emotes.filter((e) => now - e.at < 2600).slice(-12);
+  return (
+    <>
+      <div className="pointer-events-none absolute bottom-0 right-2 top-0 w-24 overflow-hidden">
+        {live.map((e) => (
+          <img
+            key={e.at}
+            src={`/emotes/${e.k}.webp`}
+            alt=""
+            className="absolute bottom-0 h-12 w-12 animate-[emote-rise_2.6s_ease-out_forwards]"
+            style={{ right: `${(e.at * 7.3) % 56}px` }}
+          />
+        ))}
+      </div>
+      {canSend && (
+        <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5 rounded-full border-[3px] border-ink bg-[#17132b]/90 p-1.5 shadow-[0_4px_0_0_#000]">
+          {CROWD.map((k) => (
+            <button
+              key={k}
+              onClick={() => link.emote(k)}
+              aria-label={k}
+              className="grid h-10 w-10 place-items-center rounded-full bg-white/10 hover:bg-white/20 active:scale-90"
+            >
+              <img src={`/emotes/${k}.webp`} alt="" className="h-8 w-8" />
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1005,6 +1190,40 @@ function StartCard({
   );
 }
 
+/** The end of a raid you defended or watched. */
+function ViewerEnd(props: {
+  escaped: boolean;
+  onLeave?: () => void;
+  viewer: { role: 'defend' | 'watch' | 'rob'; robber: string; result: RaidResult | null };
+}) {
+  const { escaped, viewer } = props;
+  return (
+    <div className="absolute inset-0 z-20 grid place-items-center bg-[#0b0918]/70 p-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-[360px] rounded-[18px] border-[3px] border-ink bg-paper-raised p-5 text-center text-ink shadow-[0_6px_0_0_#000]">
+        <div
+          className={cn(
+            'mx-auto inline-block -rotate-3 rounded-[8px] border-[3px] px-4 pb-1 pt-2 font-display text-[40px] uppercase leading-none',
+            escaped ? 'border-jail text-jail' : 'border-cash text-cash',
+          )}
+        >
+          {escaped ? 'Got away' : 'Caught!'}
+        </div>
+        <p className="mt-4 text-[15px] leading-snug">
+          {escaped
+            ? `${viewer.robber} got out${viewer.result?.moved ? ` with ${money(viewer.result.moved)}` : ''}.`
+            : `${viewer.robber} is off to jail${viewer.result?.moved ? ` and their gang paid ${money(viewer.result.moved)}` : ''}.`}
+        </p>
+        <button
+          onClick={props.onLeave}
+          className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-[10px] border-[3px] border-ink bg-pink font-display text-[22px] uppercase leading-none text-ink shadow-[0_4px_0_0_#000] active:translate-y-[2px]"
+        >
+          <span className="pt-1">Back to the city</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function EndCard(props: {
   escaped: boolean;
   hud: Hud;
@@ -1012,7 +1231,7 @@ function EndCard(props: {
   caughtBy: RushChog | null | undefined;
   onAgain: () => void;
   onLeave?: () => void;
-  real?: { myGang: string; onLeave: () => void; replayHref?: string; result: RushNet['result'] };
+  real?: { myGang: string; onLeave: () => void; replayHref?: string; result: RaidResult | null };
   rescue?: RushChog;
   replay?: { moved: number; robbers: string };
 }) {

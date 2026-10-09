@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ConnectPanel } from '@/components/connect-panel';
 import type { RealResult } from '@/components/heist/heist-game';
+import { RaidLink } from '@/components/rush/raid-link';
 import { RushGame } from '@/components/rush/rush-game';
 import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
@@ -84,12 +85,16 @@ interface Run {
   revenge: boolean;
   powers: PowerId[];
   guards: { id: number; name: string }[];
+  /** The live raid room (defenders can join); missing if the live server can't be reached. */
+  link?: RaidLink;
 }
 interface Robbing {
   target: GangId;
   gang: GangId;
   chog: number;
   since: number;
+  /** The run, to defend or watch live. */
+  run?: string;
 }
 interface GangInfo {
   members: { id: number; name: string; stolen: number; catches: number }[];
@@ -177,6 +182,18 @@ export function CityApp() {
   const [emoteOpen, setEmoteOpen] = useState(false);
   const [banner, setBanner] = useState<BannerData | null>(null);
   const [boardTab, setBoardTab] = useState<'gangs' | 'hits'>('gangs');
+  /** Defending your gang's vault, or watching a raid, live. */
+  const [raidView, setRaidView] = useState<{ link: RaidLink; role: 'defend' | 'watch'; target: GangId } | null>(
+    null,
+  );
+  const [, setRaidSeen] = useState(0);
+  useEffect(() => {
+    if (!raidView) return;
+    const stop = raidView.link.listen(() => setRaidSeen((n) => n + 1));
+    return () => {
+      stop();
+    };
+  }, [raidView]);
   const [sheet, setSheet] = useState<'gangs' | 'me' | 'connect' | null>(null);
   const [peek, setPeek] = useState<Tapped | null>(null);
   const [live, setLive] = useState<{ status: LiveStatus; online: number }>({
@@ -221,6 +238,7 @@ export function CityApp() {
         gang: e.gang as GangId,
         chog: e.chog,
         since: Date.now(),
+        run: e.run,
       };
       setAlarms((a) => ({ ...a, [r.target]: r }));
       if (r.target === myGang.current) setRaid(r);
@@ -399,8 +417,8 @@ export function CityApp() {
     setBusy(`free${prisoner}`);
     setNotice(null);
     try {
-      const d = await post<{ run: Run }>('/api/heist/breakout', { chogId: chog.id, prisoner });
-      setRun(d.run);
+      const d = await post<{ run: Run; pass?: string }>('/api/heist/breakout', { chogId: chog.id, prisoner });
+      setRun({ ...d.run, link: d.pass ? new RaidLink({ t: 'raid', pass: d.pass }) : undefined });
     } catch (e) {
       setNotice((e as Error).message);
     } finally {
@@ -408,13 +426,34 @@ export function CityApp() {
     }
   }
 
+  /** Jump into a raid on your gang's vault as a guard. */
+  async function defend(r: Robbing) {
+    if (!chog || !r.run) return;
+    setBusy('defend-raid');
+    setNotice(null);
+    try {
+      const d = await post<{ pass: string }>('/api/raid/join', { runId: r.run, chogId: chog.id });
+      setRaid(null);
+      setRaidView({ link: new RaidLink({ t: 'raid', pass: d.pass }), role: 'defend', target: r.target });
+    } catch (e) {
+      setNotice((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function watch(r: Robbing) {
+    if (!r.run) return;
+    setRaidView({ link: new RaidLink({ t: 'watch', run: r.run }), role: 'watch', target: r.target });
+  }
+
   async function rob(target: GangId) {
     if (!chog) return;
     setBusy(target);
     setNotice(null);
     try {
-      const d = await post<{ run: Run }>('/api/heist/start', { chogId: chog.id, target });
-      setRun(d.run);
+      const d = await post<{ run: Run; pass?: string }>('/api/heist/start', { chogId: chog.id, target });
+      setRun({ ...d.run, link: d.pass ? new RaidLink({ t: 'raid', pass: d.pass }) : undefined });
     } catch (e) {
       setNotice((e as Error).message);
     } finally {
@@ -547,11 +586,54 @@ export function CityApp() {
   }, []);
 
   const backTo = (place: string) => {
+    run?.link?.close();
+    raidView?.link.close();
+    setRaidView(null);
     setRun(null);
     setPractice(false);
     // The city remounts after the heist; put your Chog back at the door it went in by.
     requestAnimationFrame(() => view.current?.appearAt(place));
   };
+
+  if (raidView) {
+    const { link } = raidView;
+    const st = link.setup;
+    const leave = () => {
+      backTo(raidView.target);
+      void loadBoard();
+    };
+    if (!st)
+      return (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[#0b0918] p-6 text-center text-white">
+          <div>
+            <p className="font-display text-[34px] uppercase leading-none">
+              {link.status === 'failed' ? 'That raid is over' : raidView.role === 'defend' ? 'Joining the raid…' : 'Finding the raid…'}
+            </p>
+            {link.status === 'failed' && (
+              <button onClick={leave} className={cn(btn, 'mt-5 bg-[#ffd666] text-ink')}>
+                <span className="pt-0.5">Back to the city</span>
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    const target = st.target as GangId;
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0918]">
+        <RushGame
+          mapId={st.map}
+          rules={st.rules}
+          seed={st.seed}
+          link={link}
+          robber={{ id: st.robber.chog, name: st.robber.name }}
+          player={{ id: st.robber.chog, name: st.robber.name, gang: null, powers: st.powers as PowerId[] }}
+          guards={st.guards.map((id) => ({ id, name: '' }))}
+          owner={{ name: GANGS[target]?.name ?? 'The jail', color: GANG_COLOR[target]?.bg ?? '#ff5a4f', ink: GANG_COLOR[target]?.fg ?? '#111111' }}
+          onLeave={leave}
+        />
+      </div>
+    );
+  }
 
   if (run && chog) {
     return (
@@ -561,6 +643,7 @@ export function CityApp() {
           mapId={run.vault}
           rules={rushRules(run.tier, !!run.prisoner)}
           seed={rushSeed(run.id)}
+          link={run.link}
           player={{
             id: chog.id,
             name: chog.name,
@@ -700,12 +783,16 @@ export function CityApp() {
             b={{
               id: `raid${raid.since}`,
               title: 'Raid!',
-              line: `${GANGS[raid.gang].name} ${verb(raid.gang)} robbing your vault. Tap to go there.`,
+              line:
+                raid.run && chog && !jailedNow
+                  ? `${GANGS[raid.gang].name} ${verb(raid.gang)} robbing your vault. Tap to jump in and catch them!`
+                  : `${GANGS[raid.gang].name} ${verb(raid.gang)} robbing your vault. Tap to go there.`,
               chog: raid.chog,
               tone: 'alarm',
             }}
             onClick={() => {
-              view.current?.walkTo(raid.target);
+              if (raid.run && chog && !jailedNow) void defend(raid);
+              else view.current?.walkTo(raid.target);
               setRaid(null);
             }}
           />
@@ -780,6 +867,8 @@ export function CityApp() {
             onConnect={() => setSheet('connect')}
             onDefend={(l) => void defendVault(l)}
             onBreakOut={(id) => void breakOut(id)}
+            onWatch={(r) => watch(r)}
+            onDefendRaid={(r) => void defend(r)}
             info={gangInfo && gangInfo.gang === door.gang ? gangInfo.data : undefined}
             robbing={door.gang ? alarms[door.gang] : undefined}
           />
@@ -1244,6 +1333,8 @@ function DoorCard(props: {
   onConnect: () => void;
   onDefend: (level: number) => void;
   onBreakOut: (prisoner: number) => void;
+  onWatch: (r: Robbing) => void;
+  onDefendRaid: (r: Robbing) => void;
   info?: GangInfo;
   robbing?: Robbing;
 }) {
@@ -1361,6 +1452,24 @@ function DoorCard(props: {
           {GANGS[props.robbing.gang].name} {verb(props.robbing.gang)} {mine ? 'robbing you' : 'inside'} right
           now
         </p>
+      )}
+      {props.robbing && props.robbing.run && props.robbing.since > props.now - 180_000 && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {mine && props.loggedIn && !props.jailedNow && (
+            <button
+              onClick={() => props.onDefendRaid(props.robbing!)}
+              className={cn(btn, 'h-11 bg-[#ff2d55] text-[17px] text-white')}
+            >
+              <span className="pt-0.5">Defend</span>
+            </button>
+          )}
+          <button
+            onClick={() => props.onWatch(props.robbing!)}
+            className={cn(btn, 'h-11 bg-white text-[17px] text-ink', !(mine && props.loggedIn) && 'col-span-2')}
+          >
+            <span className="pt-0.5">Watch live</span>
+          </button>
+        </div>
       )}
       {mine ? (
         <>

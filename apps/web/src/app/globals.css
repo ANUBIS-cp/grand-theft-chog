@@ -135,3 +135,18 @@
     transform: scale(1) rotate(0);
   }
 }
+
+@keyframes emote-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(-40px) scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-420px) scale(1);
+  }
+}

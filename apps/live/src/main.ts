@@ -14,6 +14,7 @@ import {
   type Walker,
 } from '@chog-city/game/city';
 import { readTicket } from '@chog-city/server/ticket';
+import { raidCount, raidHello, type RaidHandler } from './raids.ts';
 import { createServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 
@@ -120,7 +121,7 @@ function spawnFor(p: Player, x: unknown, y: unknown, now: number) {
 const http = createServer((req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, players: players.size }));
+    res.end(JSON.stringify({ ok: true, players: players.size, raids: raidCount() }));
     return;
   }
   res.writeHead(404);
@@ -142,6 +143,7 @@ wss.on('connection', (ws, req) => {
     return ws.close(1008, 'too-many');
 
   let me: Player | null = null;
+  let raid: RaidHandler | null = null;
   const hello = setTimeout(() => !me && ws.close(1008, 'no-hello'), 5000);
 
   ws.on('message', (raw) => {
@@ -150,6 +152,14 @@ wss.on('connection', (ws, req) => {
     try {
       msg = JSON.parse(String(raw));
     } catch {
+      return;
+    }
+    if (raid) return raid(msg);
+    if (!me && (msg.t === 'raid' || msg.t === 'watch')) {
+      // A raid socket: it belongs to the raid room from here on, not the street.
+      clearTimeout(hello);
+      raid = raidHello(ws, msg, now);
+      if (!raid) ws.close(1008, 'no-raid');
       return;
     }
     if (!me) {

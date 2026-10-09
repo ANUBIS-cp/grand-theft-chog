@@ -42,3 +42,51 @@ export function readTicket(ticket: string, now = Date.now()): Ticket | null {
     return null;
   }
 }
+
+/** A pass into a raid room on the live server: robber, defender or watcher, and the run's setup. */
+export interface RaidPass {
+  role: 'rob' | 'defend';
+  run: string;
+  chog: number;
+  name: string;
+  /** The robber's pass carries the run's setup, so the live server needs no database. */
+  setup?: {
+    map: string;
+    tier: number;
+    breakout: boolean;
+    powers: string[];
+    guards: number[];
+    target: string;
+  };
+  exp: number;
+}
+
+export const RAID_PASS_MS = 3 * 60_000;
+
+export function makeRaidPass(p: Omit<RaidPass, 'exp'>, now = Date.now()): string {
+  const body = Buffer.from(JSON.stringify({ ...p, exp: now + RAID_PASS_MS })).toString('base64url');
+  return `${body}.${sign('raid:' + body)}`;
+}
+
+export function readRaidPass(pass: string, now = Date.now()): RaidPass | null {
+  const [body, mac] = pass.split('.');
+  if (!body || !mac) return null;
+  const want = Buffer.from(sign('raid:' + body));
+  const got = Buffer.from(mac);
+  if (want.length !== got.length || !timingSafeEqual(want, got)) return null;
+  try {
+    const p = JSON.parse(Buffer.from(body, 'base64url').toString()) as RaidPass;
+    return p.exp > now ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Signs a message from the live server to the web app (a finished raid). */
+export const signInternal = (body: string) => sign('internal:' + body);
+export function checkInternal(body: string, mac: string | null): boolean {
+  if (!mac) return false;
+  const want = Buffer.from(signInternal(body));
+  const got = Buffer.from(mac);
+  return want.length === got.length && timingSafeEqual(want, got);
+}

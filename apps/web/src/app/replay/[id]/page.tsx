@@ -39,7 +39,12 @@ export default async function ReplayPage({ params }: Props) {
   const player = { id: run.chogId, name: name(run.chogId), gang: GANGS[run.gang].name, powers: run.powers };
   const guards = run.guards.map((id) => ({ id, name: name(id) }));
   const rescue = run.prisoner ? { id: run.prisoner, name: name(run.prisoner) } : undefined;
-  const replay = { inputs: run.inputs, moved: run.moved, robbers: GANGS[run.gang].name };
+  const replay = {
+    inputs: run.inputs,
+    moved: run.moved,
+    robbers: GANGS[run.gang].name,
+    defenders: run.defenders,
+  };
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-[#0b0918]">
       <header className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-1.5 text-[13px] text-white/70 sm:px-4">
