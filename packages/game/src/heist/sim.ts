@@ -32,6 +32,10 @@ export const CONE_TAN = 0.55;
 export const SPOT = 24;
 export const CRACK = 45;
 export const ALARM = 15 * TPS;
+/** Opening the safe trips a silent alarm: this long to get out before it goes off. */
+export const LOCKDOWN = 20 * TPS;
+/** Take this share of the loose cash (and every safe) for the clean-out bonus. */
+export const SWEEP_PERCENT = 80;
 const TOUCH = 18;
 
 export interface Input {
@@ -72,7 +76,9 @@ export interface HeistState {
   phase: Phase;
   timeLeft: number;
   alarmLeft: number;
-  alarmBy: 'guard' | 'camera' | 'laser' | 'time' | null;
+  alarmBy: 'guard' | 'camera' | 'laser' | 'time' | 'lockdown' | null;
+  /** Ticks until the silent alarm from the safe goes off (0 = not started). */
+  lockdown: number;
   player: {
     x: number;
     y: number;
@@ -96,6 +102,8 @@ export interface HeistState {
   freePass: boolean;
   carried: number;
   spotted: boolean;
+  /** Got out with every safe and most of the loose cash. */
+  swept: boolean;
   score: number;
   caughtBy: number | null;
 }
@@ -103,7 +111,8 @@ export interface HeistState {
 export type HeistEvent =
   | { t: 'loot'; kind: LootKind; value: number; x: number; y: number }
   | { t: 'safe'; value: number; x: number; y: number }
-  | { t: 'alarm'; by: 'guard' | 'camera' | 'laser' | 'time'; i: number }
+  | { t: 'alarm'; by: 'guard' | 'camera' | 'laser' | 'time' | 'lockdown'; i: number }
+  | { t: 'lockdown' }
   | { t: 'calm' }
   | { t: 'pass'; i: number }
   | { t: 'power'; id: PowerId }
@@ -124,6 +133,7 @@ export function startHeist(level: Level, powers: readonly PowerId[]): HeistState
     timeLeft: level.ticks,
     alarmLeft: 0,
     alarmBy: null,
+    lockdown: 0,
     player: {
       x: level.start[0] * UNIT,
       y: level.start[1] * UNIT,
@@ -165,9 +175,18 @@ export function startHeist(level: Level, powers: readonly PowerId[]): HeistState
     freePass: false,
     carried: 0,
     spotted: false,
+    swept: false,
     score: 0,
     caughtBy: null,
   };
+}
+
+/** Escaping pays what you carry, x1.5 if nobody ever saw you, +25% for cleaning the place out. */
+export function escapeScore(level: Level, s: HeistState) {
+  const loose = level.loot.reduce((a, l) => a + LOOT_VALUE[l.kind], 0);
+  const took = level.loot.reduce((a, l, i) => a + (s.taken[i] ? LOOT_VALUE[l.kind] : 0), 0);
+  const swept = s.safes.every((x) => x.open) && took * 100 >= loose * SWEEP_PERCENT;
+  return { swept, score: Math.floor((s.carried * (s.spotted ? 2 : 3) * (swept ? 5 : 4)) / 8) };
 }
 
 function dirBetween(a: [number, number], b: [number, number]): Dir | -1 {
@@ -289,6 +308,10 @@ export function step(s: HeistState, level: Level, input: Input): HeistEvent[] {
         safe.open = true;
         s.carried += level.safes[si]!.value;
         ev.push({ t: 'safe', value: level.safes[si]!.value, x: sx, y: sy });
+        if (s.phase === 'play' && s.lockdown === 0) {
+          s.lockdown = LOCKDOWN;
+          ev.push({ t: 'lockdown' });
+        }
       }
     }
   }
@@ -306,7 +329,9 @@ export function step(s: HeistState, level: Level, input: Input): HeistEvent[] {
 
   if (s.carried > 0 && ptx === level.exit[0] && pty === level.exit[1]) {
     s.phase = 'escaped';
-    s.score = Math.floor((s.carried * (s.spotted ? 2 : 3)) / 2);
+    const out = escapeScore(level, s);
+    s.score = out.score;
+    s.swept = out.swept;
     ev.push({ t: 'escaped', score: s.score });
     return ev;
   }
@@ -382,6 +407,7 @@ export function step(s: HeistState, level: Level, input: Input): HeistEvent[] {
 
   if (s.phase === 'play') {
     if (--s.timeLeft <= 0) raiseAlarm(s, 'time', -1, ev);
+    else if (s.lockdown > 0 && --s.lockdown === 0) raiseAlarm(s, 'lockdown', -1, ev);
   } else if (s.phase === 'alarm' && --s.alarmLeft <= 0) {
     s.phase = 'busted';
     ev.push({ t: 'busted', by: null });
@@ -415,8 +441,12 @@ function moveGuards(s: HeistState, level: Level, ptx: number, pty: number) {
     const diff = ((g.want - g.a + 96) % 64) - 32;
     g.a = (g.a + Math.max(-4, Math.min(4, diff)) + 64) % 64;
     const route = level.guards[i]!;
-    // Chasing guards average 2.33 units a tick against your 3: they catch you only if you run into a corner.
-    const speed = g.mode === 'chase' ? (s.tick % 3 === 0 ? 3 : 2) : SPEED.guard;
+    // Chasing guards start at 2.33 units a tick against your 3 and speed up the longer the alarm rings:
+    // 2.67 after 5 seconds, a match for you after 10. Get out early or get cornered.
+    const rang = ALARM - s.alarmLeft;
+    const chase =
+      rang >= 10 * TPS ? 3 : rang >= 5 * TPS ? (s.tick % 3 === 0 ? 2 : 3) : s.tick % 3 === 0 ? 3 : 2;
+    const speed = g.mode === 'chase' ? chase : SPEED.guard;
     const wasMoving = g.dir !== -1;
     travel(g, speed, () => {
       const tx = g.x / UNIT;
@@ -526,7 +556,7 @@ function usePower(s: HeistState, level: Level, slot: number, ev: HeistEvent[]) {
       });
       break;
     case 'bribe':
-      if (s.phase === 'alarm' && s.alarmBy !== 'time') {
+      if (s.phase === 'alarm' && s.alarmBy !== 'time' && s.alarmBy !== 'lockdown') {
         s.phase = 'play';
         s.alarmLeft = 0;
         s.alarmBy = null;

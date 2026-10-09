@@ -1,7 +1,15 @@
 'use client';
 import { GANGS, type GangId } from '@chog-city/data';
 import type { Place } from '@chog-city/game/city';
-import { FIRST_VAULT, GUARD_PRICE, POWERS, vaultDef, type PowerId } from '@chog-city/game/heist';
+import {
+  BUST_FINE,
+  FIRST_VAULT,
+  GUARD_PRICE,
+  POWERS,
+  SAFE_BY_TIER,
+  vaultDef,
+  type PowerId,
+} from '@chog-city/game/heist';
 import {
   ArrowBendUpLeft,
   ArrowSquareOut,
@@ -1340,6 +1348,15 @@ function DoorCard(props: {
       <p className="mt-2 inline-flex items-center gap-1.5 text-[13px] text-white/70">
         <ShieldCheck size={15} weight="fill" /> Defence: {DEFENCE[row?.tier ?? 0]}
       </p>
+      {!mine && (
+        <ul className="mt-2 grid gap-0.5 text-[13px] text-white/70">
+          <li>
+            <strong className="text-white">Safe: {money(SAFE_BY_TIER[row?.tier ?? 0] ?? 0)}</strong>. Loose
+            cash is small change.
+          </li>
+          <li>Caught: your gang pays what you carried + {money(BUST_FINE)}, and 30 min in jail.</li>
+        </ul>
+      )}
       {props.robbing && props.robbing.since > props.now - 180_000 && (
         <p className="mt-2 flex items-center gap-2 rounded-[8px] bg-[#ff2d55] px-2.5 py-1.5 text-[13px] font-semibold text-ink">
           <span className="h-2 w-2 animate-pulse rounded-full bg-ink" />

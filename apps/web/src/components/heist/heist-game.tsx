@@ -1,6 +1,7 @@
 'use client';
 import type { SkillId } from '@chog-city/data';
 import {
+  BUST_FINE,
   POWERS,
   TPS,
   IDLE,
@@ -16,7 +17,7 @@ import {
   type PowerId,
   type VaultDef,
 } from '@chog-city/game/heist';
-import { ArrowClockwise, SpeakerHigh, SpeakerSlash, Vault, X } from '@phosphor-icons/react';
+import { ArrowClockwise, SpeakerHigh, SpeakerSlash, Star, Vault, X } from '@phosphor-icons/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
@@ -103,6 +104,12 @@ interface Hud {
   score: number;
   spotted: boolean;
   caughtBy: number | null;
+  /** Seconds left on the silent alarm the safe tripped (0 = not tripped). */
+  lockdown: number;
+  /** What the safes hold, and how much of that you've opened. */
+  safeValue: number;
+  safeTaken: number;
+  swept: boolean;
 }
 
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
@@ -225,6 +232,7 @@ export function HeistGame({
     let fxAcc = 0;
     let lastKey = '';
     let crackTick = 0;
+    let lastLock = 0;
     const DT = 1000 / TPS;
     const frame = (now: number) => {
       const st = game.current!;
@@ -281,7 +289,15 @@ export function HeistGame({
         score: st.s.score,
         spotted: st.s.spotted,
         caughtBy: st.s.caughtBy,
+        lockdown: st.s.phase === 'play' ? Math.ceil(st.s.lockdown / TPS) : 0,
+        safeValue: level.safes.reduce((a, x) => a + x.value, 0),
+        safeTaken: level.safes.reduce((a, x, i) => a + (st.s.safes[i]!.open ? x.value : 0), 0),
+        swept: st.s.swept,
       };
+      // Count the last seconds of the silent alarm out loud.
+      if (next.lockdown && next.lockdown !== lastLock && !scriptRef.current)
+        sound.current?.tick(next.lockdown <= 5);
+      lastLock = next.lockdown;
       const key = JSON.stringify(next);
       if (key !== lastKey) {
         lastKey = key;
@@ -346,6 +362,12 @@ export function HeistGame({
             st.fx.flash = 0.35;
             st.fx.flashColor = '#ffd666';
             st.fx.shake = 6;
+            break;
+          case 'lockdown':
+            sfx?.lockdown();
+            st.fx.flash = 0.25;
+            st.fx.flashColor = '#ff9f1c';
+            st.fx.float(px, py - t * 0.9, 'SILENT ALARM!', '#ffb347', true);
             break;
           case 'alarm':
             sfx?.alarmOn();
@@ -534,6 +556,8 @@ export function HeistGame({
   const alarm = phase === 'alarm';
   const over = phase === 'escaped' || phase === 'busted';
   const caughtBy = hud?.caughtBy != null ? guards[hud.caughtBy % guards.length] : null;
+  // A practice run walks you through it step by step.
+  const coach = !real && !replay && !rescue;
 
   return (
     <div className="flex h-full flex-col bg-[#0b0918] text-white">
@@ -568,13 +592,15 @@ export function HeistGame({
         <div
           className={cn(
             'font-display text-[32px] leading-none tabular-nums sm:text-[36px]',
-            alarm ? 'text-[#ff4d6d]' : 'text-white',
+            alarm ? 'text-[#ff4d6d]' : hud?.lockdown ? 'animate-pulse text-[#ffb347]' : 'text-white',
           )}
-          aria-label={alarm ? 'Seconds to get out' : 'Time left'}
+          aria-label={alarm ? 'Seconds to get out' : hud?.lockdown ? 'Seconds before the alarm' : 'Time left'}
         >
           {alarm
             ? `0:${String(hud?.seconds ?? 0).padStart(2, '0')}`
-            : clock(hud ? hud.seconds * TPS : level.ticks)}
+            : hud?.lockdown
+              ? `0:${String(hud.lockdown).padStart(2, '0')}`
+              : clock(hud ? hud.seconds * TPS : level.ticks)}
         </div>
         <div className="flex items-center gap-1 justify-self-end">
           {rescue ? (
@@ -616,13 +642,12 @@ export function HeistGame({
         onPointerCancel={onPointerUp}
       >
         <canvas ref={canvasRef} className="absolute inset-0" />
-        {alarm && (
-          <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center">
-            <div className="rounded-[6px] border-2 border-ink bg-[#ff2d55] px-3 pb-0.5 pt-1.5 font-display text-[18px] uppercase leading-none tracking-wide text-white shadow-[2px_2px_0_0_#000]">
-              Alarm! Get out
-            </div>
+        {hud?.started && !over && (
+          <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center px-3">
+            <Goal hud={hud} rescue={rescue} />
           </div>
         )}
+        {coach && hud && !over && <Coach hud={hud} />}
         {joy && (
           <div className="pointer-events-none absolute" style={{ left: joy.x, top: joy.y }}>
             <div className="absolute -left-9 -top-9 h-[72px] w-[72px] rounded-full border-2 border-white/30 bg-white/5" />
@@ -638,6 +663,8 @@ export function HeistGame({
             escaped={phase === 'escaped'}
             score={hud.score}
             carried={hud.carried}
+            safe={hud.safeTaken}
+            swept={hud.swept}
             clean={!hud.spotted}
             owner={owner.name}
             caughtBy={caughtBy}
@@ -738,6 +765,87 @@ export function HeistGame({
   );
 }
 
+/** The one thing to do right now, always at the top of the vault. */
+function Goal({ hud, rescue }: { hud: Hud; rescue?: HeistChog }) {
+  const box =
+    'flex items-center gap-2 rounded-[10px] border-[3px] border-ink px-3 pb-1 pt-1.5 font-display text-[17px] uppercase leading-none shadow-[0_4px_0_0_#000] sm:text-[19px]';
+  if (hud.phase === 'alarm')
+    return <div className={cn(box, 'animate-pulse bg-[#ff2d55] text-white')}>Alarm! Get out the exit</div>;
+  if (hud.lockdown)
+    return (
+      <div className={cn(box, 'bg-[#ffb347] text-ink')}>
+        {rescue ? 'Cell open! ' : 'Safe open! '}Out before the alarm: {hud.lockdown}s
+      </div>
+    );
+  if (hud.safeTaken === 0)
+    return (
+      <div className={cn(box, 'bg-[#ffd666] text-ink')}>
+        <Vault size={18} weight="fill" />
+        {rescue ? 'Open the cell at the top' : `Crack the safe: ${money(hud.safeValue)}`}
+      </div>
+    );
+  return <div className={cn(box, 'bg-[#7dffa8] text-ink')}>Get out the green exit</div>;
+}
+
+/** Practice: the steps of a heist, ticked off as you do them. */
+function Coach({ hud }: { hud: Hud }) {
+  const steps = [
+    { label: 'Move', tip: 'Arrow keys or WASD. On a phone, drag anywhere.', done: hud.started },
+    {
+      label: 'Grab some cash',
+      tip: 'Walk over it. Loose cash is small change.',
+      done: hud.carried > hud.safeTaken,
+    },
+    {
+      label: 'Crack the safe',
+      tip: 'Walk into it and keep pushing. Stay out of the flashlights: if one stays on you, the alarm goes off.',
+      done: hud.safeTaken > 0,
+    },
+    {
+      label: 'Get out',
+      tip: 'Opening the safe trips a silent alarm. Reach the green exit before it goes off.',
+      done: hud.phase === 'escaped',
+    },
+  ];
+  const now = steps.findIndex((x) => !x.done);
+  return (
+    <div className="pointer-events-none absolute bottom-3 left-3 hidden w-[250px] rounded-[14px] border-[3px] border-ink bg-[#17132b]/95 p-3 shadow-[0_5px_0_0_#000] sm:block">
+      <p className="font-display text-[14px] uppercase tracking-wide text-white/55">Practice</p>
+      <ol className="mt-1 grid gap-1.5">
+        {steps.map((x, i) => (
+          <li key={x.label} className="flex items-start gap-2">
+            <span
+              className={cn(
+                'mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border-2 text-[11px] font-bold',
+                x.done
+                  ? 'border-[#3ddc84] bg-[#3ddc84] text-ink'
+                  : i === now
+                    ? 'border-[#ffd666] text-[#ffd666]'
+                    : 'border-white/30 text-white/40',
+              )}
+            >
+              {x.done ? '✓' : i + 1}
+            </span>
+            <span className="min-w-0">
+              <span
+                className={cn(
+                  'block text-[14px] font-semibold leading-tight',
+                  x.done ? 'text-white/45 line-through' : i === now ? 'text-white' : 'text-white/50',
+                )}
+              >
+                {x.label}
+              </span>
+              {i === now && (
+                <span className="mt-0.5 block text-[12px] leading-snug text-white/65">{x.tip}</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function StartHint({ player, rescue }: { player: HeistGameProps['player']; rescue?: HeistChog }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
@@ -749,7 +857,7 @@ function StartHint({ player, rescue }: { player: HeistGameProps['player']; rescu
           <span className="sm:hidden">Drag anywhere. </span>
           {rescue
             ? `Open the cell at the top to free ${rescue.name}, stay out of the flashlights, walk out the green EXIT.`
-            : 'Grab cash, stay out of the flashlights, walk out the green EXIT.'}
+            : 'Crack the safe for the big money, stay out of the flashlights, walk out the green EXIT.'}
         </div>
       </div>
     </div>
@@ -760,6 +868,8 @@ function EndCard({
   escaped,
   score,
   carried,
+  safe,
+  swept,
   clean,
   owner,
   caughtBy,
@@ -772,6 +882,8 @@ function EndCard({
   escaped: boolean;
   score: number;
   carried: number;
+  safe: number;
+  swept: boolean;
   clean: boolean;
   owner: string;
   caughtBy: HeistChog | null | undefined;
@@ -812,6 +924,30 @@ function EndCard({
         >
           {escaped ? (rescue ? 'Freed' : 'Escaped') : 'Busted'}
         </div>
+        {!rescue && (
+          <div className="mt-3 flex justify-center gap-1.5" aria-label="Stars">
+            {[
+              { on: escaped, label: 'Got out' },
+              { on: escaped && safe > 0, label: 'Cracked the safe' },
+              { on: escaped && clean, label: 'Never seen' },
+            ].map((x, i) => (
+              <span key={x.label} className="flex w-[74px] flex-col items-center gap-0.5">
+                <Star
+                  size={34}
+                  weight="fill"
+                  className={cn(
+                    'drop-shadow-[0_2px_0_#000]',
+                    x.on ? 'animate-[star-pop_420ms_ease-out_both] text-[#ffc93c]' : 'text-ink/15',
+                  )}
+                  style={{ animationDelay: `${200 + i * 180}ms` }}
+                />
+                <span className={cn('text-[11px] font-semibold leading-tight', !x.on && 'text-ink-soft')}>
+                  {x.label}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
         {real && !real.saved ? (
           <p className="mt-5 animate-pulse text-[15px] text-ink-soft">
             {rescue ? 'Unlocking…' : 'Counting the cash…'}
@@ -842,12 +978,20 @@ function EndCard({
             </p>
             <ul className="mx-auto mt-4 max-w-[240px] space-y-1 text-[14px]">
               <li className="flex justify-between">
-                <span>Grabbed</span>
-                <span className="font-mono tabular-nums">{money(carried)}</span>
+                <span>Loose cash</span>
+                <span className="font-mono tabular-nums">{money(carried - safe)}</span>
+              </li>
+              <li className={cn('flex justify-between', !safe && 'text-ink-soft')}>
+                <span>Safe</span>
+                <span className="font-mono tabular-nums">{safe ? money(safe) : 'not opened'}</span>
               </li>
               <li className={cn('flex justify-between', !clean && 'text-ink-soft line-through')}>
                 <span>Never seen</span>
                 <span className="font-mono">×1.5</span>
+              </li>
+              <li className={cn('flex justify-between', !swept && 'text-ink-soft line-through')}>
+                <span>Cleaned out</span>
+                <span className="font-mono">+25%</span>
               </li>
               {real?.saved?.result?.revenge && (
                 <li className="flex justify-between font-semibold text-pink-deep">
@@ -880,13 +1024,16 @@ function EndCard({
               <p className="mt-3 text-[14px] leading-snug">
                 Your Chog is in jail for 30 minutes.
                 {real.saved?.result?.moved
-                  ? ` ${real.myGang} paid ${owner} a ${money(real.saved.result.moved)} fine.`
+                  ? ` ${real.myGang} paid ${owner} ${money(real.saved.result.moved)}: what you carried plus the fine.`
                   : ''}
               </p>
             ) : replay ? (
               <p className="mt-3 text-[14px] text-ink-soft">Off to jail for 30 minutes.</p>
             ) : (
-              <p className="mt-3 text-[14px] text-ink-soft">You dropped {money(carried)}.</p>
+              <p className="mt-3 text-[14px] text-ink-soft">
+                In a real hit your gang would pay {money(carried + BUST_FINE)}: what you carried plus the
+                fine.
+              </p>
             )}
           </>
         )}

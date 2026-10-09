@@ -11,6 +11,8 @@ export const START_CASH = 10_000;
 export const JAIL_MS = 30 * 60_000;
 /** Hitting a gang that robbed yours in the last day pays this much more. */
 export const REVENGE_PERCENT = 25;
+/** Getting caught: your gang pays the vault everything you were carrying, plus this. */
+export const BUST_FINE = 250;
 export const REVENGE_MS = 24 * 3_600_000;
 /** A run must be finished within this long of starting. */
 export const RUN_MAX_MS = 15 * 60_000;
@@ -55,7 +57,7 @@ export const maxTicks = (level: Level) => level.ticks + ALARM + TPS;
 
 export interface Settlement {
   state: HeistState;
-  /** Cash that moves: from the vault to the robber's gang on an escape, from the robber's gang to the vault on a bust. */
+  /** Cash that moves: from the vault to the robber's gang on an escape; on a bust, from the robber's gang to the vault (what was carried, plus the fine). */
   moved: number;
 }
 
@@ -73,5 +75,5 @@ export function settle(
     const worth = Math.floor((state.score * (100 + (revenge ? REVENGE_PERCENT : 0))) / 100);
     return { state, moved: Math.max(0, Math.min(worth, vaultCash)) };
   }
-  return { state, moved: Math.max(0, Math.min(Math.floor(state.carried / 2), robberCash)) };
+  return { state, moved: Math.max(0, Math.min(state.carried + BUST_FINE, robberCash)) };
 }

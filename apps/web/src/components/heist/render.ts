@@ -18,7 +18,6 @@ import {
   type HeistState,
   type Level,
 } from '@chog-city/game/heist';
-import { drawPiece, makePiece, type Piece } from '../chog/piece';
 import type { Fx } from './fx';
 
 // Draws a vault in a 3/4 top-down view: floors, raised walls, furniture, the people in it, and the lights.
@@ -64,6 +63,15 @@ function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number,
   g.roundRect(x, y, w, h, r);
 }
 
+/** A Chog's face as a round token. (cx, cy) is the centre of the circle inside the canvas, in CSS px. */
+interface Face {
+  c: HTMLCanvasElement;
+  w: number;
+  h: number;
+  cx: number;
+  cy: number;
+}
+
 export class VaultRenderer {
   t = 32;
   lift = 10;
@@ -73,7 +81,7 @@ export class VaultRenderer {
   private base!: HTMLCanvasElement;
   private dark!: HTMLCanvasElement;
   private sprites: Record<string, HTMLCanvasElement> = {};
-  private faces: { player?: Piece; guards: (Piece | undefined)[] } = { guards: [] };
+  private faces: { player?: Face; guards: (Face | undefined)[] } = { guards: [] };
   /** Screen size (CSS px), and the camera's top-left corner in the world. */
   private view = { w: 0, h: 0 };
   private cam = { x: 0, y: 0, ready: false };
@@ -627,13 +635,65 @@ export class VaultRenderer {
 
   private buildFaces() {
     const { t, dpr } = this;
-    const piece = (img: HTMLImageElement, base: string, cap: boolean): Piece | undefined => {
+    const face = (img: HTMLImageElement, ring: string, cap: boolean): Face | undefined => {
       if (!img.complete || !img.naturalWidth) return undefined;
-      // Your Chog is drawn a little bigger than a tile so its picture reads on a phone.
-      return makePiece(img, { base, size: Math.round(t * (cap ? 0.95 : 1.12)), cap }, dpr);
+      // Your Chog is drawn a little bigger than a tile so its face reads on a phone.
+      const d = Math.round(t * (cap ? 1 : 1.3));
+      const pad = cap ? Math.round(d * 0.35) : 4;
+      const c = canvas((d + 8) * dpr, (d + pad + 4) * dpr);
+      const g = c.getContext('2d')!;
+      g.scale(dpr, dpr);
+      const cx = (d + 8) / 2;
+      const cy = pad + d / 2;
+      const r = d / 2;
+      g.save();
+      g.beginPath();
+      g.arc(cx, cy, r - 2, 0, Math.PI * 2);
+      g.clip();
+      // Crop toward the face: the art is a bust, so zoom in a little on the upper middle.
+      const sw = img.naturalWidth * 0.78;
+      g.drawImage(img, img.naturalWidth * 0.11, img.naturalHeight * 0.04, sw, sw, cx - r, cy - r, d, d);
+      g.restore();
+      g.lineWidth = 3;
+      g.strokeStyle = ring;
+      g.beginPath();
+      g.arc(cx, cy, r - 2.5, 0, Math.PI * 2);
+      g.stroke();
+      g.lineWidth = 2;
+      g.strokeStyle = INK;
+      g.beginPath();
+      g.arc(cx, cy, r - 0.5, 0, Math.PI * 2);
+      g.stroke();
+      if (cap) {
+        // A guard's cap.
+        const cw = d * 0.78;
+        const ch = d * 0.34;
+        const top = pad - ch * 0.55;
+        g.fillStyle = '#1b2a52';
+        g.strokeStyle = INK;
+        g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(cx - cw / 2, top + ch);
+        g.quadraticCurveTo(cx - cw / 2, top, cx, top);
+        g.quadraticCurveTo(cx + cw / 2, top, cx + cw / 2, top + ch);
+        g.closePath();
+        g.fill();
+        g.stroke();
+        g.fillStyle = '#0d1428';
+        roundRect(g, cx - cw * 0.58, top + ch - 2, cw * 1.16, ch * 0.32, 3);
+        g.fill();
+        g.stroke();
+        g.fillStyle = '#ffd666';
+        g.beginPath();
+        g.arc(cx, top + ch * 0.5, ch * 0.2, 0, Math.PI * 2);
+        g.fill();
+        g.lineWidth = 1.5;
+        g.stroke();
+      }
+      return { c, w: d + 8, h: d + pad + 4, cx, cy };
     };
-    this.faces.player = piece(this.images.player, '#ff4f9a', false);
-    this.faces.guards = this.images.guards.map((img) => piece(img, '#3b5bdb', true));
+    this.faces.player = face(this.images.player, '#ff4f9a', false);
+    this.faces.guards = this.images.guards.map((img) => face(img, '#3b5bdb', true));
   }
 
   // ---------- frame ----------
@@ -698,8 +758,27 @@ export class VaultRenderer {
       g.restore();
     }
 
-    // Safes.
+    // Safes, with a bouncing marker over any still shut: that's where the money is.
     level.safes.forEach((sf, i) => this.safe(g, sf.x, sf.y, s.safes[i]!.open, now));
+    if (s.phase === 'play')
+      level.safes.forEach((sf, i) => {
+        if (s.safes[i]!.open) return;
+        const cx = this.tx(sf.x) + t / 2;
+        const by = this.ty(sf.y) - this.lift - t * 0.35 - Math.abs(Math.sin(now / 260)) * t * 0.22;
+        g.save();
+        g.fillStyle = '#ffd666';
+        g.strokeStyle = INK;
+        g.lineWidth = 2;
+        g.lineJoin = 'round';
+        g.beginPath();
+        g.moveTo(cx - t * 0.26, by - t * 0.3);
+        g.lineTo(cx + t * 0.26, by - t * 0.3);
+        g.lineTo(cx, by);
+        g.closePath();
+        g.fill();
+        g.stroke();
+        g.restore();
+      });
 
     // People, back to front.
     const people: { y: number; draw: () => void }[] = guards.map((gu) => ({
@@ -1013,21 +1092,18 @@ export class VaultRenderer {
       g.restore();
     }
     const face = this.faces.player;
-    const alpha = s.player.hide > 0 ? 0.35 + 0.1 * Math.sin(now / 60) : 1;
-    if (face) {
-      const d = s.player.dir === -1 ? s.player.face : s.player.dir;
-      drawPiece(g, face, x, y + t * 0.3, { moving, seed: 0, face: DX[d]! < 0 ? -1 : 1, alpha }, now);
-    } else {
-      g.save();
-      g.globalAlpha = alpha;
-      g.translate(x, y - bob);
-      g.scale(squash, 2 - squash);
+    g.save();
+    g.globalAlpha = s.player.hide > 0 ? 0.35 + 0.1 * Math.sin(now / 60) : 1;
+    g.translate(x, y - bob);
+    g.scale(squash, 2 - squash);
+    if (face) g.drawImage(face.c, -face.cx, -face.cy, face.w, face.h);
+    else {
       g.fillStyle = '#ff4f9a';
       g.beginPath();
       g.arc(0, 0, t * 0.44, 0, Math.PI * 2);
       g.fill();
-      g.restore();
     }
+    g.restore();
     if (s.player.magnet > 0) {
       g.save();
       g.strokeStyle = 'rgba(255, 214, 102, 0.5)';
@@ -1047,19 +1123,24 @@ export class VaultRenderer {
     g.ellipse(x, y + t * 0.38, t * 0.34, t * 0.12, 0, 0, Math.PI * 2);
     g.fill();
     const face = this.faces.guards[i % Math.max(1, this.faces.guards.length)];
-    if (face) {
-      // A stunned guard rocks on its base and goes dim.
-      g.save();
-      g.translate(x, y + t * 0.3);
-      if (stunned) g.rotate(Math.sin(now / 120) * 0.18);
-      drawPiece(g, face, 0, 0, { moving: false, seed: i * 0.37, face: 1, alpha: stunned ? 0.55 : 1 }, now);
-      g.restore();
-    } else {
-      g.fillStyle = stunned ? '#2a3a7a' : '#3b5bdb';
+    const sway = stunned ? Math.sin(now / 120) * 0.15 : 0;
+    g.save();
+    g.translate(x, y);
+    g.rotate(sway);
+    if (face) g.drawImage(face.c, -face.cx, -face.cy, face.w, face.h);
+    else {
+      g.fillStyle = '#3b5bdb';
       g.beginPath();
-      g.arc(x, y, t * 0.44, 0, Math.PI * 2);
+      g.arc(0, 0, t * 0.44, 0, Math.PI * 2);
       g.fill();
     }
+    if (stunned) {
+      g.fillStyle = 'rgba(40, 40, 60, 0.45)';
+      g.beginPath();
+      g.arc(0, 0, t * 0.44, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.restore();
   }
 
   private safe(g: CanvasRenderingContext2D, x: number, y: number, open: boolean, now: number) {

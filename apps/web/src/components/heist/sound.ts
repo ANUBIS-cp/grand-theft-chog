@@ -90,6 +90,18 @@ export class Sound {
     [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.05 + i * 0.07, 0.25, 'triangle', 0.12));
   }
 
+  /** The safe tripped the silent alarm: a two-note warning. */
+  lockdown() {
+    this.tone(880, 0, 0.14, 'square', 0.07);
+    this.tone(660, 0.16, 0.14, 'square', 0.07);
+    this.tone(880, 0.32, 0.14, 'square', 0.07);
+  }
+
+  /** One second gone on the countdown. */
+  tick(urgent: boolean) {
+    this.tone(urgent ? 1400 : 1000, 0, 0.05, 'square', urgent ? 0.06 : 0.035);
+  }
+
   suspect() {
     this.tone(660, 0, 0.09, 'sine', 0.08, 880);
   }

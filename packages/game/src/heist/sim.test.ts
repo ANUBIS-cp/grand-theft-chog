@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { UNIT, buildLevel, distances, type Dir, type VaultDef } from './level.ts';
 import { powersFor } from './powers.ts';
-import { IDLE, inLight, replay, startHeist, step, type Input } from './sim.ts';
+import { IDLE, LOCKDOWN, inLight, replay, startHeist, step, type Input } from './sim.ts';
 import { FIRST_VAULT, VAULTS } from './vaults.ts';
 
 const go = (d: Dir | -1, n: number): Input[] => Array.from({ length: n }, () => ({ d, p: -1 }));
@@ -74,9 +74,21 @@ describe('loot and getting out', () => {
     const s = startHeist(l, []);
     for (const i of [...go(UP, 8), ...go(LEFT, 8), ...go(DOWN, 8), ...go(RIGHT, 8), ...go(DOWN, 8)])
       step(s, l, i);
-    expect(s.carried).toBe(30);
+    expect(s.carried).toBe(60);
     expect(s.phase).toBe('escaped');
-    expect(s.score).toBe(45);
+    expect(s.score).toBe(90);
+    expect(s.swept).toBe(false);
+  });
+
+  it('pays +25% on top for cleaning the place out', () => {
+    const lv = buildLevel(room(['#####', '#$$.#', '#.@.#', '##E##']));
+    const s = startHeist(lv, []);
+    for (const i of [...go(UP, 8), ...go(LEFT, 8), ...go(DOWN, 8), ...go(RIGHT, 8), ...go(DOWN, 8)])
+      step(s, lv, i);
+    expect(s.phase).toBe('escaped');
+    expect(s.swept).toBe(true);
+    // 100 carried, x1.5 never seen, +25% cleaned out.
+    expect(s.score).toBe(187);
   });
 
   it('cracks a safe by pushing into it', () => {
@@ -87,6 +99,19 @@ describe('loot and getting out', () => {
     step(s, lv, { d: UP, p: -1 });
     expect(s.safes[0]!.open).toBe(true);
     expect(s.carried).toBe(100);
+  });
+
+  it('opening the safe trips a silent alarm: 20 seconds to get out', () => {
+    const lv = buildLevel(room(['#####', '#.S.#', '#.@.#', '##E##']));
+    const s = startHeist(lv, []);
+    for (const i of go(UP, 45)) step(s, lv, i);
+    // It starts counting the tick the safe opens.
+    expect(s.lockdown).toBe(LOCKDOWN - 1);
+    for (const i of go(-1, LOCKDOWN - 2)) step(s, lv, i);
+    expect(s.phase).toBe('play');
+    step(s, lv, IDLE);
+    expect(s.phase).toBe('alarm');
+    expect(s.alarmBy).toBe('lockdown');
   });
 
   it('cracks four times faster with a lockpick', () => {
@@ -181,6 +206,6 @@ describe('replays', () => {
     const l = buildLevel(FIRST_VAULT);
     const s = replay(l, [], [...go(UP, 16), ...go(DOWN, 16), ...go(DOWN, 8)]);
     expect(s.phase).toBe('escaped');
-    expect(s.score).toBe(Math.floor(25 * 1.5));
+    expect(s.score).toBe(Math.floor(50 * 1.5));
   });
 });

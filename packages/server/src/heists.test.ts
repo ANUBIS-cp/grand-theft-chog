@@ -1,6 +1,6 @@
 import { CHOGS, gangOptions } from '@chog-city/data';
 import { HOUR, dayStart } from '@chog-city/game';
-import { START_CASH, encodeInputs, type Input } from '@chog-city/game/heist';
+import { BUST_FINE, START_CASH, encodeInputs, type Input } from '@chog-city/game/heist';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   defend,
@@ -83,11 +83,12 @@ describe('the gang war', () => {
     expect((await recentHits(db))[0]).toMatchObject({ gang: 'lazoor', target: 'mcga', result: 'escaped' });
   });
 
-  it('a bust jails the Chog and nothing is taken', async () => {
+  it('a bust jails the Chog and its gang pays the fine to the vault', async () => {
     const run = await startRun(db, { address: A, chogId: lazoorChog, target: 'mcga', now: NOW });
     const out = await finishRun(db, { address: A, runId: run.id, inputs: '', now: NOW + 60_000 });
     expect(out.result).toBe('busted');
-    expect((await vaultCash(db)).mcga).toBe(START_CASH);
+    expect((await vaultCash(db)).mcga).toBe(START_CASH + BUST_FINE);
+    expect((await vaultCash(db)).lazoor).toBe(START_CASH - BUST_FINE);
     expect(
       await refused(startRun(db, { address: A, chogId: lazoorChog, target: 'robbers', now: NOW + 70_000 })),
     ).toBe('jailed');

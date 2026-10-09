@@ -18,7 +18,13 @@ export const Tile = { Floor: 0, Wall: 1, Desk: 2, Pillar: 3, Safe: 4, Exit: 5, P
 export type Tile = (typeof Tile)[keyof typeof Tile];
 
 export type LootKind = 'coin' | 'cash' | 'bag';
-export const LOOT_VALUE: Record<LootKind, number> = { coin: 5, cash: 25, bag: 100 };
+export const LOOT_VALUE: Record<LootKind, number> = { coin: 10, cash: 50, bag: 150 };
+
+/**
+ * What a gang vault's safe holds at each defence level. Loose cash on the floor is small change next to it,
+ * so a quick grab at the door barely pays and the real money means going for the safe.
+ */
+export const SAFE_BY_TIER = [600, 1_000, 1_800, 3_000] as const;
 
 export interface GuardDef {
   /** Waypoints, walked in a loop. A single waypoint is a guard who stands and looks around. */
@@ -76,6 +82,8 @@ export interface VaultDef {
   cameras: CameraDef[];
   lasers: Omit<LaserDef, 'x' | 'y'>[];
   safeValue: number;
+  /** The safe's value by defence level instead (gang vaults). */
+  safeByTier?: readonly number[];
   /** Seconds before the cops arrive. */
   seconds: number;
 }
@@ -130,7 +138,7 @@ export function buildLevel(def: VaultDef, tier = 3): Level {
       if (ch === 'c') loot.push({ x, y, kind: 'coin' });
       if (ch === '$') loot.push({ x, y, kind: 'cash' });
       if (ch === 'B') loot.push({ x, y, kind: 'bag' });
-      if (ch === 'S') safes.push({ x, y, value: def.safeValue });
+      if (ch === 'S') safes.push({ x, y, value: def.safeByTier?.[tier] ?? def.safeValue });
       if (ch === 'L') laserTiles.push([x, y]);
       if (ch === '@') start = [x, y];
       if (ch === 'E') exit = [x, y];
