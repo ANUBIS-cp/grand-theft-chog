@@ -1,5 +1,6 @@
 import { BH, BW, CITY, Ground, ROAD, groundAt, type Place, type Prop } from '@chog-city/game/city';
 import { chogImage } from '@/lib/images';
+import { drawPiece, hopHeight, makePiece, type Piece } from '../chog/piece';
 
 // Draws the city at night in the same 3/4 view as the vaults: ground tiles, buildings (roof at the back, front
 // wall at the bottom of the footprint, so nobody is ever hidden behind one), lamps, trees, and the Chogs on the
@@ -60,6 +61,13 @@ function makeCanvas(w: number, h: number) {
   return c;
 }
 
+/** A steady 0-1 number per person, so pieces don't all hop in step. */
+function keySeed(key: string) {
+  let h = 7;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+  return hash(h, 3);
+}
+
 const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US');
 
 /** Darker or lighter version of a #rrggbb colour. */
@@ -86,7 +94,7 @@ export class CityRenderer {
   private dark!: HTMLCanvasElement;
   private tiles: Record<string, HTMLCanvasElement> = {};
   private buildings = new Map<string, { c: HTMLCanvasElement; key: string }>();
-  private faces = new Map<string, HTMLCanvasElement>();
+  private faces = new Map<string, Piece>();
   private images = new Map<number, Img>();
   view = { w: 0, h: 0 };
   cam = { x: 0, y: 0, ready: false };
@@ -846,138 +854,92 @@ export class CityRenderer {
 
   // ---------- people ----------
 
-  private face(chog: number | null, d: number): HTMLCanvasElement | undefined {
-    const key = `${chog ?? 'guest'}:${d}`;
-    const have = this.faces.get(key);
-    if (have) return have;
-    const img = chog === null ? undefined : this.image(chog);
-    if (chog !== null && !img) return undefined;
-    const { dpr } = this;
-    const c = makeCanvas(d * dpr, d * dpr);
-    const g = c.getContext('2d')!;
-    g.scale(dpr, dpr);
-    const r = d / 2;
-    g.save();
-    g.beginPath();
-    g.arc(r, r, r - 1.5, 0, Math.PI * 2);
-    g.clip();
-    if (img) {
-      const sw = img.naturalWidth * 0.78;
-      g.drawImage(img, img.naturalWidth * 0.11, img.naturalHeight * 0.04, sw, sw, 0, 0, d, d);
-    } else {
-      // A guest: a plain grey Chog shape.
-      g.fillStyle = '#9b97b0';
-      g.fillRect(0, 0, d, d);
-      g.fillStyle = '#7a7690';
-      g.beginPath();
-      g.arc(r, r * 1.25, r * 0.7, 0, Math.PI * 2);
-      g.fill();
-      g.fillStyle = '#ffffff';
-      for (const ex of [0.72, 1.28]) {
-        g.beginPath();
-        g.arc(r * ex, r * 0.85, r * 0.18, 0, Math.PI * 2);
-        g.fill();
-      }
-      g.fillStyle = INK;
-      for (const ex of [0.72, 1.28]) {
-        g.beginPath();
-        g.arc(r * ex, r * 0.88, r * 0.08, 0, Math.PI * 2);
-        g.fill();
-      }
-    }
-    g.restore();
-    g.strokeStyle = INK;
-    g.lineWidth = 2.5;
-    g.beginPath();
-    g.arc(r, r, r - 1.5, 0, Math.PI * 2);
-    g.stroke();
-    this.faces.set(key, c);
-    return c;
+  /** Card width for a person, in CSS px. You are drawn a little bigger. */
+  private cardSize(p: Person) {
+    return Math.round(this.t * (p.me ? 1.3 : 1.12));
   }
 
+  private piece(p: Person): Piece {
+    const size = this.cardSize(p);
+    const img = p.chog === null ? undefined : this.image(p.chog);
+    const ready = p.chog === null || !!img;
+    const key = `${p.chog ?? 'guest'}:${size}:${p.color}:${p.me ? 1 : 0}`;
+    const have = this.faces.get(key);
+    if (have) return have;
+    const piece = makePiece(img, { base: p.color, size, gold: p.me }, this.dpr);
+    // A piece drawn while its picture loads is not kept, so the picture shows as soon as it arrives.
+    if (ready) this.faces.set(key, piece);
+    return piece;
+  }
+
+  /** Remembers when each person last turned round or did an emote, to spin or wiggle their piece. */
+  private motion = new Map<string, { face: -1 | 1; turnedAt: number; emoteAt: number }>();
+
   private drawPerson(p: Person, now: number) {
-    const { g, t } = this;
+    const { g } = this;
+    let m = this.motion.get(p.key);
+    if (!m) this.motion.set(p.key, (m = { face: p.face, turnedAt: -1e9, emoteAt: -1e9 }));
+    if (m.face !== p.face) {
+      m.face = p.face;
+      m.turnedAt = now;
+    }
+    const piece = this.piece(p);
     const x = this.sx(p.x);
-    const y = this.sy(p.y);
-    const step = p.moving ? Math.sin(now / 75 + p.x * 3) : 0;
-    const bob = p.moving ? Math.abs(step) * t * 0.06 : Math.sin(now / 600 + p.y) * t * 0.012;
-    const d = Math.round(t * (p.me ? 1.05 : 0.95));
-    // Shadow.
-    g.fillStyle = 'rgba(0,0,0,0.4)';
-    g.beginPath();
-    g.ellipse(x, y + t * 0.2, t * 0.32, t * 0.11, 0, 0, Math.PI * 2);
-    g.fill();
-    // Feet.
-    g.fillStyle = '#1a1626';
-    g.strokeStyle = INK;
-    g.lineWidth = 1.5;
-    for (const side of [-1, 1]) {
-      const lift = p.moving ? Math.max(0, step * side) * t * 0.1 : 0;
-      g.beginPath();
-      g.ellipse(x + side * t * 0.13, y + t * 0.16 - lift, t * 0.1, t * 0.065, 0, 0, Math.PI * 2);
-      g.fill();
-      g.stroke();
-    }
-    // Body: a jacket in the gang's colour.
-    const by = y - t * 0.1 - bob;
-    g.fillStyle = p.color;
-    g.beginPath();
-    g.roundRect(x - t * 0.22, by - t * 0.2, t * 0.44, t * 0.36, t * 0.12);
-    g.fill();
-    g.lineWidth = 2;
-    g.stroke();
-    // Head.
-    const f = this.face(p.chog, d);
-    const hy = by - t * 0.2 - d * 0.82;
-    if (f) {
-      g.save();
-      if (p.face < 0) {
-        g.translate(x, 0);
-        g.scale(-1, 1);
-        g.drawImage(f, -d / 2, hy, d, d);
-      } else g.drawImage(f, x - d / 2, hy, d, d);
-      g.restore();
-    } else {
-      g.fillStyle = '#3a3550';
-      g.beginPath();
-      g.arc(x, hy + d / 2, d / 2 - 1.5, 0, Math.PI * 2);
-      g.fill();
-      g.strokeStyle = INK;
-      g.stroke();
-    }
+    const y = this.sy(p.y) + this.t * 0.12;
     if (p.me) {
       // A ring at your feet so you can find yourself in a crowd.
       g.strokeStyle = '#ffd23f';
-      g.lineWidth = 2.5;
+      g.lineWidth = 3;
       g.beginPath();
-      g.ellipse(x, y + t * 0.2, t * 0.42, t * 0.15, 0, 0, Math.PI * 2);
+      g.ellipse(x, y + piece.h - piece.fy - 4, piece.w * 0.52, piece.w * 0.17, 0, 0, Math.PI * 2);
       g.stroke();
     }
+    drawPiece(
+      g,
+      piece,
+      x,
+      y,
+      {
+        moving: p.moving,
+        seed: keySeed(p.key),
+        face: p.face,
+        turned: now - m.turnedAt,
+        emoted: p.emote ? now - p.emote.at : undefined,
+        alpha: p.npc ? 0.92 : 1,
+      },
+      now,
+    );
   }
 
   /** Names and speech bubbles go on top of the darkness so they stay readable. */
   private drawTag(p: Person, now: number) {
     const { g, t } = this;
+    const piece = this.piece(p);
+    const seed = keySeed(p.key);
     const x = this.sx(p.x);
-    const d = Math.round(t * (p.me ? 1.05 : 0.95));
-    const top = this.sy(p.y) - t * 0.3 - d * 0.82 - (p.moving ? 0 : 0);
-    const size = Math.max(10, Math.round(t * (p.me ? 0.24 : 0.21)));
-    g.font = `600 ${size}px ${this.bodyFont}`;
+    const top = this.sy(p.y) + t * 0.12 - piece.top - hopHeight(piece, { moving: p.moving, seed, face: p.face }, now);
+    const size = Math.max(11, Math.round(t * (p.me ? 0.25 : 0.22)));
+    g.font = `700 ${size}px ${this.bodyFont}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    const w = g.measureText(p.name).width + size;
-    const h = size * 1.5;
-    const ty = top - h * 0.6;
-    g.globalAlpha = p.npc ? 0.75 : 1;
-    g.fillStyle = p.color;
+    const w = g.measureText(p.name).width + size * 1.6;
+    const h = size * 1.55;
+    const ty = top - h * 0.75;
+    g.globalAlpha = p.npc ? 0.8 : 1;
+    // A dark plate with a stripe of the gang's colour, gold for you.
+    g.fillStyle = 'rgba(13,11,26,0.88)';
     g.beginPath();
     g.roundRect(x - w / 2, ty - h / 2, w, h, h / 2);
     g.fill();
-    g.strokeStyle = INK;
-    g.lineWidth = 1.5;
+    g.strokeStyle = p.me ? '#ffd23f' : p.color;
+    g.lineWidth = p.me ? 2.5 : 2;
     g.stroke();
-    g.fillStyle = p.ink;
-    g.fillText(p.name, x, ty + 0.5);
+    g.fillStyle = p.me ? '#ffd23f' : p.color;
+    g.beginPath();
+    g.arc(x - w / 2 + h * 0.5, ty, h * 0.17, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#ffffff';
+    g.fillText(p.name, x + h * 0.18, ty + 0.5);
     g.globalAlpha = 1;
     if (p.emote && now - p.emote.at < 3500)
       this.drawEmote(p.emote.kind, x, ty - h / 2 - t * 0.5, now - p.emote.at);
@@ -1129,7 +1091,14 @@ export class CityRenderer {
     things.sort((a, b) => a.y - b.y);
     for (const th of things) th.draw();
 
-    this.drawNight(x0, y0, x1, y1, now);
+    // Every Chog stays lit so its picture reads at night.
+    const lit: { x: number; y: number; r: number }[] = [];
+    for (const p of [...opts.jailed, ...people]) {
+      if (!inView(p.x, p.y, 2)) continue;
+      const pc = this.piece(p);
+      lit.push({ x: this.sx(p.x), y: this.sy(p.y) + t * 0.12 - pc.top * 0.5, r: pc.top * 0.95 });
+    }
+    this.drawNight(x0, y0, x1, y1, now, lit);
 
     for (const p of opts.jailed) if (inView(p.x, p.y, 2)) this.drawTag(p, now);
     // Your own name last, so it's never under someone else's.
@@ -1202,7 +1171,14 @@ export class CityRenderer {
   }
 
   /** Night: a dark layer with pools of light cut out under lamps, at shop windows, and around you. */
-  private drawNight(x0: number, y0: number, x1: number, y1: number, now: number) {
+  private drawNight(
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    now: number,
+    lit: { x: number; y: number; r: number }[],
+  ) {
     const { t, dpr } = this;
     const d = this.dark.getContext('2d')!;
     d.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1225,6 +1201,14 @@ export class CityRenderer {
       if (p.kind === 'lamp') hole(this.sx(p.x), this.sy(p.y) - t * 0.3, t * 2.6, 0.95);
       if (p.kind === 'fountain') hole(this.sx(p.x), this.sy(p.y), t * 2.2, 0.6);
       if (p.kind === 'screen') hole(this.sx(p.x), this.sy(p.y) - t, t * 3.6, 0.85);
+    }
+    for (const l of lit) {
+      const gr = d.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r);
+      gr.addColorStop(0, 'rgba(0,0,0,1)');
+      gr.addColorStop(0.6, 'rgba(0,0,0,0.95)');
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      d.fillStyle = gr;
+      d.fillRect(l.x - l.r, l.y - l.r, l.r * 2, l.r * 2);
     }
     for (const p of CITY.places) {
       if (!vis(p.x + p.w / 2, p.y + p.h, p.w)) continue;

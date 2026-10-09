@@ -201,7 +201,7 @@ export function HeistGame({
     };
     const images = {
       player: load(chogImage(player.id, 256)),
-      guards: guardsRef.current.map((c) => load(chogImage(c.id, 96))),
+      guards: guardsRef.current.map((c) => load(chogImage(c.id, 256))),
     };
     const r = new VaultRenderer(cv, level, images, { color: owner.color });
     r.font =

@@ -6,14 +6,16 @@ import {
   ArrowBendUpLeft,
   ArrowSquareOut,
   CurrencyDollarSimple,
+  DoorOpen,
+  HandGrabbing,
   HandWaving,
   Lock,
+  LockKeyOpen,
   Play,
   ShieldCheck,
   SignOut,
   SmileyAngry,
   SmileyWink,
-  Trophy,
   Vault,
   X,
 } from '@phosphor-icons/react';
@@ -30,6 +32,17 @@ import { ago, formatLeft } from '@/lib/time';
 import { logOut } from '@/lib/wallet';
 import type { Emote, PlaceLook } from './city-render';
 import { CityView, type CityHandle, type Jailed, type Stroller, type Tapped } from './city-view';
+import {
+  Banner,
+  type BannerData,
+  type Duty,
+  EmoteButton,
+  GangsButton,
+  MapButton,
+  MiniMap,
+  RoleCard,
+  RoundButton,
+} from './hud';
 import type { LiveStatus } from './live-city';
 
 interface VaultRow {
@@ -158,7 +171,13 @@ export function CityApp() {
   const [picked, setPicked] = useState<number | null>(null);
   const [run, setRun] = useState<Run | null>(null);
   const [practice, setPractice] = useState(false);
+  /** The door you're standing at, and whether its card is open. */
   const [door, setDoor] = useState<Place | null>(null);
+  const [doorOpen, setDoorOpen] = useState(false);
+  const [area, setArea] = useState('plaza');
+  const [mapOpen, setMapOpen] = useState(false);
+  const [emoteOpen, setEmoteOpen] = useState(false);
+  const [banner, setBanner] = useState<BannerData | null>(null);
   const [sheet, setSheet] = useState<'gangs' | 'me' | 'connect' | null>(null);
   const [peek, setPeek] = useState<Tapped | null>(null);
   const [live, setLive] = useState<{ status: LiveStatus; online: number }>({
@@ -222,6 +241,62 @@ export function CityApp() {
   useEffect(() => {
     if (board) setAlarms(Object.fromEntries(board.robbing.map((r) => [r.target, r])));
   }, [board]);
+  // A comic banner when a hit lands (only ones that just happened, not the history on load).
+  const lastHit = useRef<string | null>(null);
+  useEffect(() => {
+    const h = board?.hits[0];
+    if (!h) return;
+    if (lastHit.current === null) {
+      lastHit.current = h.id;
+      return;
+    }
+    if (h.id === lastHit.current) return;
+    lastHit.current = h.id;
+    if (Date.now() - h.at > 120_000) return;
+    const mine = myGang.current;
+    const name = (g: GangId) => GANGS[g].name;
+    let b: BannerData;
+    if (h.prisoner !== null)
+      b =
+        h.result === 'escaped'
+          ? {
+              id: h.id,
+              title: 'Jail break!',
+              line: `${name(h.gang)} broke a gang-mate out`,
+              chog: h.chogId,
+              tone: 'win',
+            }
+          : {
+              id: h.id,
+              title: 'Caught!',
+              line: `${name(h.gang)} got caught at the jail`,
+              chog: h.chogId,
+              tone: 'lose',
+            };
+    else if (h.result === 'escaped')
+      b = {
+        id: h.id,
+        title: h.target === mine ? 'You got robbed!' : 'Robbed!',
+        line: `${name(h.gang)} took ${money(h.moved)} from ${name(h.target)}`,
+        chog: h.chogId,
+        tone: h.target === mine ? 'lose' : 'win',
+      };
+    else
+      b = {
+        id: h.id,
+        title: 'Busted!',
+        line: `${name(h.gang)} got caught robbing ${name(h.target)}`,
+        chog: h.chogId,
+        tone: 'lose',
+      };
+    setBanner(b);
+  }, [board]);
+  useEffect(() => {
+    if (!banner) return;
+    const t = setTimeout(() => setBanner(null), 5000);
+    return () => clearTimeout(t);
+  }, [banner]);
+
   useEffect(() => {
     if (!raid) return;
     const t = setTimeout(() => setRaid(null), 25_000);
@@ -348,6 +423,128 @@ export function CityApp() {
     }
   }
 
+  // ---------- heads-up display ----------
+  const myRow = chog?.gang ? board?.board.find((v) => v.gang === chog.gang) : undefined;
+  const myRank = myRow && board ? board.board.indexOf(myRow) + 1 : 0;
+  const walk = (id: string) => () => view.current?.walkTo(id);
+  const duties: Duty[] = [];
+  if (!me?.address) {
+    duties.push(
+      {
+        key: 'connect',
+        label: 'Connect your wallet',
+        sub: 'Walk in as your own Chog',
+        onGo: () => setSheet('connect'),
+      },
+      { key: 'practice', label: 'Try the practice vault', onGo: walk('training') },
+    );
+  } else if (!chog) {
+    duties.push({
+      key: 'practice',
+      label: 'Try the practice vault',
+      sub: 'No Chog in this wallet',
+      onGo: walk('training'),
+    });
+  } else if (chog.gang) {
+    const gang = chog.gang;
+    if (jailedNow)
+      duties.push({
+        key: 'jail',
+        label: 'Sit out your jail time',
+        sub: `Out in ${formatLeft(chog.jailedUntil! - now)}`,
+      });
+    const hit = chog.hitToday;
+    const next = board?.board.find((v) => v.gang !== gang && !hit.includes(v.gang));
+    duties.push({
+      key: 'rob',
+      label: hit.length ? `Robbed ${plural(hit.length, 'vault')} today` : 'Rob a rival vault',
+      sub: next ? `Richest left: ${GANGS[next.gang].name} ${money(next.cash)}` : 'Every vault hit today',
+      done: hit.length > 0,
+      onGo: next && !jailedNow ? walk(next.gang) : undefined,
+    });
+    for (const g of revenge.filter((r) => !hit.includes(r)).slice(0, 2))
+      duties.push({
+        key: `rev${g}`,
+        label: `Hit back at ${GANGS[g].name}`,
+        sub: 'They robbed you: revenge pays 25% more',
+        onGo: jailedNow ? undefined : walk(g),
+      });
+    const mates = (city?.jailed ?? []).filter((j) => j.gang === gang && j.id !== chog.id && j.until > now);
+    if (mates.length)
+      duties.push({
+        key: 'free',
+        label: `Free ${mates[0]!.name} from jail`,
+        sub: mates.length > 1 ? `${mates.length} gang-mates locked up` : undefined,
+        onGo: jailedNow ? undefined : walk('jail'),
+      });
+    if (myRow) {
+      const guarded = !!myRow.boughtUntil && myRow.boughtUntil > now;
+      duties.push({
+        key: 'guard',
+        label: guarded ? 'Guards on duty' : 'Guard your vault',
+        sub: `Defence: ${DEFENCE[myRow.tier]}`,
+        done: guarded,
+        onGo: jailedNow ? undefined : walk(gang),
+      });
+    }
+  }
+  const areaName =
+    area === 'plaza'
+      ? 'Plaza'
+      : area === 'street'
+        ? 'Streets'
+        : area === 'jail'
+          ? 'Jail'
+          : area === 'training'
+            ? 'Practice vault'
+            : (GANGS[area as GangId]?.name ?? 'Streets');
+  const useLook = !door
+    ? { icon: HandGrabbing, label: 'Use' }
+    : door.kind === 'jail'
+      ? { icon: LockKeyOpen, label: 'Jail', tone: '#ff8a80' }
+      : door.kind === 'training'
+        ? { icon: Play, label: 'Practice', tone: '#7cf0c4' }
+        : door.gang === chog?.gang
+          ? { icon: Vault, label: 'Vault', tone: '#ffd666' }
+          : { icon: DoorOpen, label: 'Rob', tone: '#ff5a4f' };
+  const openDoor = () => door && setDoorOpen(true);
+
+  // Keys: E / Space use a door, G gangs, M map, T emotes, 1-4 an emote, Esc closes things.
+  const keyState = useRef({ door, doorOpen, sheet, peek, mapOpen, inHeist: !!run || practice });
+  keyState.current = { door, doorOpen, sheet, peek, mapOpen, inHeist: !!run || practice };
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const st = keyState.current;
+      if (st.inHeist) return;
+      if (e.code === 'Escape') {
+        setMapOpen(false);
+        setEmoteOpen(false);
+        setDoorOpen(false);
+        return;
+      }
+      if (st.sheet || st.peek) return;
+      if (e.code === 'KeyM') return setMapOpen((o) => !o);
+      if (st.mapOpen) return;
+      if ((e.code === 'KeyE' || e.code === 'Space' || e.code === 'Enter') && st.door && !st.doorOpen) {
+        if (e.code === 'Enter' && el?.tagName === 'BUTTON') return;
+        e.preventDefault();
+        return setDoorOpen(true);
+      }
+      if (e.code === 'KeyG') return setSheet('gangs');
+      if (e.code === 'KeyT') return setEmoteOpen((o) => !o);
+      const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
+      if (i >= 0) {
+        view.current?.emote(EMOTES[i]!.kind);
+        setEmoteOpen(false);
+      }
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, []);
+
   const backTo = (place: string) => {
     setRun(null);
     setPractice(false);
@@ -420,8 +617,14 @@ export function CityApp() {
     );
   }
 
-  const latest = board?.hits[0];
-  const anyCard = !!(door || sheet || peek || (chog && !chog.gang) || (welcome && !me?.address));
+  const anyCard = !!(
+    (door && doorOpen) ||
+    sheet ||
+    peek ||
+    mapOpen ||
+    (chog && !chog.gang) ||
+    (welcome && !me?.address)
+  );
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-[#07060d] text-white">
@@ -432,143 +635,114 @@ export function CityApp() {
         jailed={city?.jailed ?? []}
         places={looks}
         board={screen}
-        paused={!!sheet || !!peek || (!!chog && !chog.gang)}
-        onDoor={setDoor}
+        paused={!!sheet || !!peek || mapOpen || (!!chog && !chog.gang)}
+        onDoor={(p, asked) => {
+          setDoor(p);
+          setDoorOpen(!!p && asked);
+        }}
+        onArea={setArea}
+        mapOpen={mapOpen}
+        onCloseMap={() => setMapOpen(false)}
         onPerson={setPeek}
         onLive={(status, online) =>
           setLive((l) => (l.status === status && l.online === online ? l : { status, online }))
         }
       />
 
-      {/* Top bar */}
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-3">
-        <div className="pointer-events-auto flex flex-col gap-2">
-          <Link
-            href="/"
-            className="font-display text-[26px] uppercase leading-none text-white [text-shadow:2px_2px_0_#000]"
-          >
-            Chog City
-          </Link>
-          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-black/50 px-2 py-0.5 text-[12px] font-semibold text-white/85">
-            <span
-              className={cn(
-                'h-2 w-2 rounded-full',
-                live.status === 'live'
-                  ? 'bg-[#3ddc84]'
-                  : live.status === 'elsewhere'
-                    ? 'bg-jail'
-                    : 'bg-white/40',
-              )}
-            />
-            {live.status === 'live'
-              ? `${live.online} playing now`
-              : live.status === 'elsewhere'
-                ? 'Open in another window'
-                : 'Connecting…'}
-          </span>
-        </div>
-        {latest && (
-          <button
-            onClick={() => setSheet('gangs')}
-            className="pointer-events-auto hidden max-w-[440px] items-center gap-2 truncate rounded-full border-2 border-ink bg-[#151229]/90 py-1 pl-1 pr-3 text-[13px] shadow-[2px_2px_0_0_#000] md:flex"
-          >
-            <img
-              src={chogImage(latest.chogId, 96)}
-              alt=""
-              className="h-6 w-6 shrink-0 rounded-full border border-ink"
-            />
-            <span className="truncate">
-              <HitLine h={latest} /> · <span className="text-white/50">{ago(latest.at, now)}</span>
-            </span>
-          </button>
-        )}
-        <div className="pointer-events-auto flex items-center gap-2">
-          {me?.address ? (
-            chog ? (
-              <button
-                onClick={() => setSheet('me')}
-                className="flex items-center gap-2 rounded-full border-2 border-ink bg-[#151229] py-1 pl-1 pr-3 shadow-[2px_2px_0_0_#000]"
-              >
-                <img
-                  src={chogImage(chog.id, 96)}
-                  alt=""
-                  className="h-8 w-8 rounded-full border-2 border-ink"
-                />
-                <span className="hidden font-display text-[16px] uppercase leading-none sm:inline">
-                  {chog.name}
-                </span>
-                {jailedNow && <Lock size={14} weight="fill" className="text-jail" />}
-              </button>
-            ) : (
-              <button
-                onClick={() => setSheet('me')}
-                className="rounded-full border-2 border-ink bg-[#151229] px-3 py-1.5 text-[13px] shadow-[2px_2px_0_0_#000]"
-              >
-                {short(me.address)}
-              </button>
-            )
-          ) : (
+      {/* Top left: who you are and today's jobs */}
+      <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-col items-start gap-2">
+        <RoleCard
+          chog={chog?.id ?? null}
+          name={chog?.name ?? 'Guest'}
+          gang={chog?.gang ? GANGS[chog.gang].name : null}
+          color={meLook.color}
+          ink={meLook.ink}
+          vault={myRow ? `Vault ${money(myRow.cash)} · #${myRank} of ${board?.board.length ?? 0}` : undefined}
+          duties={duties}
+          footer={board && chog?.gang ? `New day in ${formatLeft(board.resetAt - now)}` : undefined}
+          onPortrait={() => setSheet(me?.address ? 'me' : 'connect')}
+        />
+      </div>
+
+      {/* Top right: the minimap */}
+      <div className="pointer-events-none absolute right-3 top-3 z-20 flex items-start gap-2">
+        {!me?.address && (
+          <div className="hidden sm:block">
             <button
               onClick={() => setSheet('connect')}
-              className={cn(btn, 'h-10 bg-[#ffd666] px-3 text-[17px] text-ink')}
+              className={cn(btn, 'pointer-events-auto h-10 bg-[#ffd666] px-3 text-[17px] text-ink')}
             >
               <span className="pt-0.5">Connect wallet</span>
             </button>
-          )}
-        </div>
-      </header>
+          </div>
+        )}
+        <MiniMap
+          area={areaName}
+          online={
+            live.status === 'live'
+              ? `${live.online} playing now`
+              : live.status === 'elsewhere'
+                ? 'Open in another window'
+                : 'Connecting…'
+          }
+          dot={live.status === 'live' ? '#3ddc84' : live.status === 'elsewhere' ? '#ff5a4f' : '#ffffff66'}
+          onOpen={() => setMapOpen(true)}
+        />
+      </div>
 
-      {/* Bottom left: gangs and emotes */}
+      {/* Top middle: comic banners */}
+      <div className="pointer-events-none absolute inset-x-0 top-[148px] z-30 flex justify-center px-3 sm:top-4">
+        {raid ? (
+          <Banner
+            b={{
+              id: `raid${raid.since}`,
+              title: 'Raid!',
+              line: `${GANGS[raid.gang].name} ${verb(raid.gang)} robbing your vault. Tap to go there.`,
+              chog: raid.chog,
+              tone: 'alarm',
+            }}
+            onClick={() => {
+              view.current?.walkTo(raid.target);
+              setRaid(null);
+            }}
+          />
+        ) : (
+          banner && <Banner b={banner} onClick={() => setBanner(null)} />
+        )}
+      </div>
+
+      {/* Bottom right: action buttons */}
       {!anyCard && (
-        <div className="absolute bottom-3 left-3 z-20 flex flex-col items-start gap-2">
-          <Emotes onEmote={(k) => view.current?.emote(k)} />
-          <button
-            onClick={() => setSheet('gangs')}
-            className={cn(btn, 'h-11 bg-[#ffd666] text-[18px] text-ink')}
-          >
-            <Trophy size={18} weight="fill" />
-            <span className="pt-0.5">Gangs</span>
-          </button>
-        </div>
-      )}
-
-      {jailedNow && chog && (
-        <div className="pointer-events-none absolute inset-x-0 top-[52px] z-20 flex justify-center px-3 md:top-14">
-          <div className="inline-flex items-center gap-2 rounded-full border-2 border-ink bg-jail px-3 py-1.5 text-[14px] font-semibold shadow-[2px_2px_0_0_#000]">
-            <Lock size={15} weight="fill" />
-            {chog.name} is in jail · out in {formatLeft(chog.jailedUntil! - now)}
+        <div className="pointer-events-none absolute bottom-4 right-3 z-20 flex items-end gap-3 sm:bottom-5 sm:right-5 sm:gap-4">
+          <div className="relative flex flex-col items-center gap-3">
+            {emoteOpen && (
+              <div className="pointer-events-auto absolute bottom-[calc(100%+8px)] flex flex-col gap-2">
+                {EMOTES.map((e, i) => (
+                  <button
+                    key={e.kind}
+                    onClick={() => {
+                      view.current?.emote(e.kind);
+                      setEmoteOpen(false);
+                    }}
+                    aria-label={e.label}
+                    title={`${e.label} (${i + 1})`}
+                    className="relative grid h-12 w-12 place-items-center rounded-full border-[3px] border-ink bg-white text-ink shadow-[0_4px_0_0_#000] active:translate-y-[2px] active:shadow-[0_2px_0_0_#000]"
+                  >
+                    <e.Icon size={22} weight="fill" />
+                    <span className="absolute -left-1 -top-1 grid h-5 w-5 place-items-center rounded-[5px] border-2 border-ink bg-[#17132b] font-display text-[11px] leading-none text-white">
+                      {i + 1}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <EmoteButton onClick={() => setEmoteOpen((o) => !o)} />
           </div>
-        </div>
-      )}
-
-      {raid && (
-        <div className="absolute inset-x-0 top-16 z-40 flex justify-center px-3">
-          <div className="flex max-w-[520px] items-center gap-3 rounded-[12px] border-2 border-ink bg-[#ff2d55] py-2 pl-2 pr-2 text-ink shadow-[3px_3px_0_0_#000]">
-            <img
-              src={chogImage(raid.chog, 96)}
-              alt=""
-              className="h-10 w-10 shrink-0 rounded-full border-2 border-ink"
-            />
-            <p className="text-[15px] font-semibold leading-snug">
-              {GANGS[raid.gang].name} {verb(raid.gang)} robbing your vault right now!
-            </p>
-            <button
-              onClick={() => {
-                view.current?.walkTo(raid.target);
-                setRaid(null);
-              }}
-              className="shrink-0 rounded-[8px] border-2 border-ink bg-white px-2.5 pb-1 pt-1.5 font-display text-[16px] uppercase leading-none"
-            >
-              Go there
-            </button>
-            <button
-              onClick={() => setRaid(null)}
-              aria-label="Close"
-              className="grid h-8 w-8 shrink-0 place-items-center"
-            >
-              <X size={16} weight="bold" />
-            </button>
+          <div className="flex flex-col items-center gap-3">
+            <MapButton onClick={() => setMapOpen(true)} />
+            <GangsButton onClick={() => setSheet('gangs')} />
           </div>
+          <RoundButton big {...useLook} hotkey="E" disabled={!door} lit={!!door} onClick={openDoor} />
         </div>
       )}
 
@@ -585,8 +759,8 @@ export function CityApp() {
       )}
 
       {/* At a door */}
-      {door && !sheet && !peek && (
-        <Card onClose={() => setDoor(null)}>
+      {door && doorOpen && !sheet && !peek && (
+        <Card onClose={() => setDoorOpen(false)}>
           <DoorCard
             place={door}
             row={board?.board.find((v) => v.gang === door.gang)}
@@ -610,7 +784,7 @@ export function CityApp() {
       )}
 
       {/* First visit */}
-      {welcome && me && !me.address && !door && !sheet && !peek && (
+      {welcome && me && !me.address && !(door && doorOpen) && !sheet && !peek && (
         <Card onClose={closeWelcome}>
           <h1 className="font-display text-[32px] uppercase leading-[0.95]">Welcome to Chog City</h1>
           <p className="mt-2 text-[15px] leading-snug text-white/80">
@@ -841,39 +1015,11 @@ const EMOTES: { kind: Emote; label: string; Icon: typeof HandWaving }[] = [
   { kind: 'cash', label: 'Show the cash', Icon: CurrencyDollarSimple },
 ];
 
-function Emotes({ onEmote }: { onEmote: (k: Emote) => void }) {
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement | null;
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
-      const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
-      if (i >= 0) onEmote(EMOTES[i]!.kind);
-    };
-    window.addEventListener('keydown', k);
-    return () => window.removeEventListener('keydown', k);
-  }, [onEmote]);
-  return (
-    <div className="flex gap-1.5">
-      {EMOTES.map((e, i) => (
-        <button
-          key={e.kind}
-          onClick={() => onEmote(e.kind)}
-          aria-label={e.label}
-          title={`${e.label} (${i + 1})`}
-          className="grid h-10 w-10 place-items-center rounded-full border-2 border-ink bg-white font-display text-[18px] text-ink shadow-[2px_2px_0_0_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
-        >
-          <e.Icon size={20} weight="bold" />
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /** A card at the bottom of the screen (phones) or bottom left (wider screens). */
 function Card({ children, onClose }: { children: React.ReactNode; onClose?: () => void }) {
   return (
-    <div className="absolute inset-x-0 bottom-0 z-30 p-3 sm:bottom-3 sm:left-3 sm:right-auto sm:w-[400px] sm:p-0">
-      <div className="relative max-h-[72dvh] overflow-y-auto rounded-[16px] border-2 border-ink bg-[#151229]/95 p-4 shadow-[4px_4px_0_0_#000] backdrop-blur">
+    <div className="absolute inset-x-0 bottom-0 z-30 p-3 sm:bottom-6 sm:left-1/2 sm:right-auto sm:w-[440px] sm:-translate-x-1/2 sm:p-0">
+      <div className="relative max-h-[72dvh] animate-[sheet-in_220ms_ease-out] overflow-y-auto rounded-[18px] border-[3px] border-ink bg-[#17132b]/97 p-4 shadow-[0_6px_0_0_#000] backdrop-blur">
         {onClose && (
           <button
             onClick={onClose}

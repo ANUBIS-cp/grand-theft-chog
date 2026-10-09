@@ -68,7 +68,13 @@ interface Props {
   board: Board;
   /** Keys and taps do nothing while a card or the heist is open over the city. */
   paused: boolean;
-  onDoor: (p: Place | null) => void;
+  /** At a door (or left it). `asked` is true when you tapped the building or picked it, so its card opens. */
+  onDoor: (p: Place | null, asked: boolean) => void;
+  /** Which part of the city you're in: a place id, 'plaza' or 'street'. */
+  onArea: (area: string) => void;
+  /** The big map is open. */
+  mapOpen: boolean;
+  onCloseMap: () => void;
   onPerson: (p: Tapped) => void;
   onLive: (status: LiveStatus, online: number) => void;
 }
@@ -89,7 +95,7 @@ const color = (gang: GangId | null) => (gang ? GANG_COLOR[gang] : GUEST);
 
 export const CityView = forwardRef<CityHandle, Props>(function CityView(props, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const miniRef = useRef<HTMLCanvasElement>(null);
+  const bigRef = useRef<HTMLCanvasElement>(null);
   const live = useRef(props);
   live.current = props;
   const state = useRef({
@@ -103,6 +109,9 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     stick: null as { x: number; y: number } | null,
     emote: null as { kind: Emote; at: number } | null,
     door: null as Place | null,
+    /** The place you asked to walk to; its card opens when you get there. */
+    intent: null as string | null,
+    area: '',
     walkers: new Map<number, Walker>(),
     rand: rng(Date.now() & 0xffff),
     r: null as CityRenderer | null,
@@ -116,7 +125,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
   useImperativeHandle(ref, () => ({
     walkTo(id) {
       const p = placeOf(id);
-      if (p) goTo(p.door.x, p.door.y);
+      if (p) goTo(p.door.x, p.door.y, p.id);
     },
     emote(kind) {
       state.current.emote = { kind, at: performance.now() };
@@ -139,8 +148,9 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     return j !== null && j > Date.now();
   }
 
-  function goTo(x: number, y: number) {
+  function goTo(x: number, y: number, intent: string | null = null) {
     const s = state.current;
+    s.intent = intent;
     if (inJail()) {
       // In the jail yard you can only shuffle about inside the fence.
       if (inPen(x, y)) {
@@ -287,7 +297,13 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       const door = jailed ? null : (doorAt(s.x, s.y) ?? null);
       if (door !== s.door) {
         s.door = door;
-        p.onDoor(door);
+        p.onDoor(door, !!door && s.intent === door.id);
+        if (door) s.intent = null;
+      }
+      const area = areaAt(s.x, s.y);
+      if (area !== s.area) {
+        s.area = area;
+        p.onArea(area);
       }
 
       const net = s.net;
@@ -372,7 +388,12 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
 
       if (now - miniAt > 120) {
         miniAt = now;
-        drawMini(miniRef.current, s.x, s.y, people, p.places, now);
+        lastAt.x = s.x;
+        lastAt.y = s.y;
+        lastAt.people = people;
+        const layer = drawMap(s.x, s.y, people, p.places, now);
+        drawLocal(miniCanvas(), layer, s.x, s.y);
+        if (p.mapOpen) drawBig(bigRef.current, layer, p.places, r.font, now);
       }
       raf = requestAnimationFrame(frame);
     };
@@ -424,22 +445,24 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     const place = CITY.places.find(
       (pl) => w.x >= pl.x && w.x < pl.x + pl.w && w.y >= pl.y - 0.7 && w.y < pl.y + pl.h,
     );
-    if (place) return goTo(place.door.x, place.door.y);
+    if (place) return goTo(place.door.x, place.door.y, place.id);
     if (groundAt(Math.floor(w.x), Math.floor(w.y)) === Ground.Pen)
-      return goTo(placeOf('jail')!.door.x, placeOf('jail')!.door.y);
+      return goTo(placeOf('jail')!.door.x, placeOf('jail')!.door.y, 'jail');
     goTo(w.x, w.y);
   }
 
-  function onMini(e: React.PointerEvent<HTMLCanvasElement>) {
-    if (live.current.paused || inJail()) return;
+  /** A tap on the big map walks you there (to the door, for a building). */
+  function onMap(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (inJail()) return;
     const box = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - box.left) / box.width) * CITY.w;
     const y = ((e.clientY - box.top) / box.height) * CITY.h;
     const place = CITY.places.find(
       (pl) => x >= pl.x - 1 && x < pl.x + pl.w + 1 && y >= pl.y - 1 && y < pl.y + pl.h + 3,
     );
-    if (place) goTo(place.door.x, place.door.y);
+    if (place) goTo(place.door.x, place.door.y, place.id);
     else goTo(x, y);
+    live.current.onCloseMap();
   }
 
   return (
@@ -452,13 +475,20 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         onPointerUp={onUp}
         onPointerCancel={onUp}
       />
-      <canvas
-        ref={miniRef}
-        onPointerDown={onMini}
-        aria-label="Map of the city. Tap a spot to walk there."
-        className="absolute bottom-3 right-3 z-10 w-[132px] cursor-pointer rounded-[10px] border-2 border-ink shadow-[3px_3px_0_0_#000] sm:w-[188px]"
-        style={{ aspectRatio: `${CITY.w} / ${CITY.h}` }}
-      />
+      {props.mapOpen && (
+        <div
+          className="absolute inset-0 z-30 grid place-items-center bg-black/60 p-4 backdrop-blur-[2px]"
+          onPointerDown={(e) => e.target === e.currentTarget && props.onCloseMap()}
+        >
+          <canvas
+            ref={bigRef}
+            onPointerDown={onMap}
+            aria-label="Map of the city. Tap a spot to walk there."
+            className="max-h-full w-full max-w-[920px] cursor-pointer rounded-[22px] border-[3px] border-ink shadow-[0_6px_0_0_#000]"
+            style={{ aspectRatio: `${CITY.w} / ${CITY.h}` }}
+          />
+        </div>
+      )}
     </div>
   );
 });
@@ -489,73 +519,175 @@ function jailedPeople(list: Jailed[], now: number): (Person & { tap?: Tapped })[
     });
 }
 
-const MINI: Record<number, string> = {
-  [Ground.Road]: '#1b1828',
-  [Ground.Cross]: '#1b1828',
-  [Ground.Walk]: '#2f2a47',
-  [Ground.Prop]: '#2f2a47',
-  [Ground.Yard]: '#352c49',
-  [Ground.Grass]: '#1d4434',
-  [Ground.Plaza]: '#3a3258',
-  [Ground.Pen]: '#3a3a44',
-  [Ground.Block]: '#2f2a47',
+const MAP_GROUND: Record<number, string> = {
+  [Ground.Road]: '#17142a',
+  [Ground.Cross]: '#17142a',
+  [Ground.Walk]: '#3a3456',
+  [Ground.Prop]: '#3a3456',
+  [Ground.Yard]: '#3d3358',
+  [Ground.Grass]: '#25573f',
+  [Ground.Plaza]: '#4a4170',
+  [Ground.Pen]: '#45455a',
+  [Ground.Block]: '#3a3456',
 };
 
-let miniBase: HTMLCanvasElement | null = null;
+/** Which part of the city (x, y) is in: a place id when you're at or beside it, else 'plaza' or 'street'. */
+export function areaAt(x: number, y: number): string {
+  for (const p of CITY.places)
+    if (x >= p.x - 1 && x <= p.x + p.w + 1 && y >= p.y - 1 && y <= p.y + p.h + (p.kind === 'jail' ? 5 : 2))
+      return p.id;
+  const g = groundAt(Math.floor(x), Math.floor(y));
+  return g === Ground.Plaza || g === Ground.Grass ? 'plaza' : 'street';
+}
 
-function drawMini(
-  cv: HTMLCanvasElement | null,
+const bases = new Map<number, HTMLCanvasElement>();
+
+function mapBase(k: number) {
+  let b = bases.get(k);
+  if (b) return b;
+  b = document.createElement('canvas');
+  b.width = Math.ceil(CITY.w * k);
+  b.height = Math.ceil(CITY.h * k);
+  const g = b.getContext('2d')!;
+  for (let j = 0; j < CITY.h; j++)
+    for (let i = 0; i < CITY.w; i++) {
+      g.fillStyle = MAP_GROUND[CITY.ground[j * CITY.w + i]!] ?? '#000';
+      g.fillRect(Math.floor(i * k), Math.floor(j * k), Math.ceil(k), Math.ceil(k));
+    }
+  bases.set(k, b);
+  return b;
+}
+
+/** Paints the whole city at k px per tile: ground, buildings in their gang's colour, and everyone. */
+function paintMap(
+  g: CanvasRenderingContext2D,
+  k: number,
   x: number,
   y: number,
   people: Person[],
   places: Record<string, PlaceLook>,
   now: number,
 ) {
-  if (!cv) return;
-  const k = 4;
-  if (cv.width !== CITY.w * k) {
-    cv.width = CITY.w * k;
-    cv.height = CITY.h * k;
-  }
-  const g = cv.getContext('2d')!;
-  if (!miniBase) {
-    miniBase = document.createElement('canvas');
-    miniBase.width = CITY.w * k;
-    miniBase.height = CITY.h * k;
-    const b = miniBase.getContext('2d')!;
-    for (let j = 0; j < CITY.h; j++)
-      for (let i = 0; i < CITY.w; i++) {
-        b.fillStyle = MINI[CITY.ground[j * CITY.w + i]!] ?? '#000';
-        b.fillRect(i * k, j * k, k, k);
-      }
-  }
-  g.drawImage(miniBase, 0, 0);
+  g.drawImage(mapBase(k), 0, 0);
+  const lw = Math.max(1.5, k * 0.25);
   for (const p of CITY.places) {
     const look = places[p.id];
-    const c = p.kind === 'jail' ? '#6a6a7a' : p.kind === 'training' ? '#3f8f75' : (look?.color ?? '#555');
+    const c = p.kind === 'jail' ? '#77778c' : p.kind === 'training' ? '#4fbf98' : (look?.color ?? '#555');
     g.fillStyle = c;
-    g.fillRect(p.x * k, p.y * k, p.w * k, p.h * k);
+    g.strokeStyle = '#0d0b1a';
+    g.lineWidth = lw;
+    g.beginPath();
+    g.roundRect(p.x * k, p.y * k, p.w * k, p.h * k, k * 0.8);
+    g.fill();
+    g.stroke();
     if (look?.mine) {
       g.strokeStyle = '#ffd23f';
-      g.lineWidth = 3;
-      g.strokeRect(p.x * k + 1.5, p.y * k + 1.5, p.w * k - 3, p.h * k - 3);
+      g.lineWidth = lw * 1.6;
+      g.beginPath();
+      g.roundRect(p.x * k + lw, p.y * k + lw, p.w * k - lw * 2, p.h * k - lw * 2, k * 0.6);
+      g.stroke();
     }
     if (look?.alarm && Math.floor(now / 300) % 2 === 0) {
       g.strokeStyle = '#ff2d55';
-      g.lineWidth = 4;
-      g.strokeRect(p.x * k, p.y * k, p.w * k, p.h * k);
+      g.lineWidth = lw * 2;
+      g.beginPath();
+      g.roundRect(p.x * k - lw, p.y * k - lw, p.w * k + lw * 2, p.h * k + lw * 2, k);
+      g.stroke();
     }
   }
   for (const p of people) {
     if (p.me) continue;
-    g.fillStyle = 'rgba(255,255,255,0.75)';
-    g.fillRect(p.x * k - 1.5, p.y * k - 1.5, 3, 3);
+    g.fillStyle = p.npc ? 'rgba(255,255,255,0.55)' : '#ffffff';
+    g.beginPath();
+    g.arc(p.x * k, p.y * k, Math.max(1.5, k * (p.npc ? 0.3 : 0.42)), 0, Math.PI * 2);
+    g.fill();
   }
   g.fillStyle = '#ffd23f';
-  g.strokeStyle = '#000';
-  g.lineWidth = 2;
+  g.strokeStyle = '#0d0b1a';
+  g.lineWidth = Math.max(2, k * 0.3);
   g.beginPath();
-  g.arc(x * k, y * k, 5, 0, Math.PI * 2);
+  g.arc(x * k, y * k, Math.max(4, k * 0.9), 0, Math.PI * 2);
   g.fill();
   g.stroke();
 }
+
+const LOCAL_K = 8;
+let layer: HTMLCanvasElement | null = null;
+
+/** The city at minimap scale, redrawn a few times a second. */
+function drawMap(x: number, y: number, people: Person[], places: Record<string, PlaceLook>, now: number) {
+  if (!layer) {
+    layer = document.createElement('canvas');
+    layer.width = CITY.w * LOCAL_K;
+    layer.height = CITY.h * LOCAL_K;
+  }
+  paintMap(layer.getContext('2d')!, LOCAL_K, x, y, people, places, now);
+  return layer;
+}
+
+const miniCanvas = () => document.getElementById('city-minimap') as HTMLCanvasElement | null;
+
+/** The round minimap: about 30 tiles round you. */
+function drawLocal(cv: HTMLCanvasElement | null, src: HTMLCanvasElement, x: number, y: number) {
+  if (!cv) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const size = Math.round(cv.clientWidth * dpr);
+  if (!size) return;
+  if (cv.width !== size) {
+    cv.width = size;
+    cv.height = size;
+  }
+  const g = cv.getContext('2d')!;
+  const span = 30 * LOCAL_K;
+  g.fillStyle = '#0b0918';
+  g.fillRect(0, 0, size, size);
+  g.imageSmoothingEnabled = true;
+  g.drawImage(src, x * LOCAL_K - span / 2, y * LOCAL_K - span / 2, span, span, 0, 0, size, size);
+}
+
+/** The big map, with every building's name on it. */
+function drawBig(
+  cv: HTMLCanvasElement | null,
+  _src: HTMLCanvasElement,
+  places: Record<string, PlaceLook>,
+  font: string,
+  now: number,
+) {
+  if (!cv) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = Math.round(cv.clientWidth * dpr);
+  if (!w) return;
+  const k = w / CITY.w;
+  if (cv.width !== w) {
+    cv.width = w;
+    cv.height = Math.round(CITY.h * k);
+  }
+  const g = cv.getContext('2d')!;
+  // Redraw at this size from the last frame's people (kept on the layer's paint call).
+  paintMap(g, k, lastAt.x, lastAt.y, lastAt.people, places, now);
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  for (const p of CITY.places) {
+    const look = places[p.id];
+    const name = p.kind === 'jail' ? 'Jail' : p.kind === 'training' ? 'Practice vault' : (look?.name ?? '');
+    const size = Math.round(k * 1.5);
+    g.font = `${size}px ${font}`;
+    const cx = (p.x + p.w / 2) * k;
+    const cy = (p.y + p.h / 2) * k;
+    const words = name.toUpperCase().split(' ');
+    const lines =
+      words.length > 1 && g.measureText(name.toUpperCase()).width > p.w * k * 0.9
+        ? words
+        : [name.toUpperCase()];
+    g.fillStyle = p.kind === 'gang' ? (look?.ink ?? '#fff') : '#0d0b1a';
+    lines.forEach((l, i) =>
+      g.fillText(l, cx, cy + (i - (lines.length - 1) / 2) * size * 1.05, p.w * k * 0.92),
+    );
+    if (look && p.kind === 'gang') {
+      g.font = `${Math.round(size * 0.8)}px ${font}`;
+      g.fillText(`#${look.rank}`, cx, (p.y + 1.2) * k);
+    }
+  }
+}
+
+const lastAt = { x: 0, y: 0, people: [] as Person[] };
