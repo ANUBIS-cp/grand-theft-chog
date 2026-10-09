@@ -178,6 +178,7 @@ export function CityApp() {
   const [mapOpen, setMapOpen] = useState(false);
   const [emoteOpen, setEmoteOpen] = useState(false);
   const [banner, setBanner] = useState<BannerData | null>(null);
+  const [boardTab, setBoardTab] = useState<'gangs' | 'hits'>('gangs');
   const [sheet, setSheet] = useState<'gangs' | 'me' | 'connect' | null>(null);
   const [peek, setPeek] = useState<Tapped | null>(null);
   const [live, setLive] = useState<{ status: LiveStatus; online: number }>({
@@ -906,76 +907,141 @@ export function CityApp() {
       )}
 
       {sheet === 'gangs' && (
-        <Sheet title="Gangs" onClose={() => setSheet(null)}>
-          {board && (
-            <p className="-mt-1 mb-3 text-[13px] text-white/60">
-              Richest first. Hits reset in {formatLeft(board.resetAt - now)}.
-            </p>
-          )}
-          <ol className="grid gap-2">
-            {(board?.board ?? []).map((v, i) => (
-              <li key={v.gang}>
+        <Board onClose={() => setSheet(null)}>
+          <div className="flex flex-wrap items-end justify-between gap-2 pr-12">
+            <h2 className="font-display text-[34px] uppercase leading-none sm:text-[42px]">Gang board</h2>
+            <div className="flex rounded-[10px] border-[3px] border-ink bg-[#0f0c1f] p-0.5">
+              {(['gangs', 'hits'] as const).map((k) => (
                 <button
-                  onClick={() => {
-                    setSheet(null);
-                    view.current?.walkTo(v.gang);
-                  }}
+                  key={k}
+                  onClick={() => setBoardTab(k)}
                   className={cn(
-                    'flex w-full items-center gap-3 rounded-[12px] border-2 border-ink bg-[#1d1838] p-2.5 text-left shadow-[2px_2px_0_0_#000] hover:bg-[#262046]',
-                    chog?.gang === v.gang && 'outline outline-2 outline-offset-1 outline-[#ffd666]',
+                    'rounded-[7px] px-3 pb-1 pt-1.5 font-display text-[16px] uppercase leading-none',
+                    boardTab === k ? 'bg-[#ffd666] text-ink' : 'text-white/70 hover:text-white',
                   )}
                 >
-                  <span className="w-5 text-center font-display text-[18px] text-white/50">{i + 1}</span>
-                  <span
-                    className="h-8 w-2 shrink-0 rounded-full border border-ink"
-                    style={{ background: GANG_COLOR[v.gang].bg }}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-display text-[18px] uppercase leading-none">
-                      {GANGS[v.gang].name}
-                    </span>
-                    <span className="text-[12px] text-white/60">{plural(v.members, 'member')}</span>
-                  </span>
-                  {revenge.includes(v.gang) && (
-                    <span className="inline-flex items-center gap-1 rounded-[4px] bg-pink px-1.5 py-0.5 text-[11px] font-bold uppercase text-ink">
-                      <ArrowBendUpLeft size={12} weight="bold" /> Revenge
-                    </span>
-                  )}
-                  <span className="font-display text-[20px] leading-none text-[#ffd666] tabular-nums">
-                    {money(v.cash)}
-                  </span>
+                  {k === 'gangs' ? 'Richest' : 'Latest hits'}
                 </button>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-2 text-[12px] text-white/50">Tap a gang to walk to its building.</p>
-          <h3 className="mt-6 font-display text-[24px] uppercase leading-none">Latest hits</h3>
-          {board && board.hits.length === 0 && (
-            <p className="mt-2 text-[14px] text-white/60">No hits yet. Be the first.</p>
+              ))}
+            </div>
+          </div>
+          {board && (
+            <p className="mt-1 text-[13px] text-white/60">
+              Hits reset in {formatLeft(board.resetAt - now)}. Tap a gang to walk to its building.
+            </p>
           )}
-          <ul className="mt-2 divide-y divide-white/10">
-            {(board?.hits ?? []).slice(0, 15).map((h) => (
-              <li key={h.id}>
-                <Link href={`/replay/${h.id}`} className="group flex items-center gap-3 py-2 text-[14px]">
-                  <img
-                    src={chogImage(h.chogId, 96)}
-                    alt=""
-                    className="h-8 w-8 shrink-0 rounded-full border-2 border-ink"
-                  />
-                  <p className="min-w-0 flex-1 leading-snug">
-                    <HitLine h={h} />
-                  </p>
-                  <span className="shrink-0 text-right text-[12px] text-white/50">
-                    {ago(h.at, now)}
-                    <span className="flex items-center justify-end gap-0.5 font-semibold text-white/80 group-hover:text-white">
-                      <Play size={11} weight="fill" /> Watch
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Sheet>
+          {boardTab === 'gangs' ? (
+            <ol className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {(board?.board ?? []).map((v, i) => {
+                const c = GANG_COLOR[v.gang];
+                const mine = chog?.gang === v.gang;
+                const hit = chog?.hitToday.includes(v.gang);
+                return (
+                  <li key={v.gang}>
+                    <button
+                      onClick={() => {
+                        setSheet(null);
+                        view.current?.walkTo(v.gang);
+                      }}
+                      className={cn(
+                        'group relative flex h-full w-full flex-col overflow-hidden rounded-[14px] border-[3px] border-ink bg-[#1d1838] text-left shadow-[0_5px_0_0_#000] transition hover:-translate-y-0.5',
+                        mine && 'ring-[3px] ring-[#ffd666] ring-offset-2 ring-offset-[#17132b]',
+                      )}
+                    >
+                      <span
+                        className="flex items-center gap-2 border-b-[3px] border-ink px-2.5 pb-1.5 pt-2"
+                        style={{ background: c.bg, color: c.fg }}
+                      >
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 border-ink bg-white font-display text-[15px] leading-none text-ink">
+                          {i + 1}
+                        </span>
+                        <span className="min-w-0 truncate font-display text-[18px] uppercase leading-none">
+                          {GANGS[v.gang].name}
+                        </span>
+                      </span>
+                      <span className="flex -space-x-2 px-2.5 pt-2.5">
+                        {v.guards.slice(0, 4).map((id) => (
+                          <img
+                            key={id}
+                            src={chogImage(id, 96)}
+                            alt=""
+                            className="h-11 w-11 rounded-[10px] border-2 border-ink object-cover"
+                          />
+                        ))}
+                        {v.guards.length === 0 && (
+                          <span className="h-11 text-[13px] leading-[44px] text-white/50">
+                            No members yet
+                          </span>
+                        )}
+                      </span>
+                      <span className="flex flex-1 flex-col px-2.5 pb-2.5 pt-2">
+                        <span className="font-display text-[26px] leading-none text-[#ffd666] tabular-nums">
+                          {money(v.cash)}
+                        </span>
+                        <span className="mt-1 text-[12px] text-white/60">
+                          {plural(v.members, 'member')} · {DEFENCE[v.tier]}
+                        </span>
+                        <span className="mt-1.5 flex flex-wrap gap-1">
+                          {mine && (
+                            <span className="rounded-[5px] bg-[#ffd666] px-1.5 py-0.5 text-[11px] font-bold uppercase text-ink">
+                              Your gang
+                            </span>
+                          )}
+                          {revenge.includes(v.gang) && (
+                            <span className="inline-flex items-center gap-1 rounded-[5px] bg-pink px-1.5 py-0.5 text-[11px] font-bold uppercase text-ink">
+                              <ArrowBendUpLeft size={11} weight="bold" /> Revenge
+                            </span>
+                          )}
+                          {hit && (
+                            <span className="rounded-[5px] bg-white/15 px-1.5 py-0.5 text-[11px] font-bold uppercase text-white/80">
+                              Hit today
+                            </span>
+                          )}
+                          {alarms[v.gang] && alarms[v.gang]!.since > now - 180_000 && (
+                            <span className="rounded-[5px] bg-[#ff2d55] px-1.5 py-0.5 text-[11px] font-bold uppercase text-white">
+                              Being robbed
+                            </span>
+                          )}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <>
+              {board && board.hits.length === 0 && (
+                <p className="mt-4 text-[14px] text-white/60">No hits yet. Be the first.</p>
+              )}
+              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                {(board?.hits ?? []).slice(0, 20).map((h) => (
+                  <li key={h.id}>
+                    <Link
+                      href={`/replay/${h.id}`}
+                      className="group flex items-center gap-3 rounded-[12px] border-[3px] border-ink bg-[#1d1838] p-2 text-[14px] shadow-[0_4px_0_0_#000] hover:bg-[#262046]"
+                    >
+                      <img
+                        src={chogImage(h.chogId, 96)}
+                        alt=""
+                        className="h-12 w-12 shrink-0 rounded-[10px] border-2 border-ink object-cover"
+                      />
+                      <p className="min-w-0 flex-1 leading-snug">
+                        <HitLine h={h} />
+                      </p>
+                      <span className="shrink-0 text-right text-[12px] text-white/50">
+                        {ago(h.at, now)}
+                        <span className="flex items-center justify-end gap-0.5 font-semibold text-white/80 group-hover:text-white">
+                          <Play size={11} weight="fill" /> Watch
+                        </span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </Board>
       )}
     </div>
   );
@@ -1031,6 +1097,35 @@ function Card({ children, onClose }: { children: React.ReactNode; onClose?: () =
         )}
         {children}
       </div>
+    </div>
+  );
+}
+
+/** A big board in the middle of the screen, like the game's meeting screen. */
+function Board({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [onClose]);
+  return (
+    <div
+      className="absolute inset-0 z-40 grid place-items-center bg-black/55 p-2 backdrop-blur-[2px] sm:p-6"
+      onClick={onClose}
+    >
+      <section
+        onClick={(e) => e.stopPropagation()}
+        className="relative max-h-full w-full max-w-[1040px] animate-[sheet-in_220ms_ease-out] overflow-y-auto rounded-[22px] border-[3px] border-ink bg-[#17132b] p-4 shadow-[0_8px_0_0_#000] sm:p-6"
+      >
+        <button
+          onClick={onClose}
+          className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border-[3px] border-ink bg-white text-ink shadow-[0_3px_0_0_#000]"
+          aria-label="Close"
+        >
+          <X size={18} weight="bold" />
+        </button>
+        {children}
+      </section>
     </div>
   );
 }
