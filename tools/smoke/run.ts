@@ -115,5 +115,22 @@ check(
   ['you', 'all', 's', 'fix'].every((t) => seen.includes(t)),
   seen.join(','),
 );
+// Raid rooms: a watch request for a raid that isn't running is turned away (so the route is there).
+const raid = await new Promise<string>((resolve) => {
+  const ws = new WebSocket(wsUrl, { headers: { origin: base } });
+  setTimeout(() => resolve('timeout'), 4000);
+  ws.on('open', () => ws.send(JSON.stringify({ t: 'watch', run: 'notarealrun1' })));
+  ws.on('close', (code, why) => resolve(`${code} ${String(why)}`));
+});
+check('raid rooms answer', raid === '1008 no-raid', raid);
+check(
+  'live finish needs the live server’s signature',
+  (
+    await call('/api/heist/live-finish', {
+      method: 'POST',
+      body: JSON.stringify({ run: 'x', inputs: '', defenders: [] }),
+    })
+  ).status === 403,
+);
 const out = await call('/api/auth/logout', { method: 'POST' });
 check('logout', out.status === 200 && (await call('/api/war/me')).body.address === null);
