@@ -20,6 +20,34 @@ export interface Remote {
   moving: boolean;
   seen: number;
   emote?: { kind: Emote; at: number };
+  /** Police in a getaway (not a player or a stroller). */
+  cop?: boolean;
+}
+
+/** A getaway in the city: someone carrying a bag from a robbed gang's door to their own. */
+export interface Chase {
+  run: string;
+  /** The runner's id in the people list. */
+  id: number;
+  chog: number;
+  name: string;
+  bag: number;
+  from: GangId;
+  home: GangId;
+  /** When time runs out (ms). */
+  until: number;
+  cops: { id: number; chog: number }[];
+}
+
+export interface ChaseEnd {
+  run: string;
+  id: number;
+  chog: number;
+  outcome: 'home' | 'caught';
+  /** The robbed-gang Chog that tagged them, if it wasn't the police. */
+  by: number | null;
+  who: 'police' | 'gang' | 'time' | null;
+  bag: number;
 }
 
 interface Info {
@@ -46,6 +74,9 @@ export class LiveCity {
   online = 0;
   you: number | null = null;
   people = new Map<number, Remote>();
+  chases = new Map<string, Chase>();
+  /** Your own getaway pass, sent again after a reconnect so the run carries on. */
+  private myRun: string | null = null;
   private ws: WebSocket | null = null;
   private stopped = false;
   private retry = 0;
@@ -54,7 +85,12 @@ export class LiveCity {
   constructor(
     private chog: number | null,
     private where: () => { x: number; y: number },
-    private on: { fix: (x: number, y: number) => void; status: (s: LiveStatus, online: number) => void },
+    private on: {
+      fix: (x: number, y: number) => void;
+      status: (s: LiveStatus, online: number) => void;
+      chase?: () => void;
+      chaseEnd?: (e: ChaseEnd) => void;
+    },
   ) {
     queueMicrotask(() => void this.connect());
   }
@@ -130,7 +166,28 @@ export class LiveCity {
         this.retry = 0;
         this.setStatus('live');
         this.on.fix(m.x as number, m.y as number);
+        if (this.myRun) this.ws?.send(JSON.stringify({ t: 'run', pass: this.myRun }));
         break;
+      case 'chase': {
+        const c = m as unknown as Chase;
+        this.chases.set(c.run, c);
+        for (const k of c.cops)
+          this.add({ id: k.id, chog: k.chog, name: 'Police', gang: null, npc: true }, now);
+        for (const k of c.cops) this.people.get(k.id)!.cop = true;
+        this.on.chase?.();
+        break;
+      }
+      case 'chase-end': {
+        const e = m as unknown as ChaseEnd;
+        const c = this.chases.get(e.run);
+        // The police stay a moment where they are, then go.
+        if (c) setTimeout(() => c.cops.forEach((k) => this.people.delete(k.id)), 2500);
+        this.chases.delete(e.run);
+        if (e.chog === this.chog) this.myRun = null;
+        this.on.chaseEnd?.(e);
+        this.on.chase?.();
+        break;
+      }
       case 'all':
         this.people.clear();
         for (const p of m.people as Info[]) this.add(p, now);
@@ -151,7 +208,7 @@ export class LiveCity {
       }
       case 's': {
         this.online = m.n as number;
-        const d = m.d as number[];
+        const d = (m.d as number[]).concat((m.c as number[] | undefined) ?? []);
         for (let i = 0; i < d.length; i += 4) {
           const p = this.people.get(d[i]!);
           if (!p) continue;
@@ -195,6 +252,13 @@ export class LiveCity {
       JSON.stringify({ t: 'mv', x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, f: face, m }),
     );
     this.sent = { x, y, f: face, m, at: now };
+  }
+
+  /** Out of a vault with a bag: start the getaway (the server puts you at the robbed gang's door). */
+  run(pass: string) {
+    this.myRun = pass;
+    if (this.ws?.readyState === WebSocket.OPEN && this.you !== null)
+      this.ws.send(JSON.stringify({ t: 'run', pass }));
   }
 
   emote(kind: Emote) {

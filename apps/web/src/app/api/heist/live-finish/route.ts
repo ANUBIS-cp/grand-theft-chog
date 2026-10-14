@@ -3,6 +3,7 @@ import { checkInternal } from '@chog-city/server/ticket';
 import { z } from 'zod';
 import { db } from '@/server/db';
 import { error, json } from '@/server/http';
+import { withGetaway } from '@/server/raid';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,7 +42,8 @@ export async function POST(req: Request) {
       defenders: body.data.defenders,
       now: Date.now(),
     });
-    return json({ ok: true, result });
+    // The robber's screen gets this through the live server: the getaway pass rides along.
+    return json({ ok: true, result: withGetaway(body.data.run, result) });
   } catch (e) {
     if (e instanceof HeistRefused) return error(e.code, 409);
     throw e;

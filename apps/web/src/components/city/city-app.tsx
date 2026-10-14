@@ -1,6 +1,7 @@
 'use client';
 import { GANGS, type GangId } from '@chog-city/data';
 import { EMOTES, type Emote, type Place } from '@chog-city/game/city';
+import { encodeLock } from '@chog-city/game/lock';
 import { RUSH_BANK, rushRules, rushSeed } from '@chog-city/game/rush';
 import { BUST_FINE, GUARD_PRICE, POWERS, SAFE_BY_TIER, type PowerId } from '@chog-city/game/heist';
 import {
@@ -20,6 +21,8 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ConnectPanel } from '@/components/connect-panel';
 import type { RealResult } from '@/components/heist/heist-game';
+import { Sound } from '@/components/heist/sound';
+import { LockGame } from '@/components/lock/lock-game';
 import { RaidLink } from '@/components/rush/raid-link';
 import { RushGame } from '@/components/rush/rush-game';
 import { SkillIcon } from '@/components/skill-icons';
@@ -42,7 +45,7 @@ import {
   RoleCard,
   RoundButton,
 } from './hud';
-import type { LiveStatus } from './live-city';
+import type { Chase, ChaseEnd, LiveStatus } from './live-city';
 
 interface VaultRow {
   gang: GangId;
@@ -87,6 +90,10 @@ interface Run {
   guards: { id: number; name: string }[];
   /** The live raid room (defenders can join); missing if the live server can't be reached. */
   link?: RaidLink;
+  /** Stage 1 (the lock on the door) or 2 (inside the vault). Break-outs skip the lock. */
+  stage?: 'lock' | 'vault';
+  /** The break-in was loud: the alarm is ringing inside. */
+  loud?: boolean;
 }
 interface Robbing {
   target: GangId;
@@ -173,6 +180,8 @@ export function CityApp() {
   const [city, setCity] = useState<CityData | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
   const [run, setRun] = useState<Run | null>(null);
+  const [chases, setChases] = useState<Chase[]>([]);
+  const siren = useRef<Sound | null>(null);
   const [practice, setPractice] = useState(false);
   /** The door you're standing at, and whether its card is open. */
   const [door, setDoor] = useState<Place | null>(null);
@@ -183,9 +192,11 @@ export function CityApp() {
   const [banner, setBanner] = useState<BannerData | null>(null);
   const [boardTab, setBoardTab] = useState<'gangs' | 'hits'>('gangs');
   /** Defending your gang's vault, or watching a raid, live. */
-  const [raidView, setRaidView] = useState<{ link: RaidLink; role: 'defend' | 'watch'; target: GangId } | null>(
-    null,
-  );
+  const [raidView, setRaidView] = useState<{
+    link: RaidLink;
+    role: 'defend' | 'watch';
+    target: GangId;
+  } | null>(null);
   const [, setRaidSeen] = useState(0);
   useEffect(() => {
     if (!raidView) return;
@@ -452,14 +463,94 @@ export function CityApp() {
     setBusy(target);
     setNotice(null);
     try {
-      const d = await post<{ run: Run; pass?: string }>('/api/heist/start', { chogId: chog.id, target });
-      setRun({ ...d.run, link: d.pass ? new RaidLink({ t: 'raid', pass: d.pass }) : undefined });
+      const d = await post<{ run: Run }>('/api/heist/start', { chogId: chog.id, target });
+      setRun({ ...d.run, stage: 'lock' });
     } catch (e) {
       setNotice((e as Error).message);
     } finally {
       setBusy(null);
     }
   }
+
+  // Getaways: the siren plays while you carry a bag, and the end of any chase you're part of gets a banner.
+  const chasesRef = useRef<Chase[]>([]);
+  if (chases.length) chasesRef.current = chases;
+  const myChase = chog ? chases.find((c) => c.chog === chog.id) : undefined;
+  useEffect(() => {
+    if (myChase) siren.current?.alarmOn();
+    else siren.current?.alarmOff();
+  }, [myChase]);
+  useEffect(() => () => siren.current?.alarmOff(), []);
+  const chaseEnded = (e: ChaseEnd) => {
+    const c = chasesRef.current.find((x) => x.run === e.run);
+    const myGang = chog?.gang;
+    const mine = chog && e.chog === chog.id;
+    view.current?.chaseAfter(null);
+    if (mine) {
+      siren.current?.alarmOff();
+      if (e.outcome === 'home') siren.current?.escaped();
+      else siren.current?.busted();
+      setBanner(
+        e.outcome === 'home'
+          ? {
+              id: `home${e.run}`,
+              title: 'Home free!',
+              line: `${money(e.bag)} landed in ${myGang ? GANGS[myGang].name : 'your gang'}’s vault.`,
+              chog: e.chog,
+              tone: 'win',
+            }
+          : {
+              id: `caught${e.run}`,
+              title: 'Caught!',
+              line:
+                e.who === 'gang'
+                  ? `They tagged you and took the bag back. ${money(BUST_FINE)} fine, 30 minutes in jail.`
+                  : e.who === 'time'
+                    ? `The police closed in. The bag went back: ${money(BUST_FINE)} fine, 30 minutes in jail.`
+                    : `The police got you. The bag went back: ${money(BUST_FINE)} fine, 30 minutes in jail.`,
+              chog: e.by ?? e.chog,
+              tone: 'lose',
+            },
+      );
+      void loadMe();
+      void loadCity();
+    } else if (chog && e.by === chog.id) {
+      setBanner({
+        id: `tag${e.run}`,
+        title: 'Bag back!',
+        line: `You caught them and took ${money(e.bag)} back to the vault.`,
+        chog: e.chog,
+        tone: 'win',
+      });
+      void loadMe();
+    } else if (c && myGang && c.from === myGang) {
+      setBanner(
+        e.outcome === 'home'
+          ? {
+              id: `gone${e.run}`,
+              title: 'They got away',
+              line: `${c.name} made it home with ${money(e.bag)} of yours.`,
+              chog: e.chog,
+              tone: 'lose',
+            }
+          : {
+              id: `saved${e.run}`,
+              title: 'Bag back!',
+              line: `${c.name} got caught. ${money(e.bag)} is back in your vault.`,
+              chog: e.chog,
+              tone: 'win',
+            },
+      );
+    }
+    void loadBoard();
+  };
+  // The getaway clock needs to tick faster than the city's once-a-second clock.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!chases.length) return;
+    const t = setInterval(() => setTick((n) => n + 1), 250);
+    return () => clearInterval(t);
+  }, [chases.length]);
 
   // ---------- heads-up display ----------
   const myRow = chog?.gang ? board?.board.find((v) => v.gang === chog.gang) : undefined;
@@ -607,7 +698,11 @@ export function CityApp() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-[#0b0918] p-6 text-center text-white">
           <div>
             <p className="font-display text-[34px] uppercase leading-none">
-              {link.status === 'failed' ? 'That raid is over' : raidView.role === 'defend' ? 'Joining the raid…' : 'Finding the raid…'}
+              {link.status === 'failed'
+                ? 'That raid is over'
+                : raidView.role === 'defend'
+                  ? 'Joining the raid…'
+                  : 'Finding the raid…'}
             </p>
             {link.status === 'failed' && (
               <button onClick={leave} className={cn(btn, 'mt-5 bg-[#ffd666] text-ink')}>
@@ -628,10 +723,43 @@ export function CityApp() {
           robber={{ id: st.robber.chog, name: st.robber.name }}
           player={{ id: st.robber.chog, name: st.robber.name, gang: null, powers: st.powers as PowerId[] }}
           guards={st.guards.map((id) => ({ id, name: '' }))}
-          owner={{ name: GANGS[target]?.name ?? 'The jail', color: GANG_COLOR[target]?.bg ?? '#ff5a4f', ink: GANG_COLOR[target]?.fg ?? '#111111' }}
+          owner={{
+            name: GANGS[target]?.name ?? 'The jail',
+            color: GANG_COLOR[target]?.bg ?? '#ff5a4f',
+            ink: GANG_COLOR[target]?.fg ?? '#111111',
+          }}
           onLeave={leave}
         />
       </div>
+    );
+  }
+
+  if (run && chog && run.stage === 'lock') {
+    const r = run;
+    return (
+      <LockGame
+        key={r.id}
+        gang={r.target}
+        seed={rushSeed(r.id)}
+        onDone={(inputs) => {
+          post<{ loud: boolean; pass: string }>('/api/heist/lock', {
+            runId: r.id,
+            inputs: encodeLock(inputs),
+          })
+            .then((d) =>
+              setRun({
+                ...r,
+                stage: 'vault',
+                loud: d.loud,
+                link: new RaidLink({ t: 'raid', pass: d.pass }),
+              }),
+            )
+            .catch((e: unknown) => {
+              setNotice(e instanceof Error ? e.message : 'Could not open the door.');
+              backTo(r.target);
+            });
+        }}
+      />
     );
   }
 
@@ -641,7 +769,7 @@ export function CityApp() {
         <RushGame
           key={run.id}
           mapId={run.vault}
-          rules={rushRules(run.tier, !!run.prisoner)}
+          rules={rushRules(run.tier, !!run.prisoner, run.loud)}
           seed={rushSeed(run.id)}
           link={run.link}
           player={{
@@ -673,8 +801,14 @@ export function CityApp() {
             replayHref: `/replay/${run.id}`,
             finish: async (inputs) =>
               (await post<{ result: RealResult }>('/api/heist/finish', { runId: run.id, inputs })).result,
-            onLeave: () => {
+            onLeave: (getawayPass) => {
               backTo(run.prisoner ? 'jail' : run.target);
+              // Out with a bag: run it home through the city (the live server starts the chase).
+              if (getawayPass) {
+                siren.current ??= new Sound();
+                siren.current.unlock();
+                requestAnimationFrame(() => view.current?.run(getawayPass));
+              }
               void loadMe();
               void loadBoard();
               void loadCity();
@@ -733,6 +867,8 @@ export function CityApp() {
         onLive={(status, online) =>
           setLive((l) => (l.status === status && l.online === online ? l : { status, online }))
         }
+        onChase={setChases}
+        onChaseEnd={chaseEnded}
       />
 
       {/* Top left: who you are and today's jobs */}
@@ -775,6 +911,29 @@ export function CityApp() {
           onOpen={() => setMapOpen(true)}
         />
       </div>
+
+      {/* Getaways: yours (run it home), one from your vault (stop them), or anyone's (a heads-up). */}
+      {chases.length > 0 && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-[118px] z-30 flex flex-col items-center gap-2 px-3 sm:bottom-auto sm:top-[96px]">
+          {chases
+            .filter((c) => c === myChase || (chog?.gang && c.from === chog.gang) || chases.length < 3)
+            .slice(0, 3)
+            .map((c) => (
+              <ChaseBar
+                key={c.run}
+                c={c}
+                mine={c === myChase}
+                ours={!!chog?.gang && c.from === chog.gang && c !== myChase}
+                canChase={!!chog && !jailedNow && c !== myChase}
+                onChase={() => {
+                  setDoorOpen(false);
+                  setSheet(null);
+                  view.current?.chaseAfter(c.id);
+                }}
+              />
+            ))}
+        </div>
+      )}
 
       {/* Top middle: comic banners */}
       <div className="pointer-events-none absolute inset-x-0 top-[148px] z-30 flex justify-center px-3 sm:top-4">
@@ -1465,7 +1624,11 @@ function DoorCard(props: {
           )}
           <button
             onClick={() => props.onWatch(props.robbing!)}
-            className={cn(btn, 'h-11 bg-white text-[17px] text-ink', !(mine && props.loggedIn) && 'col-span-2')}
+            className={cn(
+              btn,
+              'h-11 bg-white text-[17px] text-ink',
+              !(mine && props.loggedIn) && 'col-span-2',
+            )}
           >
             <span className="pt-0.5">Watch live</span>
           </button>
@@ -1643,6 +1806,61 @@ function Peek({ who, jailed, now }: { who: Tapped; jailed: Jailed[]; now: number
           See its record <ArrowSquareOut size={14} />
         </Link>
       </div>
+    </div>
+  );
+}
+
+/** A getaway in progress: your own (time left, where to), one from your vault (go after them), or anyone's. */
+function ChaseBar(props: { c: Chase; mine: boolean; ours: boolean; canChase: boolean; onChase: () => void }) {
+  const { c, mine, ours } = props;
+  const left = Math.max(0, Math.ceil((c.until - Date.now()) / 1000));
+  if (mine)
+    return (
+      <div className="pointer-events-none w-full max-w-[460px] animate-[banner-in_380ms_ease-out_both] rounded-[16px] border-[3px] border-ink bg-[#ffd666] px-4 py-2.5 text-ink shadow-[0_6px_0_0_#000]">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-display text-[30px] uppercase leading-[0.9]">Run it home!</p>
+            <p className="text-[14px] font-semibold leading-snug">
+              {money(c.bag)} to {GANGS[c.home].name}’s door. Dodge the police.
+            </p>
+          </div>
+          <span
+            className={cn(
+              'grid h-14 w-16 shrink-0 place-items-center rounded-[12px] border-[3px] border-ink pt-1 font-display text-[34px] tabular-nums leading-none',
+              left <= 10 ? 'animate-pulse bg-jail text-white' : 'bg-white',
+            )}
+          >
+            {left}
+          </span>
+        </div>
+      </div>
+    );
+  return (
+    <div
+      className={cn(
+        'pointer-events-auto flex w-full max-w-[460px] items-center gap-3 rounded-[14px] border-[3px] border-ink py-1.5 pl-1.5 pr-2 shadow-[0_4px_0_0_#000]',
+        ours ? 'bg-[#ff2d55] text-white' : 'bg-[#1d1838] text-white',
+      )}
+    >
+      <img
+        src={chogImage(c.chog, 96)}
+        alt=""
+        className="h-11 w-11 shrink-0 rounded-[9px] border-2 border-ink object-cover"
+      />
+      <p className="min-w-0 flex-1 text-[14px] font-semibold leading-snug">
+        <span className="block font-display text-[20px] uppercase leading-none">
+          {ours ? 'Stop the robber!' : 'Getaway!'}
+        </span>
+        {c.name} is running from {GANGS[c.from].name} with {money(c.bag)} · {left}s
+      </p>
+      {props.canChase && (
+        <button
+          onClick={props.onChase}
+          className="h-10 shrink-0 rounded-[10px] border-[3px] border-ink bg-[#ffd666] px-3 pt-1 font-display text-[18px] uppercase leading-none text-ink shadow-[0_3px_0_0_#000] active:translate-y-[2px]"
+        >
+          {ours ? 'Chase' : 'Watch'}
+        </button>
+      )}
     </div>
   );
 }

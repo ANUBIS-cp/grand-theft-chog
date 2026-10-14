@@ -57,6 +57,8 @@ export interface RaidPass {
     powers: string[];
     guards: number[];
     target: string;
+    /** The break-in was loud: the alarm is ringing from the start. */
+    loud?: boolean;
   };
   exp: number;
 }
@@ -89,4 +91,41 @@ export function checkInternal(body: string, mac: string | null): boolean {
   const want = Buffer.from(signInternal(body));
   const got = Buffer.from(mac);
   return want.length === got.length && timingSafeEqual(want, got);
+}
+
+/**
+ * A pass for the getaway: you're out of the vault with the bag and have to carry it home through the city.
+ * The live server runs the chase from this alone and reports the result back, signed.
+ */
+export interface GetawayPass {
+  run: string;
+  chog: number;
+  name: string;
+  /** The robbed gang (where you come out) and your own gang (where you take the bag). */
+  from: string;
+  home: string;
+  bag: number;
+  tier: number;
+  exp: number;
+}
+
+export const GETAWAY_PASS_MS = 5 * 60_000;
+
+export function makeGetawayPass(p: Omit<GetawayPass, 'exp'>, now = Date.now()): string {
+  const body = Buffer.from(JSON.stringify({ ...p, exp: now + GETAWAY_PASS_MS })).toString('base64url');
+  return `${body}.${sign('getaway:' + body)}`;
+}
+
+export function readGetawayPass(pass: string, now = Date.now()): GetawayPass | null {
+  const [body, mac] = pass.split('.');
+  if (!body || !mac) return null;
+  const want = Buffer.from(sign('getaway:' + body));
+  const got = Buffer.from(mac);
+  if (want.length !== got.length || !timingSafeEqual(want, got)) return null;
+  try {
+    const p = JSON.parse(Buffer.from(body, 'base64url').toString()) as GetawayPass;
+    return p.exp > now ? p : null;
+  } catch {
+    return null;
+  }
 }

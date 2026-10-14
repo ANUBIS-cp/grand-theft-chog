@@ -150,3 +150,16 @@
     transform: translateY(-420px) scale(1);
   }
 }
+
+@keyframes lock-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-7px) rotate(-0.6deg);
+  }
+  75% {
+    transform: translateX(7px) rotate(0.6deg);
+  }
+}

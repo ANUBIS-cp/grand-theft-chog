@@ -15,9 +15,11 @@ import {
   tierNow,
   GUARD_MS,
   GUARD_PRICE,
+  BUST_FINE,
   vaultDef,
   type PowerId,
 } from '@chog-city/game/heist';
+import { decodeLock, replayLock } from '@chog-city/game/lock';
 import {
   RUSH_JAIL_ID,
   decodeRushInputs,
@@ -53,13 +55,20 @@ export type HeistError =
   | 'too-poor'
   | 'not-in-jail'
   | 'not-your-gang'
-  | 'live';
+  | 'live'
+  | 'locked'
+  | 'no-lock';
 
 /** Marks a run that defenders joined: only the live server can finish it. */
 const LIVE = 'live';
 
 /** How long a building's alarm stays on without the robbery finishing. */
 const ALARM_MS = 3 * 60_000;
+
+/** A getaway nobody reported on is banked after this long (a live server failure shouldn't cost you). */
+export const GETAWAY_MS = 5 * 60_000;
+/** Getting caught on the way home costs the same fine as getting caught inside. */
+const GETAWAY_FINE = BUST_FINE;
 
 export class HeistRefused extends Error {
   constructor(readonly code: HeistError) {
@@ -207,13 +216,51 @@ export async function startRun(
     guards: run.guards,
     startedAt: new Date(now),
   });
+  return run;
+}
+
+/**
+ * Stage 1, the break-in: the taps on the vault door's lock, replayed from the run's seed. A clean one is quiet;
+ * a slow or sloppy one is loud (the chase starts with the alarm ringing). Then the building's alarm lights
+ * up for the whole city: the robber is inside.
+ */
+export async function lockRun(
+  db: Db,
+  { address, runId, inputs: text, now }: { address: string; runId: string; inputs: string; now: number },
+): Promise<{ loud: boolean; chog: number; run: StartedRun }> {
+  const [run] = await db.select().from(heistRuns).where(eq(heistRuns.id, runId));
+  if (!run || run.player !== address.toLowerCase() || run.prisoner !== null) throw new HeistRefused('no-run');
+  if (run.finishedAt) throw new HeistRefused('finished');
+  if (run.lock !== null) throw new HeistRefused('locked');
+  if (now - run.startedAt.getTime() > RUN_MAX_MS) throw new HeistRefused('too-late');
+  const inputs = decodeLock(text);
+  if (!inputs) throw new HeistRefused('bad-inputs');
+  const loud = !replayLock(run.target as GangId, rushSeed(run.id), inputs).quiet;
+  const done = await db
+    .update(heistRuns)
+    .set({ lock: text, loud })
+    .where(and(eq(heistRuns.id, run.id), isNull(heistRuns.lock)))
+    .returning({ id: heistRuns.id });
+  if (!done.length) throw new HeistRefused('locked');
   // Lights the alarm on the target's building for everyone in the city.
   await db
     .execute(
-      sql`select pg_notify('city', ${JSON.stringify({ alarm: target, gang: me.gang, chog: chogId, run: run.id })})`,
+      sql`select pg_notify('city', ${JSON.stringify({ alarm: run.target, gang: run.gang, chog: run.chogId, run: run.id })})`,
     )
     .catch(() => undefined);
-  return run;
+  return {
+    loud,
+    chog: run.chogId,
+    run: {
+      id: run.id,
+      vault: run.vault,
+      tier: run.tier,
+      target: run.target as GangId,
+      revenge: run.revenge,
+      powers: run.powers as PowerId[],
+      guards: run.guards as number[],
+    },
+  };
 }
 
 /** Vaults being robbed right now (runs started in the last few minutes and not finished). */
@@ -234,6 +281,7 @@ export async function robbing(
       and(
         isNull(heistRuns.finishedAt),
         isNull(heistRuns.prisoner),
+        isNotNull(heistRuns.lock),
         gt(heistRuns.startedAt, new Date(now - ALARM_MS)),
       ),
     );
@@ -255,6 +303,8 @@ export interface FinishedRun {
   jailedUntil: number | null;
   revenge: boolean;
   target: GangId;
+  /** Out of the vault with a bag: it's only yours once you carry it home through the city (stage 3). */
+  getaway?: { bag: number; from: GangId; home: GangId; chog: number; tier: number };
 }
 
 /**
@@ -268,6 +318,7 @@ function replayRun(
     powers: unknown;
     prisoner: number | null;
     revenge: boolean;
+    loud: boolean;
     id: string;
   },
   text: string,
@@ -280,7 +331,7 @@ function replayRun(
   if (map) {
     const inputs = decodeRushInputs(text);
     if (!inputs || inputs.length > rushMaxSteps(map)) throw new HeistRefused('bad-inputs');
-    const rules = rushRules(run.tier, run.prisoner !== null);
+    const rules = rushRules(run.tier, run.prisoner !== null, run.loud);
     return settleRush(
       map,
       rules,
@@ -328,6 +379,7 @@ export async function finishRun(
     if (!run || (address !== null && run.player !== address.toLowerCase())) throw new HeistRefused('no-run');
     if (run.finishedAt) throw new HeistRefused('finished');
     if (address !== null && run.inputs === LIVE) throw new HeistRefused('live');
+    if (run.lock === null && run.prisoner === null) throw new HeistRefused('no-lock');
     if (now - run.startedAt.getTime() > RUN_MAX_MS) throw new HeistRefused('too-late');
     // Lock both vaults in a fixed order so two runs settling at once can't deadlock.
     const pair = [run.gang, run.target].sort();
@@ -344,16 +396,20 @@ export async function finishRun(
     const robberHas = breakout ? 0 : (cash[run.gang] ?? 0);
     const { state, moved } = replayRun(run, text, vaultHas, robberHas, defenders);
     const escaped = state.phase === 'escaped';
+    // Out with cash: the bag leaves the vault now (it can't be spent twice) and reaches your gang's vault
+    // only when you carry it home.
+    const bagged = escaped && !breakout && moved > 0;
     const [from, to] = escaped ? [run.target, run.gang] : [run.gang, run.target];
     if (moved > 0) {
       await tx
         .update(gangVaults)
         .set({ cash: sql`${gangVaults.cash} - ${moved}`, updatedAt: new Date(now) })
         .where(eq(gangVaults.gang, from));
-      await tx
-        .update(gangVaults)
-        .set({ cash: sql`${gangVaults.cash} + ${moved}`, updatedAt: new Date(now) })
-        .where(eq(gangVaults.gang, to));
+      if (!bagged)
+        await tx
+          .update(gangVaults)
+          .set({ cash: sql`${gangVaults.cash} + ${moved}`, updatedAt: new Date(now) })
+          .where(eq(gangVaults.gang, to));
     }
     // A guard steered by a real defender: the catch is theirs.
     const human = defenders.find((d) => d.guard === state.caughtBy);
@@ -368,18 +424,20 @@ export async function finishRun(
     await tx
       .update(heistChogs)
       .set(
-        escaped
-          ? {
-              stolen: sql`${heistChogs.stolen} + ${moved}`,
-              escapes: sql`${heistChogs.escapes} + 1`,
-              best: sql`greatest(${heistChogs.best}, ${state.score})`,
-              lastRunAt: new Date(now),
-            }
-          : {
-              busts: sql`${heistChogs.busts} + 1`,
-              jailedUntil: new Date(jailedUntil!),
-              lastRunAt: new Date(now),
-            },
+        bagged
+          ? { lastRunAt: new Date(now) }
+          : escaped
+            ? {
+                stolen: sql`${heistChogs.stolen} + ${moved}`,
+                escapes: sql`${heistChogs.escapes} + 1`,
+                best: sql`greatest(${heistChogs.best}, ${state.score})`,
+                lastRunAt: new Date(now),
+              }
+            : {
+                busts: sql`${heistChogs.busts} + 1`,
+                jailedUntil: new Date(jailedUntil!),
+                lastRunAt: new Date(now),
+              },
       )
       .where(eq(heistChogs.id, run.chogId));
     if (caughtBy !== null && !breakout)
@@ -398,6 +456,7 @@ export async function finishRun(
         caughtBy,
         // Defenders' moves are kept after the robber's, so the replay plays them too.
         inputs: defenders.length ? `${text}\n${JSON.stringify(defenders)}` : text,
+        ...(bagged ? { getaway: 'running' as const, bagUntil: new Date(now + GETAWAY_MS) } : {}),
       })
       .where(eq(heistRuns.id, run.id));
     await tx
@@ -414,8 +473,107 @@ export async function finishRun(
       jailedUntil,
       revenge: run.revenge,
       target: run.target,
+      ...(bagged
+        ? {
+            getaway: {
+              bag: moved,
+              from: run.target as GangId,
+              home: run.gang as GangId,
+              chog: run.chogId,
+              tier: run.tier,
+            },
+          }
+        : {}),
     };
   });
+}
+
+export interface GetawayResult {
+  outcome: 'home' | 'caught';
+  bag: number;
+  caughtBy: number | null;
+  jailedUntil: number | null;
+}
+
+/**
+ * Stage 3 is over: the live server says you carried the bag home (it lands in your gang's vault) or got caught
+ * on the way (it goes back, you pay the fine and go to jail; a robbed-gang Chog that tagged you gets the
+ * catch). Also used to bank a getaway nobody reported on.
+ */
+export async function finishGetaway(
+  db: Db,
+  { runId, outcome, by, now }: { runId: string; outcome: 'home' | 'caught'; by: number | null; now: number },
+): Promise<GetawayResult> {
+  return db.transaction(async (tx) => {
+    const [run] = await tx.select().from(heistRuns).where(eq(heistRuns.id, runId)).for('update');
+    if (!run || run.getaway !== 'running') throw new HeistRefused('no-run');
+    const bag = run.moved ?? 0;
+    const pair = [run.gang, run.target].sort();
+    const vaults = await tx
+      .select()
+      .from(gangVaults)
+      .where(inArray(gangVaults.gang, pair))
+      .orderBy(gangVaults.gang)
+      .for('update');
+    const robberHas = vaults.find((v) => v.gang === run.gang)?.cash ?? 0;
+    const home = outcome === 'home';
+    const fine = home ? 0 : Math.min(GETAWAY_FINE, robberHas);
+    await tx
+      .update(gangVaults)
+      .set({ cash: sql`${gangVaults.cash} + ${home ? bag : bag + fine}`, updatedAt: new Date(now) })
+      .where(eq(gangVaults.gang, home ? run.gang : run.target));
+    if (fine)
+      await tx
+        .update(gangVaults)
+        .set({ cash: sql`${gangVaults.cash} - ${fine}`, updatedAt: new Date(now) })
+        .where(eq(gangVaults.gang, run.gang));
+    const jailedUntil = home ? null : now + JAIL_MS;
+    await tx
+      .update(heistChogs)
+      .set(
+        home
+          ? {
+              stolen: sql`${heistChogs.stolen} + ${bag}`,
+              escapes: sql`${heistChogs.escapes} + 1`,
+              best: sql`greatest(${heistChogs.best}, ${run.score ?? 0})`,
+            }
+          : { busts: sql`${heistChogs.busts} + 1`, jailedUntil: new Date(jailedUntil!) },
+      )
+      .where(eq(heistChogs.id, run.chogId));
+    // Only a Chog of the robbed gang can make the catch (the live server checks; this is belt and braces).
+    const catcher =
+      !home && by !== null && (await heistRecord(tx as unknown as Db, by))?.gang === run.target ? by : null;
+    if (catcher !== null)
+      await tx
+        .update(heistChogs)
+        .set({ catches: sql`${heistChogs.catches} + 1` })
+        .where(eq(heistChogs.id, catcher));
+    await tx
+      .update(heistRuns)
+      .set({
+        getaway: home ? 'home' : 'caught',
+        // A run caught on the way home reads as a bust everywhere else (feed, record, replay).
+        ...(home ? {} : { result: 'busted' as const, moved: bag + fine, caughtBy: catcher }),
+      })
+      .where(eq(heistRuns.id, run.id));
+    await tx
+      .execute(
+        sql`select pg_notify('city', ${JSON.stringify({ war: run.id, target: run.target, gang: run.gang })})`,
+      )
+      .catch(() => undefined);
+    return { outcome, bag, caughtBy: catcher, jailedUntil };
+  });
+}
+
+/** Banks every getaway whose time ran out without a word from the live server. */
+export async function expireGetaways(db: Db, now: number): Promise<number> {
+  const due = await db
+    .select({ id: heistRuns.id })
+    .from(heistRuns)
+    .where(and(eq(heistRuns.getaway, 'running'), sql`${heistRuns.bagUntil} < ${new Date(now)}`));
+  for (const r of due)
+    await finishGetaway(db, { runId: r.id, outcome: 'home', by: null, now }).catch(() => undefined);
+  return due.length;
 }
 
 export interface WarHit {
@@ -606,6 +764,8 @@ export async function runForReplay(db: Db, id: string) {
     moved: r.moved ?? 0,
     revenge: r.revenge,
     prisoner: r.prisoner,
+    loud: r.loud,
+    getaway: r.getaway,
     at: r.finishedAt!.getTime(),
   };
 }
@@ -666,6 +826,7 @@ export async function startBreakout(
     powers: run.powers,
     guards: run.guards,
     prisoner,
+    lock: '',
     startedAt: new Date(now),
   });
   await db
@@ -687,7 +848,7 @@ export async function joinRaid(
   if (!(await canControl(db, address, chogId))) throw new HeistRefused('not-yours');
   const [run] = await db.select().from(heistRuns).where(eq(heistRuns.id, runId));
   if (!run || run.finishedAt || now - run.startedAt.getTime() > RUN_MAX_MS) throw new HeistRefused('no-run');
-  if (run.prisoner !== null) throw new HeistRefused('no-run');
+  if (run.prisoner !== null || run.lock === null) throw new HeistRefused('no-run');
   if (run.chogId === chogId) throw new HeistRefused('own-gang');
   const me = await heistRecord(db, chogId);
   if (me?.gang !== run.target) throw new HeistRefused('not-your-gang');

@@ -1,10 +1,15 @@
 import { CHOGS, gangOptions } from '@chog-city/data';
 import { HOUR, dayStart } from '@chog-city/game';
 import { BUST_FINE, START_CASH } from '@chog-city/game/heist';
-import { encodeRushInputs, type RushInput } from '@chog-city/game/rush';
+import { encodeLock, perfectLock } from '@chog-city/game/lock';
+import { encodeRushInputs, rushSeed, type RushInput } from '@chog-city/game/rush';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   defend,
+  expireGetaways,
+  finishGetaway,
+  lockRun,
+  GETAWAY_MS,
   startBreakout,
   finishLiveRun,
   finishRun,
@@ -45,6 +50,15 @@ beforeEach(async () => {
   await setGang(db, B, mcgaChog, 'mcga');
 });
 
+/** Stage 1: a clean break-in on the run's lock (or a loud one with no taps). */
+const breakIn = (address: string, run: { id: string; target: string }, quiet = true, now = NOW + 500) =>
+  lockRun(db, {
+    address,
+    runId: run.id,
+    inputs: quiet ? encodeLock(perfectLock(run.target as 'mcga', rushSeed(run.id))) : '',
+    now,
+  });
+
 const refused = async (p: Promise<unknown>) => {
   try {
     await p;
@@ -65,15 +79,36 @@ describe('the gang war', () => {
     expect(await refused(setGang(db, A, lazoorChog, 'mcga'))).toBe('bad-gang');
   });
 
-  it('an escape moves cash from their vault to yours, once per vault per day', async () => {
+  it('breaks in first: the lock is replayed (quiet or loud) and only done once', async () => {
     const run = await startRun(db, { address: A, chogId: lazoorChog, target: 'mcga', now: NOW });
+    expect(
+      await refused(finishRun(db, { address: A, runId: run.id, inputs: grabAndGo, now: NOW + 1000 })),
+    ).toBe('no-lock');
+    expect(await refused(breakIn(B, run))).toBe('no-run');
+    expect(await breakIn(A, run)).toMatchObject({ loud: false, run: { id: run.id } });
+    expect(await refused(breakIn(A, run))).toBe('locked');
+    const other = await startRun(db, { address: B, chogId: mcgaChog, target: 'lazoor', now: NOW });
+    expect((await breakIn(B, other, false)).loud).toBe(true);
+  });
+
+  it('an escape carries the bag out; it lands in your vault when you get it home, once per vault per day', async () => {
+    const run = await startRun(db, { address: A, chogId: lazoorChog, target: 'mcga', now: NOW });
+    await breakIn(A, run);
     const out = await finishRun(db, { address: A, runId: run.id, inputs: grabAndGo, now: NOW + 60_000 });
     expect(out.result).toBe('escaped');
     expect(out.moved).toBeGreaterThan(0);
+    expect(out.getaway).toMatchObject({ bag: out.moved, from: 'mcga', home: 'lazoor', chog: lazoorChog });
+    // Out of their vault, not in yours yet.
+    expect(await vaultCash(db)).toMatchObject({ mcga: START_CASH - out.moved, lazoor: START_CASH });
+    const home = await finishGetaway(db, { runId: run.id, outcome: 'home', by: null, now: NOW + 90_000 });
+    expect(home).toMatchObject({ outcome: 'home', bag: out.moved, jailedUntil: null });
     const cash = await vaultCash(db);
     expect(cash.mcga).toBe(START_CASH - out.moved);
     expect(cash.lazoor).toBe(START_CASH + out.moved);
     expect((await heistRecord(db, lazoorChog))!.stolen).toBe(out.moved);
+    expect(
+      await refused(finishGetaway(db, { runId: run.id, outcome: 'home', by: null, now: NOW + 91_000 })),
+    ).toBe('no-run');
     expect(
       await refused(finishRun(db, { address: A, runId: run.id, inputs: grabAndGo, now: NOW + 61_000 })),
     ).toBe('finished');
@@ -87,8 +122,40 @@ describe('the gang war', () => {
     expect((await recentHits(db))[0]).toMatchObject({ gang: 'lazoor', target: 'mcga', result: 'escaped' });
   });
 
+  it('caught on the way home: the bag goes back, the fine is paid, jail; a robbed-gang Chog gets the catch', async () => {
+    const run = await startRun(db, { address: A, chogId: lazoorChog, target: 'mcga', now: NOW });
+    await breakIn(A, run);
+    const out = await finishRun(db, { address: A, runId: run.id, inputs: grabAndGo, now: NOW + 60_000 });
+    // B's MCGA Chog tagged the robber in the street.
+    const caught = await finishGetaway(db, {
+      runId: run.id,
+      outcome: 'caught',
+      by: mcgaChog,
+      now: NOW + 80_000,
+    });
+    expect(caught.caughtBy).toBe(mcgaChog);
+    expect(await vaultCash(db)).toMatchObject({
+      mcga: START_CASH + BUST_FINE,
+      lazoor: START_CASH - BUST_FINE,
+    });
+    expect(out.moved).toBeGreaterThan(0);
+    expect((await heistRecord(db, lazoorChog))!.jailedUntil!.getTime()).toBe(NOW + 80_000 + 30 * 60_000);
+    expect((await heistRecord(db, mcgaChog))!.catches).toBe(1);
+    expect((await recentHits(db))[0]).toMatchObject({ result: 'busted' });
+  });
+
+  it('a getaway nobody reports on is banked after five minutes', async () => {
+    const run = await startRun(db, { address: A, chogId: lazoorChog, target: 'mcga', now: NOW });
+    await breakIn(A, run);
+    const out = await finishRun(db, { address: A, runId: run.id, inputs: grabAndGo, now: NOW + 60_000 });
+    expect(await expireGetaways(db, NOW + 60_000 + GETAWAY_MS - 1)).toBe(0);
+    expect(await expireGetaways(db, NOW + 60_000 + GETAWAY_MS + 1)).toBe(1);
+    expect((await vaultCash(db)).lazoor).toBe(START_CASH + out.moved);
+  });
+
   it('a bust jails the Chog and its gang pays the fine to the vault', async () => {
     const run = await startRun(db, { address: A, chogId: lazoorChog, target: 'mcga', now: NOW });
+    await breakIn(A, run);
     const out = await finishRun(db, { address: A, runId: run.id, inputs: '', now: NOW + 60_000 });
     expect(out.result).toBe('busted');
     expect((await vaultCash(db)).mcga).toBe(START_CASH + BUST_FINE);
@@ -127,6 +194,7 @@ describe('the gang war', () => {
   it('frees a jailed gang-mate on a clean break-out, moves no cash, and allows one try a day', async () => {
     // B's MCGA Chog gets caught in Lazoor's vault.
     const r = await startRun(db, { address: B, chogId: mcgaChog, target: 'lazoor', now: NOW });
+    await breakIn(B, r);
     await finishRun(db, { address: B, runId: r.id, inputs: '', now: NOW + 1000 });
     expect((await heistRecord(db, mcgaChog))!.jailedUntil!.getTime()).toBeGreaterThan(NOW);
     // Only a gang-mate can try.
@@ -157,21 +225,22 @@ describe('the gang war', () => {
 
   it('a gang-mate can jump into a raid on their vault; then only the live server can finish it', async () => {
     const run = await startRun(db, { address: A, chogId: lazoorChog, target: 'mcga', now: NOW });
+    await breakIn(A, run);
     // Not your gang's vault, or not your Chog: no.
-    expect(await refused(joinRaid(db, { address: A, chogId: lazoorChog, runId: run.id, now: NOW + 1000 }))).toBe(
-      'own-gang',
-    );
-    expect(await refused(joinRaid(db, { address: A, chogId: mcgaChog, runId: run.id, now: NOW + 1000 }))).toBe(
-      'not-yours',
-    );
+    expect(
+      await refused(joinRaid(db, { address: A, chogId: lazoorChog, runId: run.id, now: NOW + 1000 })),
+    ).toBe('own-gang');
+    expect(
+      await refused(joinRaid(db, { address: A, chogId: mcgaChog, runId: run.id, now: NOW + 1000 })),
+    ).toBe('not-yours');
     expect(await joinRaid(db, { address: B, chogId: mcgaChog, runId: run.id, now: NOW + 1000 })).toEqual({
       run: run.id,
       target: 'mcga',
     });
     // The robber's own browser can't settle it now (it could leave the defender out).
-    expect(await refused(finishRun(db, { address: A, runId: run.id, inputs: grabAndGo, now: NOW + 5000 }))).toBe(
-      'live',
-    );
+    expect(
+      await refused(finishRun(db, { address: A, runId: run.id, inputs: grabAndGo, now: NOW + 5000 })),
+    ).toBe('live');
     // The live server's record, with the defender standing still on guard 0, settles it.
     const out = await finishLiveRun(db, {
       runId: run.id,
@@ -180,6 +249,6 @@ describe('the gang war', () => {
       now: NOW + 6000,
     });
     expect(out.result).toBe('escaped');
-    expect((await vaultCash(db)).lazoor).toBe(START_CASH + out.moved);
+    expect((await vaultCash(db)).mcga).toBe(START_CASH - out.moved);
   });
 });

@@ -22,7 +22,7 @@ import {
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { GANG_COLOR } from '@/lib/theme';
 import { CityRenderer, type Board, type Emote, type Person, type PlaceLook } from './city-render';
-import { LiveCity, type LiveStatus } from './live-city';
+import { LiveCity, type Chase, type ChaseEnd, type LiveStatus } from './live-city';
 
 export interface Me {
   chog: number | null;
@@ -57,6 +57,10 @@ export interface CityHandle {
   emote(kind: Emote): void;
   /** Put your Chog at a place's door (coming back from a heist). */
   appearAt(placeId: string): void;
+  /** Out of a vault with a bag: start the getaway home. */
+  run(pass: string): void;
+  /** Keep walking after someone (a robber running from your vault), or stop (null). */
+  chaseAfter(id: number | null): void;
 }
 
 interface Props {
@@ -77,6 +81,9 @@ interface Props {
   onCloseMap: () => void;
   onPerson: (p: Tapped) => void;
   onLive: (status: LiveStatus, online: number) => void;
+  /** The getaways running in the city changed. */
+  onChase?: (chases: Chase[]) => void;
+  onChaseEnd?: (e: ChaseEnd) => void;
 }
 
 const KEYS: Record<string, [number, number]> = {
@@ -91,6 +98,7 @@ const KEYS: Record<string, [number, number]> = {
 };
 
 const GUEST = { bg: '#8d89a6', fg: '#111111' };
+const POLICE = { bg: '#2b59ff', fg: '#ffffff' };
 const color = (gang: GangId | null) => (gang ? GANG_COLOR[gang] : GUEST);
 
 export const CityView = forwardRef<CityHandle, Props>(function CityView(props, ref) {
@@ -118,6 +126,9 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     net: null as LiveCity | null,
     /** Everyone drawn last frame, for taps. */
     drawn: [] as (Person & { tap?: Tapped })[],
+    /** Someone you're running after (a robber with your gang's cash), and when you last steered at them. */
+    after: null as number | null,
+    afterAt: 0,
   });
 
   const jailedNow = props.me.jail !== null && props.me.jail > Date.now();
@@ -125,7 +136,10 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
   useImperativeHandle(ref, () => ({
     walkTo(id) {
       const p = placeOf(id);
-      if (p) goTo(p.door.x, p.door.y, p.id);
+      if (!p) return;
+      // Already standing at that door: there's no walk to finish, so open its card now.
+      if (state.current.door?.id === p.id) return live.current.onDoor(p, true);
+      goTo(p.door.x, p.door.y, p.id);
     },
     emote(kind) {
       state.current.emote = { kind, at: performance.now() };
@@ -140,6 +154,13 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       s.path = [];
       s.target = null;
       s.r?.follow(s.x, s.y, true);
+    },
+    run(pass) {
+      state.current.net?.run(pass);
+    },
+    chaseAfter(id) {
+      state.current.after = id;
+      state.current.afterAt = 0;
     },
   }));
 
@@ -194,6 +215,11 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         s.target = null;
       },
       status: (st, online) => live.current.onLive(st, online),
+      chase: () => live.current.onChase?.([...net.chases.values()]),
+      chaseEnd: (e) => {
+        if (s.after === e.id) s.after = null;
+        live.current.onChaseEnd?.(e);
+      },
     });
     s.net = net;
     const t = setInterval(() => live.current.onLive(net.status, net.online), 2000);
@@ -311,13 +337,20 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       // A stroller who's in jail stands in the jail yard instead.
       const locked = new Set(p.jailed.filter((j) => j.until > Date.now()).map((j) => j.id));
       const people: (Person & { tap?: Tapped })[] = [];
+      const bags = new Map<number, number>();
+      let mine: Chase | undefined;
+      if (net)
+        for (const c of net.chases.values()) {
+          bags.set(c.id, c.bag);
+          if (c.chog === p.me.chog) mine = c;
+        }
       if (net && net.status === 'live') {
         // Everyone else, from the live server.
         for (const o of net.people.values()) {
           if (o.id === net.you || Number.isNaN(o.nx) || now - o.seen > 3000) continue;
           if (o.npc && o.chog !== null && locked.has(o.chog)) continue;
           const at = net.at(o, now);
-          const c = color(o.gang);
+          const c = o.cop ? POLICE : color(o.gang);
           people.push({
             key: `p${o.id}`,
             chog: o.chog,
@@ -328,10 +361,24 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
             y: at.y,
             face: o.face,
             moving: o.moving,
-            npc: o.npc,
+            npc: o.npc && !o.cop,
+            cop: o.cop,
+            bag: bags.get(o.id),
             emote: o.emote,
-            tap: o.chog !== null ? { chog: o.chog, name: o.name, gang: o.gang, player: !o.npc } : undefined,
+            tap:
+              o.chog !== null && !o.cop
+                ? { chog: o.chog, name: o.name, gang: o.gang, player: !o.npc }
+                : undefined,
           });
+        }
+        // Running after a robber: steer at them a few times a second.
+        if (s.after !== null && now - s.afterAt > 300) {
+          s.afterAt = now;
+          const o = net.people.get(s.after);
+          if (o && !Number.isNaN(o.nx)) {
+            const at = net.at(o, now);
+            goTo(at.x, at.y);
+          } else s.after = null;
         }
       } else {
         // Offline: today's strollers, walked here.
@@ -377,21 +424,28 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         face: s.face,
         moving: s.moving,
         me: true,
+        bag: mine?.bag,
         emote: s.emote ?? undefined,
       });
       s.drawn = people;
+      const home = mine ? placeOf(mine.home) : undefined;
 
       r.places = p.places;
       r.board = p.board;
       r.follow(s.x, s.y);
-      r.draw(people, now, { jailed: [], target: s.target, door });
+      r.draw(people, now, {
+        jailed: [],
+        target: s.target,
+        door,
+        goal: home ? { x: home.door.x, y: home.door.y, from: { x: s.x, y: s.y } } : null,
+      });
 
       if (now - miniAt > 120) {
         miniAt = now;
         lastAt.x = s.x;
         lastAt.y = s.y;
         lastAt.people = people;
-        const layer = drawMap(s.x, s.y, people, p.places, now);
+        const layer = drawMap(s.x, s.y, people, p.places, now, home?.door);
         drawLocal(miniCanvas(), layer, s.x, s.y);
         if (p.mapOpen) drawBig(bigRef.current, layer, p.places, r.font, now);
       }
@@ -567,6 +621,7 @@ function paintMap(
   people: Person[],
   places: Record<string, PlaceLook>,
   now: number,
+  goal?: { x: number; y: number },
 ) {
   g.drawImage(mapBase(k), 0, 0);
   const lw = Math.max(1.5, k * 0.25);
@@ -595,12 +650,35 @@ function paintMap(
       g.stroke();
     }
   }
+  const flash = Math.floor(now / 250) % 2 === 0;
   for (const p of people) {
     if (p.me) continue;
-    g.fillStyle = p.npc ? 'rgba(255,255,255,0.55)' : '#ffffff';
+    // Police flash red and blue; anyone with a bag is a big red dot.
+    g.fillStyle = p.cop
+      ? flash
+        ? '#ff2d55'
+        : '#3c82ff'
+      : p.bag
+        ? '#ff2d55'
+        : p.npc
+          ? 'rgba(255,255,255,0.55)'
+          : '#ffffff';
     g.beginPath();
-    g.arc(p.x * k, p.y * k, Math.max(1.5, k * (p.npc ? 0.3 : 0.42)), 0, Math.PI * 2);
+    g.arc(
+      p.x * k,
+      p.y * k,
+      Math.max(1.5, k * (p.cop ? 0.55 : p.bag ? 0.75 : p.npc ? 0.3 : 0.42)),
+      0,
+      Math.PI * 2,
+    );
     g.fill();
+  }
+  if (goal) {
+    g.strokeStyle = '#ffd23f';
+    g.lineWidth = Math.max(2, k * 0.35);
+    g.beginPath();
+    g.arc(goal.x * k, goal.y * k, Math.max(5, k * (flash ? 1.6 : 1.2)), 0, Math.PI * 2);
+    g.stroke();
   }
   g.fillStyle = '#ffd23f';
   g.strokeStyle = '#0d0b1a';
@@ -615,13 +693,20 @@ const LOCAL_K = 8;
 let layer: HTMLCanvasElement | null = null;
 
 /** The city at minimap scale, redrawn a few times a second. */
-function drawMap(x: number, y: number, people: Person[], places: Record<string, PlaceLook>, now: number) {
+function drawMap(
+  x: number,
+  y: number,
+  people: Person[],
+  places: Record<string, PlaceLook>,
+  now: number,
+  goal?: { x: number; y: number },
+) {
   if (!layer) {
     layer = document.createElement('canvas');
     layer.width = CITY.w * LOCAL_K;
     layer.height = CITY.h * LOCAL_K;
   }
-  paintMap(layer.getContext('2d')!, LOCAL_K, x, y, people, places, now);
+  paintMap(layer.getContext('2d')!, LOCAL_K, x, y, people, places, now, goal);
   return layer;
 }
 

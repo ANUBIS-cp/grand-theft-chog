@@ -2,6 +2,7 @@ import { HeistRefused, finishRun } from '@chog-city/server';
 import { z } from 'zod';
 import { db } from '@/server/db';
 import { error, json } from '@/server/http';
+import { withGetaway } from '@/server/raid';
 import { allow } from '@/server/rate';
 import { currentAddress } from '@/server/session';
 
@@ -19,7 +20,10 @@ export async function POST(req: Request) {
   try {
     return json({
       ok: true,
-      result: await finishRun(await db(), { address, ...body.data, now: Date.now() }),
+      result: withGetaway(
+        body.data.runId,
+        await finishRun(await db(), { address, ...body.data, now: Date.now() }),
+      ),
     });
   } catch (e) {
     if (e instanceof HeistRefused) return error(e.code, 409);

@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./heist": "./src/heist/index.ts",
     "./city": "./src/city/index.ts",
-    "./rush": "./src/rush/index.ts"
+    "./rush": "./src/rush/index.ts",
+    "./lock": "./src/lock/index.ts"
   },
   "dependencies": {
     "@chog-city/data": "*",

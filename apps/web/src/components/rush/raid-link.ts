@@ -31,6 +31,8 @@ export interface RaidResult {
   jailedUntil?: number | null;
   result?: 'escaped' | 'busted';
   error?: string;
+  /** Out with a bag: the pass for carrying it home through the city (stage 3). */
+  getawayPass?: string;
 }
 
 export class RaidLink {

@@ -190,6 +190,14 @@ export const heistRuns = pgTable(
     /** Set on a break-out: the jailed gang-mate this run tried to free. */
     prisoner: integer('prisoner'),
     inputs: text('inputs'),
+    /** The break-in's taps (stage 1); null until it's done, empty for a break-out (no lock). */
+    lock: text('lock'),
+    /** The break-in was loud, so the chase starts with the alarm ringing. */
+    loud: boolean('loud').notNull().default(false),
+    /** Stage 3: 'running' while the bag is being carried home, then 'home' or 'caught'. */
+    getaway: text('getaway').$type<'running' | 'home' | 'caught'>(),
+    /** When a getaway nobody reported on is banked anyway (a live server failure shouldn't cost you). */
+    bagUntil: timestamp('bag_until', { withTimezone: true }),
   },
   (t) => [
     index('heist_runs_chog_day').on(t.chogId, t.day),

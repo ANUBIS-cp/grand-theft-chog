@@ -1,5 +1,5 @@
 // Chog City worker: keeps owners in sync with the chain and opens each game day on time.
-import { ensureDay, monad, seedStates } from '@chog-city/server';
+import { ensureDay, expireGetaways, monad, seedStates } from '@chog-city/server';
 import { connect } from '@chog-city/server/db';
 import { dayOf } from '@chog-city/game';
 import { createPublicClient, http } from 'viem';
@@ -44,6 +44,11 @@ async function main() {
       await ensureDay(db, day);
       if (day !== lastDay) log('game day ready', { day });
       lastDay = day;
+    }),
+    // A getaway the live server never reported on is banked, so its failure doesn't cost the player.
+    every(30_000, 'getaways', async () => {
+      const n = await expireGetaways(db, Date.now());
+      if (n) log('banked unreported getaways', { n });
     }),
   ]);
 }

@@ -162,6 +162,8 @@ export interface RushRules {
   hunt: number;
   /** A break-out: you can only leave once the cell (the safe) is open. */
   needSafe?: boolean;
+  /** The break-in was loud: the alarm is already ringing when you get in. */
+  loud?: boolean;
 }
 
 const rand = (s: RushState) => {
@@ -208,7 +210,7 @@ export function startRush(
     chainAge: 99,
     flip: 0,
     knocked: 0,
-    alarm: 0,
+    alarm: rules.loud ? RUSH.alarm : 0,
     clock: 0,
     safe: map.safe ? { open: false, hits: 0, dialing: false, needle: 0, zone: 0, at: 0 } : null,
     noise: null,

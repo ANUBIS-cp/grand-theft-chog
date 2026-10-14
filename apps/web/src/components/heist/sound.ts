@@ -179,6 +179,29 @@ export class Sound {
     this.siren = null;
   }
 
+  /** Break-in locks: a pin sets, a wire is cut, a reel stops, the dial clicks, and the door gives. */
+  pin() {
+    this.tone(1760, 0, 0.05, 'square', 0.05);
+    this.tone(2637, 0.04, 0.09, 'triangle', 0.05);
+  }
+  snip() {
+    this.noise(0, 0.07, 0.25, 5000, 2500);
+    this.tone(1200, 0, 0.04, 'square', 0.03);
+  }
+  clunk() {
+    this.tone(180, 0, 0.12, 'square', 0.08, 90);
+    this.noise(0, 0.06, 0.15, 900, 300);
+  }
+  dialTick() {
+    this.noise(0, 0.02, 0.12, 3500, 3000);
+  }
+  slip() {
+    this.tone(150, 0, 0.18, 'sawtooth', 0.07, 110);
+  }
+  unlocked() {
+    [784, 1175, 1568].forEach((f, i) => this.tone(f, i * 0.07, 0.16, 'triangle', 0.07));
+  }
+
   busted() {
     this.alarmOff();
     this.thud();

@@ -7,13 +7,14 @@ import type { RushRules } from './sim.ts';
 export const rushMapFor = (gang: GangId) => RUSH_MAPS[GANG_IDS.indexOf(gang) % RUSH_MAPS.length]!;
 
 /** The rules for a vault at a defence level (0-3): more and faster guards, a fuller safe. */
-export function rushRules(tier: number, breakout = false): RushRules {
+export function rushRules(tier: number, breakout = false, loud = false): RushRules {
   const t = Math.max(0, Math.min(3, tier));
   return {
     guards: t >= 2 ? 4 : 3,
     safeValue: breakout ? 1 : SAFE_BY_TIER[t]!,
     hunt: [0, 0.15, 0.3, 0.5][t]!,
     needSafe: breakout,
+    ...(loud ? { loud: true } : {}),
   };
 }
 

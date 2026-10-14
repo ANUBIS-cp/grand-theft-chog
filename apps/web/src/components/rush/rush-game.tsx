@@ -55,8 +55,9 @@ export interface RushGameProps {
   /** A real robbery: the key presses go to the server when it ends, and the card offers a way back. */
   real?: {
     myGang: string;
-    finish: (inputs: string) => Promise<{ moved: number; jailedUntil: number | null }>;
-    onLeave: () => void;
+    finish: (inputs: string) => Promise<{ moved: number; jailedUntil: number | null; getawayPass?: string }>;
+    /** Back to the city; with a getaway pass when you came out with a bag to carry home. */
+    onLeave: (getawayPass?: string) => void;
     replayHref?: string;
   };
   /** Watching a run that already happened. */
@@ -1231,7 +1232,12 @@ function EndCard(props: {
   caughtBy: RushChog | null | undefined;
   onAgain: () => void;
   onLeave?: () => void;
-  real?: { myGang: string; onLeave: () => void; replayHref?: string; result: RaidResult | null };
+  real?: {
+    myGang: string;
+    onLeave: (getawayPass?: string) => void;
+    replayHref?: string;
+    result: RaidResult | null;
+  };
   rescue?: RushChog;
   replay?: { moved: number; robbers: string };
 }) {
@@ -1292,11 +1298,13 @@ function EndCard(props: {
           <>
             <div className="mt-4 font-display text-[56px] leading-none tabular-nums">{money(shown)}</div>
             <p className="mt-1 text-[14px] text-ink-soft">
-              {real
-                ? `moved from ${props.owner} to ${real.myGang}`
-                : replay
-                  ? `taken from ${props.owner} by ${replay.robbers}`
-                  : 'Practice run: no real cash moves.'}
+              {real?.result?.getawayPass
+                ? `in your bag. It's only ${real.myGang}'s once you carry it to your door. Police are on the way.`
+                : real
+                  ? `moved from ${props.owner} to ${real.myGang}`
+                  : replay
+                    ? `taken from ${props.owner} by ${replay.robbers}`
+                    : 'Practice run: no real cash moves.'}
             </p>
             <ul className="mx-auto mt-4 max-w-[240px] space-y-1 text-[14px]">
               <li className="flex justify-between">
@@ -1346,13 +1354,16 @@ function EndCard(props: {
         {real ? (
           <>
             <button
-              onClick={real.onLeave}
+              onClick={() => real.onLeave(real.result?.getawayPass)}
               disabled={!real.result}
-              className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-[10px] border-[3px] border-ink bg-pink font-display text-[22px] uppercase leading-none text-ink shadow-[0_4px_0_0_#000] active:translate-y-[2px] disabled:opacity-50"
+              className={cn(
+                'mt-5 inline-flex h-12 w-full items-center justify-center rounded-[10px] border-[3px] border-ink font-display text-[22px] uppercase leading-none text-ink shadow-[0_4px_0_0_#000] active:translate-y-[2px] disabled:opacity-50',
+                real.result?.getawayPass ? 'animate-pulse bg-[#ffd666]' : 'bg-pink',
+              )}
             >
-              <span className="pt-1">Back to the city</span>
+              <span className="pt-1">{real.result?.getawayPass ? 'Run it home!' : 'Back to the city'}</span>
             </button>
-            {real.result && real.replayHref && (
+            {real.result && !real.result.getawayPass && real.replayHref && (
               <a
                 href={real.replayHref}
                 target="_blank"

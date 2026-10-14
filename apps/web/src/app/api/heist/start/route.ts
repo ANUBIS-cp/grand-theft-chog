@@ -4,7 +4,6 @@ import { z } from 'zod';
 import { db } from '@/server/db';
 import { error, json } from '@/server/http';
 import { allow } from '@/server/rate';
-import { robberPass } from '@/server/raid';
 import { currentAddress } from '@/server/session';
 
 export const dynamic = 'force-dynamic';
@@ -22,8 +21,6 @@ export async function POST(req: Request) {
     return json({
       ok: true,
       run: { ...run, guards: run.guards.map((id) => ({ id, name: displayName(getChog(id)!) })) },
-      // The live server runs the raid, so the robbed gang can jump in and defend.
-      pass: robberPass(run, body.data.chogId),
     });
   } catch (e) {
     if (e instanceof HeistRefused) return error(e.code, 409);

@@ -14,6 +14,7 @@ import {
   type Walker,
 } from '@chog-city/game/city';
 import { readTicket } from '@chog-city/server/ticket';
+import { chasesNow, copPositions, startChase, stepChases } from './getaway.ts';
 import { raidCount, raidHello, type RaidHandler } from './raids.ts';
 import { createServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -202,6 +203,8 @@ wss.on('connection', (ws, req) => {
       players.set(p.id, p);
       send(ws, { t: 'you', id: p.id, x: p.x, y: p.y });
       send(ws, { t: 'all', people: everyone() });
+      // Getaways already running, so a newcomer sees the chase too.
+      for (const c of chasesNow()) send(ws, { t: 'chase', ...c });
       if (p.chog !== null) broadcast({ t: 'join', p: info(p) }, p.id);
       // A stroller that is now being played leaves the street.
       if (p.chog !== null && strolling.some((s) => s.chog === p.chog)) broadcast({ t: 'leave', id: -p.chog });
@@ -223,6 +226,14 @@ wss.on('connection', (ws, req) => {
       me.face = msg.f === -1 ? -1 : 1;
       me.moving = msg.m === 1;
       me.lastMove = now;
+    } else if (msg.t === 'run') {
+      // Out of a vault with a bag: the getaway starts at the robbed gang's door.
+      const at = startChase(me, msg.pass, now, broadcast);
+      if (at) {
+        me.x = at.x;
+        me.y = at.y;
+        send(ws, { t: 'fix', x: me.x, y: me.y });
+      }
     } else if (msg.t === 'em' && isEmote(msg.k) && now - me.lastEmote > 900) {
       me.lastEmote = now;
       if (me.chog !== null) broadcast({ t: 'em', id: me.id, k: msg.k });
@@ -265,7 +276,8 @@ setInterval(() => {
     if (p.chog === null) continue;
     d.push(p.id, Math.round(p.x * 100), Math.round(p.y * 100), (p.face < 0 ? 1 : 0) | (p.moving ? 2 : 0));
   }
-  if (players.size) broadcast({ t: 's', n: seen().length, d });
+  stepChases(TICK_MS / 1000, now, players, broadcast);
+  if (players.size) broadcast({ t: 's', n: seen().length, d, c: copPositions() });
 }, TICK_MS);
 
 // Drop connections that stopped answering.

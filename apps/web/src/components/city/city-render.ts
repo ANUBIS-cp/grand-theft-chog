@@ -26,6 +26,10 @@ export interface Person {
   /** Wandering Chogs nobody is playing: drawn a little quieter. */
   npc?: boolean;
   emote?: { kind: Emote; at: number };
+  /** Police in a getaway: a cap, a blue base and a flashing light. */
+  cop?: boolean;
+  /** Carrying a bag of stolen cash home: how much (shown over their head for everyone). */
+  bag?: number;
 }
 
 export type { Emote } from '@chog-city/game/city';
@@ -442,15 +446,37 @@ export class CityRenderer {
     const w = img.naturalWidth * k;
     const h = img.naturalHeight * k;
     g.drawImage(img, (W - w) / 2, H - h, w, h);
-    if (p.kind !== 'gang' || !look) return;
-    // Name ribbon over the front, in the gang's colour.
+  }
+
+  /** How high a drawn building's picture reaches above its plot's front edge, in px. */
+  private artHeight(p: Place, img: HTMLImageElement) {
+    const { t } = this;
+    const k = Math.min((p.w * t) / img.naturalWidth, (p.h * t + this.lipOf(p)) / img.naturalHeight);
+    return img.naturalHeight * k;
+  }
+
+  /**
+   * A drawn building's sign: the gang's name on a ribbon floating just above the picture, so it never
+   * covers the rooftop landmark, with its rank and defence. Drawn after the night, like name tags.
+   */
+  private drawSign(p: Place, look: PlaceLook, img: HTMLImageElement) {
+    const { g, t } = this;
+    const W = p.w * t;
+    const size = Math.round(t * 0.46);
+    g.save();
+    g.translate(this.sx(p.x), this.sy(p.y));
+    this.paintRibbon(g, W, p.h * t - this.artHeight(p, img) - size * 0.55, look);
+    g.restore();
+  }
+
+  private paintRibbon(g: CanvasRenderingContext2D, W: number, ry: number, look: PlaceLook) {
+    const { t } = this;
     const size = Math.round(t * 0.46);
     g.font = `${size}px ${this.font}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     const name = look.name.toUpperCase();
     const rw = Math.min(W * 0.9, g.measureText(name).width + size * 1.6);
-    const ry = H - CityRenderer.WALL * t - t * 0.15;
     g.fillStyle = look.color;
     g.strokeStyle = INK;
     g.lineWidth = 2.5;
@@ -1177,10 +1203,10 @@ export class CityRenderer {
     const size = this.cardSize(p);
     const img = p.chog === null ? undefined : this.image(p.chog);
     const ready = p.chog === null || !!img;
-    const key = `${p.chog ?? 'guest'}:${size}:${p.color}:${p.me ? 1 : 0}`;
+    const key = `${p.chog ?? 'guest'}:${size}:${p.color}:${p.me ? 1 : 0}:${p.cop ? 1 : 0}`;
     const have = this.faces.get(key);
     if (have) return have;
-    const piece = makePiece(img, { base: p.color, size, gold: p.me }, this.dpr);
+    const piece = makePiece(img, { base: p.color, size, gold: p.me, cap: p.cop }, this.dpr);
     // A piece drawn while its picture loads is not kept, so the picture shows as soon as it arrives.
     if (ready) this.faces.set(key, piece);
     return piece;
@@ -1200,6 +1226,23 @@ export class CityRenderer {
     const piece = this.piece(p);
     const x = this.sx(p.x);
     const y = this.sy(p.y) + this.t * 0.12;
+    if (p.bag) {
+      // Carrying stolen cash: a red ring pulsing at their feet that everyone can spot.
+      const k = (now % 700) / 700;
+      g.strokeStyle = `rgba(255,45,85,${0.9 - k * 0.6})`;
+      g.lineWidth = 4;
+      g.beginPath();
+      g.ellipse(
+        x,
+        y + piece.h - piece.fy - 4,
+        piece.w * (0.55 + k * 0.35),
+        piece.w * (0.18 + k * 0.12),
+        0,
+        0,
+        Math.PI * 2,
+      );
+      g.stroke();
+    }
     if (p.me) {
       // A ring at your feet so you can find yourself in a crowd.
       g.strokeStyle = '#ffd23f';
@@ -1219,10 +1262,30 @@ export class CityRenderer {
         face: p.face,
         turned: now - m.turnedAt,
         emoted: p.emote ? now - p.emote.at : undefined,
-        alpha: p.npc ? 0.92 : 1,
+        alpha: p.npc && !p.cop ? 0.92 : 1,
       },
       now,
     );
+    if (p.cop) {
+      // The light on the cap: red and blue, flashing.
+      const top =
+        y - piece.top - hopHeight(piece, { moving: p.moving, seed: keySeed(p.key), face: p.face }, now);
+      const red = Math.floor(now / 160) % 2 === 0;
+      const glow = g.createRadialGradient(x, top, 0, x, top, this.t * 0.9);
+      glow.addColorStop(0, red ? 'rgba(255,45,85,0.75)' : 'rgba(60,130,255,0.75)');
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = glow;
+      g.beginPath();
+      g.arc(x, top, this.t * 0.9, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = red ? '#ff2d55' : '#3c82ff';
+      g.strokeStyle = INK;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.roundRect(x - this.t * 0.11, top - this.t * 0.16, this.t * 0.22, this.t * 0.14, 3);
+      g.fill();
+      g.stroke();
+    }
   }
 
   /** Names and speech bubbles go on top of the darkness so they stay readable. */
@@ -1256,6 +1319,24 @@ export class CityRenderer {
     g.fillStyle = '#ffffff';
     g.fillText(p.name, x + h * 0.18, ty + 0.5);
     g.globalAlpha = 1;
+    if (p.bag) {
+      // The bag's value, over their head, gold.
+      const label = `$${p.bag.toLocaleString('en-US')}`;
+      const bs = Math.round(size * 1.15);
+      g.font = `${bs}px ${this.font}`;
+      const bw = g.measureText(label).width + bs * 1.3;
+      const bh = bs * 1.45;
+      const by = ty - h / 2 - bh / 2 - 4 + Math.sin(now / 160) * 2;
+      g.fillStyle = '#ffd23f';
+      g.strokeStyle = INK;
+      g.lineWidth = 2.5;
+      g.beginPath();
+      g.roundRect(x - bw / 2, by - bh / 2, bw, bh, 6);
+      g.fill();
+      g.stroke();
+      g.fillStyle = INK;
+      g.fillText(label, x, by + 1);
+    }
     if (p.emote && now - p.emote.at < 3500)
       this.drawEmote(p.emote.kind, x, ty - h / 2 - t * 0.5, now - p.emote.at);
   }
@@ -1307,7 +1388,13 @@ export class CityRenderer {
   draw(
     people: Person[],
     now: number,
-    opts: { jailed: Person[]; target?: { x: number; y: number } | null; door?: Place | null },
+    opts: {
+      jailed: Person[];
+      target?: { x: number; y: number } | null;
+      door?: Place | null;
+      /** Getaway: the door you're running the bag to, and where you are. */
+      goal?: { x: number; y: number; from: { x: number; y: number } } | null;
+    },
   ) {
     const { g, t, dpr, view } = this;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1379,11 +1466,70 @@ export class CityRenderer {
     }
     this.drawNight(x0, y0, x1, y1, now, lit);
 
+    for (const p of CITY.places) {
+      const look = this.places[p.id];
+      const art = p.kind === 'gang' && look ? this.artOf(p) : undefined;
+      if (art && look && inView(p.x + p.w / 2, p.y + p.h / 2, p.w)) this.drawSign(p, look, art);
+    }
+
     for (const p of opts.jailed) if (inView(p.x, p.y, 2)) this.drawTag(p, now);
     // Your own name last, so it's never under someone else's.
     for (const p of people) if (!p.me && inView(p.x, p.y, 2)) this.drawTag(p, now);
     for (const p of people) if (p.me) this.drawTag(p, now);
     if (opts.door) this.drawDoorHint(opts.door, now);
+    if (opts.goal) this.drawGoal(opts.goal, now);
+  }
+
+  /**
+   * Getaway: a big gold arrow to the door you're running the bag to. Off screen it sits on the edge of the
+   * screen pointing that way; on screen it bounces over the door.
+   */
+  private drawGoal(goal: { x: number; y: number; from: { x: number; y: number } }, now: number) {
+    const { g, t, view } = this;
+    const gx = this.sx(goal.x);
+    const gy = this.sy(goal.y);
+    const m = t * 0.9;
+    const onScreen = gx > m && gx < view.w - m && gy > m && gy < view.h - m;
+    const bob = Math.sin(now / 150) * t * 0.12;
+    let x = gx;
+    let y = gy - t * 1.6 + bob;
+    let a = Math.PI / 2;
+    if (!onScreen) {
+      const fx = this.sx(goal.from.x);
+      const fy = this.sy(goal.from.y);
+      a = Math.atan2(gy - fy, gx - fx);
+      // Where the line to the door crosses the screen's edge, pulled in a little.
+      const kx = Math.cos(a) > 0 ? (view.w - m - fx) / Math.cos(a) : (m - fx) / Math.cos(a);
+      const ky = Math.sin(a) > 0 ? (view.h - m - fy) / Math.sin(a) : (m - fy) / Math.sin(a);
+      const k = Math.min(Math.abs(kx), Math.abs(ky));
+      x = fx + Math.cos(a) * k;
+      y = fy + Math.sin(a) * k;
+    } else {
+      g.strokeStyle = `rgba(255,210,63,${0.6 + 0.4 * Math.sin(now / 120)})`;
+      g.lineWidth = 4;
+      g.beginPath();
+      g.ellipse(gx, gy + t * 0.25, t * 0.95, t * 0.35, 0, 0, Math.PI * 2);
+      g.stroke();
+    }
+    const s = t * 0.55;
+    g.save();
+    g.translate(x, y);
+    g.rotate(a);
+    g.fillStyle = '#ffd23f';
+    g.strokeStyle = INK;
+    g.lineWidth = 3;
+    g.beginPath();
+    g.moveTo(s, 0);
+    g.lineTo(-s * 0.4, -s * 0.75);
+    g.lineTo(-s * 0.4, -s * 0.3);
+    g.lineTo(-s, -s * 0.3);
+    g.lineTo(-s, s * 0.3);
+    g.lineTo(-s * 0.4, s * 0.3);
+    g.lineTo(-s * 0.4, s * 0.75);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    g.restore();
   }
 
   private drawFence(jail: Place) {
