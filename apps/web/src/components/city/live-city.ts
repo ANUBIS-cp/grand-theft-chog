@@ -34,7 +34,8 @@ export interface Chase {
   bag: number;
   from: GangId;
   home: GangId;
-  /** When time runs out (ms). */
+  /** When it started, and when time runs out (ms). */
+  since: number;
   until: number;
   cops: { id: number; chog: number }[];
 }

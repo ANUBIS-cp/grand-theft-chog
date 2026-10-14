@@ -48,6 +48,8 @@ export interface RushGameProps {
   owner: { name: string; color: string; ink: string };
   /** Practice: a way back to the city. */
   onLeave?: () => void;
+  /** Practice: out of the vault, try the getaway through the city next. */
+  onGetaway?: () => void;
   /** A live raid on the server: you rob it (defenders can join), defend it, or watch it. */
   link?: RaidLink;
   /** The run's dice (real runs and replays use the run's own, so the server sees the same run). */
@@ -848,6 +850,7 @@ export function RushGame(props: RushGameProps) {
             caughtBy={caughtBy}
             onAgain={restart}
             onLeave={onLeave}
+            onGetaway={props.onGetaway}
             real={real ? { ...real, result: link?.result ?? saved } : undefined}
             replay={replay}
             rescue={rescue}
@@ -1232,6 +1235,7 @@ function EndCard(props: {
   caughtBy: RushChog | null | undefined;
   onAgain: () => void;
   onLeave?: () => void;
+  onGetaway?: () => void;
   real?: {
     myGang: string;
     onLeave: (getawayPass?: string) => void;
@@ -1373,6 +1377,24 @@ function EndCard(props: {
                 Watch the replay and share it
               </a>
             )}
+          </>
+        ) : props.onGetaway && escaped && !replay ? (
+          <>
+            <button
+              onClick={props.onGetaway}
+              className="mt-5 inline-flex h-12 w-full animate-pulse items-center justify-center rounded-[10px] border-[3px] border-ink bg-[#ffd666] font-display text-[22px] uppercase leading-none text-ink shadow-[0_4px_0_0_#000] active:translate-y-[2px]"
+            >
+              <span className="pt-1">Now run it home!</span>
+            </button>
+            <p className="mt-2 text-[13px] text-ink-soft">
+              The last part: carry the bag through the city with the police after you.
+            </p>
+            <button
+              onClick={props.onAgain}
+              className="mt-2 text-[14px] font-semibold underline underline-offset-2"
+            >
+              Do the vault again
+            </button>
           </>
         ) : (
           <>

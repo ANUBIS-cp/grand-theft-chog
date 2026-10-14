@@ -1,7 +1,7 @@
 'use client';
-import { GANGS, type GangId } from '@chog-city/data';
-import { EMOTES, type Emote, type Place } from '@chog-city/game/city';
-import { encodeLock } from '@chog-city/game/lock';
+import { GANGS, GANG_IDS, type GangId } from '@chog-city/data';
+import { CITY, EMOTES, HEAD_START, getawayTime, placeOf, type Emote, type Place } from '@chog-city/game/city';
+import { encodeLock, lockFor, type LockKind } from '@chog-city/game/lock';
 import { RUSH_BANK, rushRules, rushSeed } from '@chog-city/game/rush';
 import { BUST_FINE, GUARD_PRICE, POWERS, SAFE_BY_TIER, type PowerId } from '@chog-city/game/heist';
 import {
@@ -141,6 +141,12 @@ const START_ERRORS: Record<string, string> = {
 
 const DEFENCE = ['Light', 'Guarded', 'Heavy', 'Fortress'];
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
+const LOCK_NAME: Record<LockKind, string> = {
+  tumbler: 'Pick the lock',
+  wires: 'Cut the alarm',
+  reels: 'Crack the slot lock',
+  dial: 'Spin the safe dial',
+};
 /** "Clowns are", "MCGA Gang is". */
 const verb = (g: GangId) => (GANGS[g].name.endsWith('s') ? 'are' : 'is');
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -182,7 +188,24 @@ export function CityApp() {
   const [run, setRun] = useState<Run | null>(null);
   const [chases, setChases] = useState<Chase[]>([]);
   const siren = useRef<Sound | null>(null);
-  const [practice, setPractice] = useState(false);
+  // Practice: a lock (a different gang's each time, so you meet every kind), the practice vault, then a
+  // practice getaway through the city.
+  const [practice, setPractice] = useState<{
+    stage: 'lock' | 'vault';
+    gang: GangId;
+    seed: number;
+    loud: boolean;
+  } | null>(null);
+  const [practiceRun, setPracticeRun] = useState<{ since: number; until: number; to: string } | null>(null);
+  const startPractice = () => {
+    const pool = GANG_IDS.filter((g) => g !== chog?.gang);
+    setPractice({
+      stage: 'lock',
+      gang: pool[Math.floor(Math.random() * pool.length)]!,
+      seed: Math.floor(Math.random() * 1e9),
+      loud: false,
+    });
+  };
   /** The door you're standing at, and whether its card is open. */
   const [door, setDoor] = useState<Place | null>(null);
   const [doorOpen, setDoorOpen] = useState(false);
@@ -547,10 +570,10 @@ export function CityApp() {
   // The getaway clock needs to tick faster than the city's once-a-second clock.
   const [, setTick] = useState(0);
   useEffect(() => {
-    if (!chases.length) return;
+    if (!chases.length && !practiceRun) return;
     const t = setInterval(() => setTick((n) => n + 1), 250);
     return () => clearInterval(t);
-  }, [chases.length]);
+  }, [chases.length, practiceRun]);
 
   // ---------- heads-up display ----------
   const myRow = chog?.gang ? board?.board.find((v) => v.gang === chog.gang) : undefined;
@@ -639,8 +662,8 @@ export function CityApp() {
   const openDoor = () => door && setDoorOpen(true);
 
   // Keys: E / Space use a door, G gangs, M map, T emotes, 1-8 an emote, Esc closes things.
-  const keyState = useRef({ door, doorOpen, sheet, peek, mapOpen, inHeist: !!run || practice });
-  keyState.current = { door, doorOpen, sheet, peek, mapOpen, inHeist: !!run || practice };
+  const keyState = useRef({ door, doorOpen, sheet, peek, mapOpen, inHeist: !!run || !!practice });
+  keyState.current = { door, doorOpen, sheet, peek, mapOpen, inHeist: !!run || !!practice };
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -681,7 +704,7 @@ export function CityApp() {
     raidView?.link.close();
     setRaidView(null);
     setRun(null);
-    setPractice(false);
+    setPractice(null);
     // The city remounts after the heist; put your Chog back at the door it went in by.
     requestAnimationFrame(() => view.current?.appearAt(place));
   };
@@ -819,6 +842,18 @@ export function CityApp() {
     );
   }
 
+  if (practice?.stage === 'lock') {
+    const pr = practice;
+    return (
+      <LockGame
+        key={pr.seed}
+        gang={pr.gang}
+        seed={pr.seed}
+        onDone={(_, quiet) => setPractice({ ...pr, stage: 'vault', loud: !quiet })}
+      />
+    );
+  }
+
   if (practice && city) {
     const player = chog ? { id: chog.id, name: chog.name, powers: chog.powers } : city.practice;
     const guards = city.strollers.slice(0, 4).map((s) => ({ id: s.id, name: s.name }));
@@ -826,12 +861,27 @@ export function CityApp() {
       <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0918]">
         <RushGame
           mapId={RUSH_BANK.id}
-          rules={rushRules(1)}
+          rules={rushRules(1, false, practice.loud)}
           coach
           player={{ ...player, gang: chog?.gang ? GANGS[chog.gang].name : null }}
           guards={guards}
           owner={{ name: 'Practice vault', color: '#7cf0c4', ink: '#111111' }}
           onLeave={() => backTo('training')}
+          onGetaway={() => {
+            backTo('training');
+            // Run it to your gang's door, or the fountain in the plaza if you haven't got one.
+            const home = chog?.gang ? placeOf(chog.gang)!.door : { x: CITY.spawn.x, y: CITY.spawn.y - 2.2 };
+            siren.current ??= new Sound();
+            siren.current.unlock();
+            siren.current.alarmOn();
+            const from = placeOf('training')!.door;
+            setPracticeRun({
+              since: Date.now(),
+              until: Date.now() + getawayTime(from, home),
+              to: chog?.gang ? `${GANGS[chog.gang].name}’s door` : 'the fountain',
+            });
+            requestAnimationFrame(() => requestAnimationFrame(() => view.current?.practiceChase(home)));
+          }}
         />
       </div>
     );
@@ -869,6 +919,27 @@ export function CityApp() {
         }
         onChase={setChases}
         onChaseEnd={chaseEnded}
+        onPracticeEnd={(outcome) => {
+          setPracticeRun(null);
+          siren.current?.alarmOff();
+          if (outcome === 'home') siren.current?.escaped();
+          else siren.current?.busted();
+          setBanner(
+            outcome === 'home'
+              ? {
+                  id: `ph${Date.now()}`,
+                  title: 'Got away!',
+                  line: 'That’s the whole robbery: break in, grab the cash, run it home. Now try it for real.',
+                  tone: 'win',
+                }
+              : {
+                  id: `pc${Date.now()}`,
+                  title: outcome === 'time' ? 'Too slow!' : 'Caught!',
+                  line: 'In a real robbery the bag goes back and you sit in jail. Try again at the practice vault.',
+                  tone: 'lose',
+                },
+          );
+        }}
       />
 
       {/* Top left: who you are and today's jobs */}
@@ -911,6 +982,25 @@ export function CityApp() {
           onOpen={() => setMapOpen(true)}
         />
       </div>
+
+      {practiceRun && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-[118px] z-30 flex justify-center px-3 sm:bottom-auto sm:top-[96px]">
+          <div className="w-full max-w-[460px] animate-[banner-in_380ms_ease-out_both] rounded-[16px] border-[3px] border-ink bg-[#ffd666] px-4 py-2.5 text-ink shadow-[0_6px_0_0_#000]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-display text-[30px] uppercase leading-[0.9]">Run it home!</p>
+                <p className="text-[14px] font-semibold leading-snug">
+                  Practice: get to {practiceRun.to}. Follow the arrow, dodge the police.
+                </p>
+                <PoliceIn since={practiceRun.since} />
+              </div>
+              <span className="grid h-14 w-16 shrink-0 place-items-center rounded-[12px] border-[3px] border-ink bg-white pt-1 font-display text-[34px] tabular-nums leading-none">
+                {Math.max(0, Math.ceil((practiceRun.until - Date.now()) / 1000))}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Getaways: yours (run it home), one from your vault (stop them), or anyone's (a heads-up). */}
       {chases.length > 0 && (
@@ -1022,7 +1112,7 @@ export function CityApp() {
             busy={busy}
             now={now}
             onRob={(g) => void rob(g)}
-            onPractice={() => setPractice(true)}
+            onPractice={startPractice}
             onConnect={() => setSheet('connect')}
             onDefend={(l) => void defendVault(l)}
             onBreakOut={(id) => void breakOut(id)}
@@ -1597,13 +1687,23 @@ function DoorCard(props: {
         <ShieldCheck size={15} weight="fill" /> Defence: {DEFENCE[row?.tier ?? 0]}
       </p>
       {!mine && (
-        <ul className="mt-2 grid gap-0.5 text-[13px] text-white/70">
-          <li>
-            <strong className="text-white">Safe: {money(SAFE_BY_TIER[row?.tier ?? 0] ?? 0)}</strong>. Loose
-            cash is small change.
-          </li>
-          <li>Caught: your gang pays what you carried + {money(BUST_FINE)}, and 30 min in jail.</li>
-        </ul>
+        <>
+          <ol className="mt-2 grid grid-cols-3 gap-1.5 text-center text-[12px] font-semibold leading-tight">
+            {[
+              ['1', LOCK_NAME[lockFor(props.place.gang!)]],
+              ['2', `Grab the cash (safe ${money(SAFE_BY_TIER[row?.tier ?? 0] ?? 0)})`],
+              ['3', 'Run it home past the police'],
+            ].map(([n, label]) => (
+              <li key={n} className="rounded-[8px] border-2 border-ink bg-white/10 px-1.5 py-1.5">
+                <span className="block font-display text-[18px] leading-none text-[#ffd666]">{n}</span>
+                {label}
+              </li>
+            ))}
+          </ol>
+          <p className="mt-1.5 text-[12px] text-white/60">
+            Caught: the cash goes back, your gang pays {money(BUST_FINE)}, and 30 min in jail.
+          </p>
+        </>
       )}
       {props.robbing && props.robbing.since > props.now - 180_000 && (
         <p className="mt-2 flex items-center gap-2 rounded-[8px] bg-[#ff2d55] px-2.5 py-1.5 text-[13px] font-semibold text-ink">
@@ -1823,6 +1923,7 @@ function ChaseBar(props: { c: Chase; mine: boolean; ours: boolean; canChase: boo
             <p className="text-[14px] font-semibold leading-snug">
               {money(c.bag)} to {GANGS[c.home].name}’s door. Dodge the police.
             </p>
+            <PoliceIn since={c.since} />
           </div>
           <span
             className={cn(
@@ -1862,5 +1963,16 @@ function ChaseBar(props: { c: Chase; mine: boolean; ours: boolean; canChase: boo
         </button>
       )}
     </div>
+  );
+}
+
+/** The head start out of the door: "Police in 3… 2… 1", then "Run!". */
+function PoliceIn({ since }: { since: number }) {
+  const left = Math.ceil(HEAD_START - (Date.now() - since) / 1000);
+  if (left < -1) return null;
+  return (
+    <p className="mt-1 font-display text-[18px] uppercase leading-none text-jail">
+      {left > 0 ? `Police in ${left}…` : 'Run!'}
+    </p>
   );
 }

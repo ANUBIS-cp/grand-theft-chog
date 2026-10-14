@@ -3,19 +3,25 @@ import type { GangId } from '@chog-city/data';
 import {
   CITY,
   Ground,
+  HEAD_START,
   WALK_SPEED,
   doorAt,
+  getawayTime,
   groundAt,
   inPen,
   newWalker,
   placeOf,
   rng,
   route,
+  seeded,
   slide,
   slideInPen,
   smooth,
+  spawnCops,
   standable,
+  stepCops,
   stepWalker,
+  type Cop,
   type Place,
   type Walker,
 } from '@chog-city/game/city';
@@ -61,6 +67,8 @@ export interface CityHandle {
   run(pass: string): void;
   /** Keep walking after someone (a robber running from your vault), or stop (null). */
   chaseAfter(id: number | null): void;
+  /** The practice getaway: out of the training warehouse to `home`, with practice police after you. */
+  practiceChase(home: { x: number; y: number }): void;
 }
 
 interface Props {
@@ -84,6 +92,8 @@ interface Props {
   /** The getaways running in the city changed. */
   onChase?: (chases: Chase[]) => void;
   onChaseEnd?: (e: ChaseEnd) => void;
+  /** The practice getaway ended (nothing real moves). */
+  onPracticeEnd?: (outcome: 'home' | 'caught' | 'time') => void;
 }
 
 const KEYS: Record<string, [number, number]> = {
@@ -129,6 +139,8 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     /** Someone you're running after (a robber with your gang's cash), and when you last steered at them. */
     after: null as number | null,
     afterAt: 0,
+    /** The practice getaway, run here in the browser with the same police as a real one. */
+    practice: null as { cops: Cop[]; home: { x: number; y: number }; started: number; until: number } | null,
   });
 
   const jailedNow = props.me.jail !== null && props.me.jail > Date.now();
@@ -161,6 +173,16 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     chaseAfter(id) {
       state.current.after = id;
       state.current.afterAt = 0;
+    },
+    practiceChase(home) {
+      const from = placeOf('training')!;
+      const now = Date.now();
+      state.current.practice = {
+        cops: spawnCops(from, home, 0, seeded(now), -900_000),
+        home,
+        started: now,
+        until: now + getawayTime(from.door, home),
+      };
     },
   }));
 
@@ -427,8 +449,35 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         bag: mine?.bag,
         emote: s.emote ?? undefined,
       });
+      // The practice getaway: step its police, and end it at the goal, on a catch or when time's up.
+      const pr = s.practice;
+      if (pr) {
+        const t = Date.now();
+        let end: 'home' | 'caught' | 'time' | null = null;
+        if (Math.hypot(s.x - pr.home.x, s.y - pr.home.y) < 1.4) end = 'home';
+        else if (t > pr.until) end = 'time';
+        else if (t - pr.started > HEAD_START * 1000 && !p.paused && stepCops(pr.cops, s, pr.home, dt))
+          end = 'caught';
+        for (const k of pr.cops)
+          people.push({
+            key: `cop${k.id}`,
+            chog: k.chog,
+            name: 'Police',
+            color: POLICE.bg,
+            ink: POLICE.fg,
+            x: k.x,
+            y: k.y,
+            face: k.face,
+            moving: k.moving,
+            cop: true,
+          });
+        if (end) {
+          s.practice = null;
+          p.onPracticeEnd?.(end);
+        }
+      }
       s.drawn = people;
-      const home = mine ? placeOf(mine.home) : undefined;
+      const home = mine ? placeOf(mine.home)?.door : pr ? pr.home : undefined;
 
       r.places = p.places;
       r.board = p.board;
@@ -437,7 +486,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         jailed: [],
         target: s.target,
         door,
-        goal: home ? { x: home.door.x, y: home.door.y, from: { x: s.x, y: s.y } } : null,
+        goal: home ? { x: home.x, y: home.y, from: { x: s.x, y: s.y } } : null,
       });
 
       if (now - miniAt > 120) {
@@ -445,7 +494,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         lastAt.x = s.x;
         lastAt.y = s.y;
         lastAt.people = people;
-        const layer = drawMap(s.x, s.y, people, p.places, now, home?.door);
+        const layer = drawMap(s.x, s.y, people, p.places, now, home);
         drawLocal(miniCanvas(), layer, s.x, s.y);
         if (p.mapOpen) drawBig(bigRef.current, layer, p.places, r.font, now);
       }

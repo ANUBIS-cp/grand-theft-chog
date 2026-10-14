@@ -16,7 +16,6 @@ import {
   WIRE,
   WIRES,
   dialNumber,
-  faceOf,
   lockQuiet,
   showing,
   startLock,
@@ -167,7 +166,8 @@ export function LockGame(props: {
   const s = st.current.s;
   const now = typeof performance !== 'undefined' ? performance.now() : 0;
   const left = Math.max(0, LOCK_LIMIT - s.tick) / LOCK_TPS;
-  const loud = s.slips > LOCK_SLIPS;
+  // Loud once you've slipped too often, or when the clock ran out and you forced the door.
+  const loud = s.slips > LOCK_SLIPS || s.phase === 'forced';
   const shaking = now - st.current.shake < 260;
   const how = HOW[s.kind];
 
@@ -417,7 +417,8 @@ function Reels({ s, gang }: { s: LockState; gang: GangId }) {
       <div className="flex justify-center gap-2.5">
         {s.reels.map((r, i) => {
           const pos = r.at / SPAN;
-          const centre = faceOf(r.at);
+          // The face in the window, counted without wrapping, so the strip scrolls smoothly past the last face.
+          const centre = Math.floor(pos + 0.5);
           const now = i === s.done;
           return (
             <div
