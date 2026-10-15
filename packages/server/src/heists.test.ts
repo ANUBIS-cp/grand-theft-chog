@@ -17,6 +17,7 @@ import {
   heistRecord,
   recentHits,
   revengeTargets,
+  runForReplay,
   setGang,
   startRun,
   vaultCash,
@@ -132,8 +133,21 @@ describe('the gang war', () => {
       outcome: 'caught',
       by: mcgaChog,
       now: NOW + 80_000,
+      track: {
+        cops: [7],
+        frames: [
+          [100, 100, 120, 100],
+          [101, 100, 102, 100],
+        ],
+        outcome: 'caught',
+        who: 'gang',
+        by: mcgaChog,
+        bag: out.moved,
+      },
     });
     expect(caught.caughtBy).toBe(mcgaChog);
+    // The run home is kept for the replay.
+    expect((await runForReplay(db, run.id))!.getawayTrack).toMatchObject({ who: 'gang', bag: out.moved });
     expect(await vaultCash(db)).toMatchObject({
       mcga: START_CASH + BUST_FINE,
       lazoor: START_CASH - BUST_FINE,

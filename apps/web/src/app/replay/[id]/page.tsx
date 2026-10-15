@@ -1,7 +1,7 @@
 import { GANGS, displayName, getChog } from '@chog-city/data';
 import { vaultDef } from '@chog-city/game/heist';
 import { rushMap, rushRules, rushSeed } from '@chog-city/game/rush';
-import { runForReplay } from '@chog-city/server';
+import { runForReplay, warBoard } from '@chog-city/server';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -39,6 +39,40 @@ export default async function ReplayPage({ params }: Props) {
   const player = { id: run.chogId, name: name(run.chogId), gang: GANGS[run.gang].name, powers: run.powers };
   const guards = run.guards.map((id) => ({ id, name: name(id) }));
   const rescue = run.prisoner ? { id: run.prisoner, name: name(run.prisoner) } : undefined;
+  // Caught or home after the vault: the run home through the city plays after it.
+  const board = run.getawayTrack ? await warBoard(await db()) : [];
+  const getaway = run.getawayTrack
+    ? {
+        track: run.getawayTrack,
+        robber: {
+          id: run.chogId,
+          name: name(run.chogId),
+          gang: run.gang,
+          color: GANG_COLOR[run.gang].bg,
+          ink: GANG_COLOR[run.gang].fg,
+        },
+        home: run.gang,
+        bag: run.getawayTrack.bag ?? run.moved,
+        catcher: run.getawayTrack.by ? { id: run.getawayTrack.by, name: name(run.getawayTrack.by) } : null,
+        places: Object.fromEntries(
+          [...board]
+            .sort((a, b) => b.cash - a.cash)
+            .map((v, i) => [
+              v.gang,
+              {
+                name: GANGS[v.gang].name,
+                color: GANG_COLOR[v.gang].bg,
+                ink: GANG_COLOR[v.gang].fg,
+                tier: v.tier,
+                cash: v.cash,
+                rank: i + 1,
+                alarm: false,
+                mine: v.gang === run.gang,
+              },
+            ]),
+        ),
+      }
+    : undefined;
   const replay = {
     inputs: run.inputs,
     moved: run.moved,
@@ -70,6 +104,7 @@ export default async function ReplayPage({ params }: Props) {
             owner={owner}
             rescue={rescue}
             replay={replay}
+            getaway={getaway}
           />
         ) : (
           <ReplayView

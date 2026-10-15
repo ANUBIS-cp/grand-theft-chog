@@ -10,6 +10,8 @@ const Body = z.object({
   run: z.string().min(8).max(40),
   outcome: z.enum(['home', 'caught']),
   by: z.number().int().min(1).max(1969).nullable(),
+  /** The route home, for the replay; checked in finishGetaway. */
+  track: z.unknown().optional(),
 });
 
 /** The live server reports how a getaway ended (signed): bag home, or caught on the way. */
@@ -30,6 +32,7 @@ export async function POST(req: Request) {
       outcome: body.data.outcome,
       by: body.data.by,
       now: Date.now(),
+      track: body.data.track,
     });
     return json({ ok: true, result });
   } catch (e) {

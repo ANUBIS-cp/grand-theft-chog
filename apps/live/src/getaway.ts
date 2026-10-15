@@ -6,6 +6,9 @@ import {
   seeded,
   spawnCops,
   stepCops,
+  TRACK_MAX_FRAMES,
+  TRACK_MS,
+  trackFrame,
   type Cop,
   type Place,
 } from '@chog-city/game/city';
@@ -41,6 +44,9 @@ interface Chase {
   cops: Cop[];
   goneAt: number | null;
   over: boolean;
+  /** The route so far, for the replay (see packages/game/src/city/track.ts). */
+  frames: number[][];
+  framedAt: number;
 }
 
 const chases = new Map<string, Chase>();
@@ -108,14 +114,28 @@ export function startChase(
     cops,
     goneAt: null,
     over: false,
+    frames: [],
+    framedAt: 0,
   };
   chases.set(pass.run, c);
   broadcast({ t: 'chase', ...chaseInfo(c) });
   return { x: from.door.x, y: from.door.y + 0.6 };
 }
 
-async function report(c: Chase, outcome: 'home' | 'caught', by: number | null) {
-  const body = JSON.stringify({ run: c.pass.run, outcome, by });
+async function report(
+  c: Chase,
+  outcome: 'home' | 'caught',
+  by: { chog: number | null; who: 'police' | 'gang' | 'time' } | null,
+) {
+  const track = {
+    cops: c.cops.map((k) => k.chog),
+    frames: c.frames,
+    outcome,
+    who: by?.who ?? null,
+    by: by?.chog ?? null,
+    bag: c.pass.bag,
+  };
+  const body = JSON.stringify({ run: c.pass.run, outcome, by: by?.chog ?? null, track });
   for (let tryNo = 0; tryNo < 3; tryNo++) {
     try {
       const res = await fetch(`${WEB}/api/heist/getaway-finish`, {
@@ -139,7 +159,10 @@ function end(
   broadcast: (msg: unknown) => void,
 ) {
   c.over = true;
-  void report(c, outcome, by?.chog ?? null);
+  // One last frame: the officers where they made the catch, the robber where last seen.
+  const last = c.frames.at(-1);
+  if (last) c.frames.push(trackFrame({ x: last[0]! / 10, y: last[1]! / 10 }, c.cops));
+  void report(c, outcome, by);
   broadcast({
     t: 'chase-end',
     run: c.pass.run,
@@ -167,6 +190,10 @@ export function stepChases(
       c.goneAt ??= now;
       if (now - c.goneAt > GONE_MS) end(c, 'caught', { chog: null, who: 'police' }, broadcast);
       continue;
+    }
+    if (now - c.framedAt >= TRACK_MS && c.frames.length < TRACK_MAX_FRAMES) {
+      c.framedAt = now;
+      c.frames.push(trackFrame(me, c.cops));
     }
     if (doorAt(me.x, me.y)?.id === c.home.id) {
       end(c, 'home', null, broadcast);

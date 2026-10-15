@@ -1423,9 +1423,11 @@ function EndCard(props: {
                 ? `in your bag. It's only ${real.myGang}'s once you carry it to your door. Police are on the way.`
                 : real
                   ? `moved from ${props.owner} to ${real.myGang}`
-                  : replay
-                    ? `taken from ${props.owner} by ${replay.robbers}`
-                    : 'Practice run: no real cash moves.'}
+                  : replay && props.onGetaway
+                    ? `in the bag. Then came the run home through the city.`
+                    : replay
+                      ? `taken from ${props.owner} by ${replay.robbers}`
+                      : 'Practice run: no real cash moves.'}
             </p>
             <ul className="mx-auto mt-4 max-w-[240px] space-y-1 text-[14px]">
               <li className="flex justify-between">
@@ -1495,6 +1497,18 @@ function EndCard(props: {
               </a>
             )}
           </>
+        ) : props.onGetaway && escaped && replay ? (
+          <>
+            <button onClick={props.onGetaway} className="btn press btn-gold mt-5 w-full">
+              <span className="pt-1">Watch the run home</span>
+            </button>
+            <button
+              onClick={props.onAgain}
+              className="mt-3 text-[14px] font-semibold underline underline-offset-2"
+            >
+              Watch the vault again
+            </button>
+          </>
         ) : props.onGetaway && escaped && !replay ? (
           <>
             <button onClick={props.onGetaway} className="btn press btn-gold mt-5 w-full animate-pulse">
@@ -1534,4 +1548,3 @@ function EndCard(props: {
 }
 
 export { TPS as RUSH_TPS };
-

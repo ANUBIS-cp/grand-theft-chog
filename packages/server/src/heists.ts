@@ -19,6 +19,7 @@ import {
   vaultDef,
   type PowerId,
 } from '@chog-city/game/heist';
+import { validTrack, type GetawayTrack } from '@chog-city/game/city';
 import { decodeLock, replayLock } from '@chog-city/game/lock';
 import {
   RUSH_JAIL_ID,
@@ -518,8 +519,16 @@ export interface GetawayResult {
  */
 export async function finishGetaway(
   db: Db,
-  { runId, outcome, by, now }: { runId: string; outcome: 'home' | 'caught'; by: number | null; now: number },
+  {
+    runId,
+    outcome,
+    by,
+    now,
+    track,
+  }: { runId: string; outcome: 'home' | 'caught'; by: number | null; now: number; track?: unknown },
 ): Promise<GetawayResult> {
+  const kept =
+    track !== undefined && validTrack(track) && track.outcome === outcome ? JSON.stringify(track) : null;
   return db.transaction(async (tx) => {
     const [run] = await tx.select().from(heistRuns).where(eq(heistRuns.id, runId)).for('update');
     if (!run || run.getaway !== 'running') throw new HeistRefused('no-run');
@@ -575,6 +584,7 @@ export async function finishGetaway(
       .update(heistRuns)
       .set({
         getaway: home ? 'home' : 'caught',
+        getawayTrack: kept,
         // A run caught on the way home reads as a bust everywhere else (feed, record, replay).
         ...(home ? {} : { result: 'busted' as const, moved: bag + fine, caughtBy: catcher }),
       })
@@ -801,6 +811,8 @@ export async function runForReplay(db: Db, id: string) {
     prisoner: r.prisoner,
     loud: r.loud,
     getaway: r.getaway,
+    getawayTrack: r.getawayTrack ? (JSON.parse(r.getawayTrack) as GetawayTrack) : null,
+    caughtBy: r.caughtBy,
     at: r.finishedAt!.getTime(),
   };
 }

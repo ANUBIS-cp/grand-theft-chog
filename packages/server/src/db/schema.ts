@@ -198,6 +198,8 @@ export const heistRuns = pgTable(
     getaway: text('getaway').$type<'running' | 'home' | 'caught'>(),
     /** When a getaway nobody reported on is banked anyway (a live server failure shouldn't cost you). */
     bagUntil: timestamp('bag_until', { withTimezone: true }),
+    /** The run home, for the replay (JSON, see packages/game/src/city/track.ts). */
+    getawayTrack: text('getaway_track'),
   },
   (t) => [
     index('heist_runs_chog_day').on(t.chogId, t.day),

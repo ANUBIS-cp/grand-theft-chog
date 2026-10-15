@@ -43,6 +43,13 @@
       "when": 1792028541532,
       "tag": "0005_burns",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792075295240,
+      "tag": "0006_getaway_track",
+      "breakpoints": true
     }
   ]
 }
