@@ -27,6 +27,7 @@ import { RaidLink } from '@/components/rush/raid-link';
 import { RushGame } from '@/components/rush/rush-game';
 import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
+import { useDragClose } from '@/components/ui/use-drag-close';
 import { chogImage } from '@/lib/images';
 import { useLive } from '@/lib/live';
 import { GANG_COLOR } from '@/lib/theme';
@@ -46,6 +47,7 @@ import {
   MapButton,
   MiniMap,
   RoleCard,
+  PhoneControls,
   RoundButton,
 } from './hud';
 import type { Chase, ChaseEnd, ChatMsg, LiveStatus } from './live-city';
@@ -1129,8 +1131,8 @@ export function CityApp() {
             {/* Phone */}
             <div
               className={cn(
-                'pointer-events-none absolute left-3 right-[128px] z-30 flex flex-col gap-2 sm:hidden',
-                run ? 'top-[max(12px,env(safe-area-inset-top))]' : 'top-[96px]',
+                'pointer-events-none absolute left-3 right-[112px] z-30 flex flex-col gap-2 sm:hidden',
+                run ? 'top-[max(12px,env(safe-area-inset-top))]' : 'top-[84px]',
               )}
             >
               {run && <RunBar {...run} />}
@@ -1190,9 +1192,9 @@ export function CityApp() {
 
       {/* Bottom right: action buttons */}
       {!anyCard && !(chatOpen && small) && (
-        <div className="pointer-events-none absolute bottom-[max(12px,env(safe-area-inset-bottom))] right-3 z-20 flex items-end gap-2.5 max-sm:left-3 max-sm:justify-between sm:bottom-5 sm:right-5 sm:gap-4">
+        <div className="pointer-events-none absolute bottom-[max(14px,env(safe-area-inset-bottom))] right-3 z-20 flex items-end gap-2.5 sm:bottom-5 sm:right-5 sm:gap-4">
           {emoteOpen && (
-            <div className="glass-strong pointer-events-auto absolute bottom-[calc(100%+14px)] right-0 z-30 w-max origin-bottom-right animate-[pop-in_340ms_cubic-bezier(.2,.9,.3,1.2)] rounded-[26px] p-2">
+            <div className="glass-strong pointer-events-auto absolute bottom-[calc(100%+14px)] right-0 z-30 w-max origin-bottom-right max-sm:bottom-[178px] animate-[pop-in_340ms_cubic-bezier(.2,.9,.3,1.2)] rounded-[26px] p-2">
               <div className="grid grid-cols-4 gap-1">
                 {EMOTES.map((k, i) => (
                   <button
@@ -1220,6 +1222,18 @@ export function CityApp() {
               </div>
             </div>
           )}
+          {small ? (
+            <PhoneControls
+              use={{ ...useLook, ready: !!door }}
+              onUse={openDoor}
+              unread={chat.filter((m) => m.id > chatSeen && m.chog !== chog?.id).length}
+              onChat={() => setChatOpen((o) => !o)}
+              onEmote={() => setEmoteOpen((o) => !o)}
+              onMap={() => setMapOpen(true)}
+              onGangs={() => setSheet('gangs')}
+            />
+          ) : (
+            <>
           <div className="relative flex items-end gap-2 sm:flex-col sm:items-center sm:gap-3">
             <ChatButton
               unread={chat.filter((m) => m.id > chatSeen && m.chog !== chog?.id).length}
@@ -1232,6 +1246,8 @@ export function CityApp() {
             <GangsButton onClick={() => setSheet('gangs')} />
           </div>
           <RoundButton big {...useLook} hotkey="E" disabled={!door} lit={!!door} onClick={openDoor} />
+            </>
+          )}
         </div>
       )}
 
@@ -1620,9 +1636,19 @@ const EMOTE_LABEL: Record<Emote, string> = {
 
 /** A card at the bottom of the screen (phones) or bottom left (wider screens). */
 function Card({ children, onClose }: { children: React.ReactNode; onClose?: () => void }) {
+  const drag = useDragClose(onClose);
+  // On a phone it's a sheet docked to the bottom edge that you pull down to close; bigger screens float it.
   return (
-    <div className="absolute inset-x-0 bottom-0 z-30 p-3 sm:bottom-6 sm:left-1/2 sm:right-auto sm:w-[440px] sm:-translate-x-1/2 sm:p-0">
-      <div className="glass-strong relative max-h-[72dvh] animate-[glass-in_380ms_cubic-bezier(.2,.9,.3,1)] overflow-y-auto rounded-[28px] p-5 text-white">
+    <div className="absolute inset-x-0 bottom-0 z-30 sm:bottom-6 sm:left-1/2 sm:right-auto sm:w-[440px] sm:-translate-x-1/2">
+      <div
+        style={drag.style}
+        className="glass-strong relative max-h-[72dvh] animate-[slide-up_420ms_cubic-bezier(.32,.72,0,1)] overflow-y-auto rounded-t-[30px] px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-5 text-white sm:animate-[glass-in_380ms_cubic-bezier(.2,.9,.3,1)] sm:rounded-[28px] sm:pb-5"
+      >
+        {onClose && (
+          <div {...drag.bind} className="absolute inset-x-0 top-0 h-9 touch-none sm:hidden">
+            <div className="mx-auto mt-2 h-[5px] w-9 rounded-full bg-white/25" />
+          </div>
+        )}
         {onClose && (
           <button
             onClick={onClose}
@@ -1677,6 +1703,7 @@ function Sheet({
   children: React.ReactNode;
   onClose: () => void;
 }) {
+  const drag = useDragClose(onClose);
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', k);
@@ -1689,10 +1716,13 @@ function Sheet({
     >
       <aside
         onClick={(e) => e.stopPropagation()}
-        className="glass-strong max-h-[88dvh] w-full animate-[slide-up_420ms_cubic-bezier(.32,.72,0,1)] overflow-y-auto rounded-t-[28px] p-5 text-white sm:max-h-none sm:w-[420px] sm:animate-[glass-in_380ms_cubic-bezier(.2,.9,.3,1)] sm:rounded-[28px]"
+        style={drag.style}
+        className="glass-strong max-h-[88dvh] w-full animate-[slide-up_420ms_cubic-bezier(.32,.72,0,1)] overflow-y-auto rounded-t-[30px] px-5 pb-[max(20px,env(safe-area-inset-bottom))] pt-5 text-white sm:max-h-none sm:w-[420px] sm:animate-[glass-in_380ms_cubic-bezier(.2,.9,.3,1)] sm:rounded-[28px] sm:pb-5"
       >
-        {/* The grabber, like an iOS sheet. */}
-        <div className="mx-auto -mt-2 mb-3 h-1.5 w-10 rounded-full bg-white/25 sm:hidden" />
+        {/* The grabber and title: pull down to close, like an iOS sheet. */}
+        <div {...drag.bind} className="-mx-5 -mt-5 mb-1 touch-none px-5 pt-2 sm:contents">
+          <div className="mx-auto mb-3 h-[5px] w-9 rounded-full bg-white/25 sm:hidden" />
+        </div>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-[26px] leading-none">{title}</h2>
           <button

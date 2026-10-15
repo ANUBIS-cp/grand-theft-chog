@@ -36,19 +36,19 @@ export function RoleCard(props: {
   }, []);
   const left = props.duties.filter((d) => !d.done).length;
   return (
-    <div className="glass pointer-events-auto w-[min(312px,calc(100vw-140px))] animate-[glass-in_420ms_cubic-bezier(.2,.9,.3,1)] overflow-hidden rounded-[24px] text-white">
-      <div className="flex items-center gap-3 p-2.5">
+    <div className="glass pointer-events-auto w-[min(312px,calc(100vw-140px))] animate-[glass-in_420ms_cubic-bezier(.2,.9,.3,1)] overflow-hidden rounded-[24px] text-white max-sm:w-[min(250px,calc(100vw-118px))] max-sm:rounded-[20px]">
+      <div className="flex items-center gap-3 p-2.5 max-sm:gap-2.5 max-sm:p-2">
         <button
           onClick={props.onPortrait}
           aria-label="Your Chogs"
-          className="press relative h-[58px] w-[58px] shrink-0 rounded-[17px] p-[2.5px] sm:h-[64px] sm:w-[64px]"
+          className="press relative h-[46px] w-[46px] shrink-0 rounded-[14px] p-[2px] sm:h-[64px] sm:w-[64px] sm:rounded-[17px] sm:p-[2.5px]"
           style={{ background: `linear-gradient(160deg, ${props.color}, ${props.color}99)` }}
         >
           {props.chog !== null ? (
             <img
               src={chogImage(props.chog, 256)}
               alt=""
-              className="h-full w-full rounded-[15px] object-cover"
+              className="h-full w-full rounded-[12px] object-cover sm:rounded-[15px]"
             />
           ) : (
             <span className="grid h-full w-full place-items-center rounded-[15px] bg-black/30 font-display text-[26px] text-white/70">
@@ -58,16 +58,16 @@ export function RoleCard(props: {
         </button>
         <div className="flex min-w-0 flex-1 flex-col justify-center">
           {props.gang && (
-            <span className="mb-0.5 flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-label-2">
+            <span className="mb-0.5 flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-label-2 max-sm:text-[11px]">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: props.color }} />
               <span className="truncate">{props.gang}</span>
             </span>
           )}
-          <span className="truncate font-display text-[19px] leading-tight max-sm:text-[16px]">
+          <span className="truncate font-display text-[19px] leading-tight max-sm:text-[15px]">
             {props.name}
           </span>
           {props.vault && (
-            <span className="mt-0.5 truncate text-[13px] font-medium tabular-nums text-sys-gold">
+            <span className="mt-0.5 truncate text-[13px] font-medium tabular-nums text-sys-gold max-sm:text-[12px]">
               {props.vault}
             </span>
           )}
@@ -76,7 +76,7 @@ export function RoleCard(props: {
           onClick={() => setOpen((o) => !o)}
           aria-label={open ? 'Hide jobs' : 'Show jobs'}
           aria-expanded={open}
-          className="press relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fill-2 text-label-2 hover:text-white"
+          className="press relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fill-2 text-label-2 hover:text-white max-sm:h-8 max-sm:w-8"
         >
           <CaretDown
             size={15}
@@ -147,11 +147,11 @@ export function RoleCard(props: {
 
 export function MiniMap(props: { area: string; online: string; dot: string; onOpen: () => void }) {
   return (
-    <div className="pointer-events-auto flex flex-col items-center gap-2">
+    <div className="pointer-events-auto flex flex-col items-center gap-2 max-sm:gap-1.5">
       <button
         onClick={props.onOpen}
         aria-label="Open the map"
-        className="press glass relative h-[112px] w-[112px] rounded-full p-[5px] sm:h-[150px] sm:w-[150px]"
+        className="press glass relative h-[92px] w-[92px] rounded-full p-[4px] sm:h-[150px] sm:w-[150px] sm:p-[5px]"
       >
         <canvas id="city-minimap" className="h-full w-full rounded-full" />
         <span className="pointer-events-none absolute inset-[5px] rounded-full shadow-[inset_0_0_0_0.5px_rgba(255,255,255,0.2),inset_0_0_20px_rgba(0,0,0,0.55)]" />
@@ -159,7 +159,7 @@ export function MiniMap(props: { area: string; online: string; dot: string; onOp
           M
         </span>
       </button>
-      <span className="glass max-w-[170px] truncate rounded-full px-3 py-1 text-[13px] font-semibold text-white">
+      <span className="glass max-w-[170px] truncate rounded-full px-3 py-1 text-[13px] font-semibold text-white max-sm:max-w-[110px] max-sm:px-2.5 max-sm:py-0.5 max-sm:text-[12px]">
         {props.area}
       </span>
       <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-white/80 [text-shadow:0_1px_6px_rgba(0,0,0,0.8)]">
@@ -251,6 +251,87 @@ export function EmoteButton({ onClick }: { onClick: () => void }) {
 }
 export function ChatButton({ onClick, unread }: { onClick: () => void; unread: number }) {
   return <RoundButton icon={ChatCircleDots} label="Chat" hotkey="↵" badge={unread} onClick={onClick} />;
+}
+
+/**
+ * A phone's controls, the way phone games lay them out: one big action button under your right thumb, and the
+ * small ones in an arc round it, icons only. Your left thumb has the rest of the screen to walk with.
+ */
+export function PhoneControls(props: {
+  use: { icon: Icon; label: string; tone?: string; ready: boolean };
+  onUse: () => void;
+  unread: number;
+  onChat: () => void;
+  onEmote: () => void;
+  onMap: () => void;
+  onGangs: () => void;
+}) {
+  const U = props.use.icon;
+  // Round the big button's middle, from its left going up over the top.
+  const R = 96;
+  const at = (deg: number) => ({
+    right: 41 - 24 - Math.cos((deg * Math.PI) / 180) * R,
+    bottom: 41 - 24 + Math.sin((deg * Math.PI) / 180) * R,
+  });
+  const small: { icon: Icon; label: string; onClick: () => void; badge?: number; deg: number }[] = [
+    { icon: ChatCircleDots, label: 'Chat', onClick: props.onChat, badge: props.unread, deg: 180 },
+    { icon: Smiley, label: 'Emote', onClick: props.onEmote, deg: 148 },
+    { icon: MapTrifold, label: 'Map', onClick: props.onMap, deg: 116 },
+    { icon: Trophy, label: 'Gangs', onClick: props.onGangs, deg: 84 },
+  ];
+  return (
+    <div className="relative h-[82px] w-[82px]">
+      {small.map((b) => {
+        const I = b.icon;
+        const p = at(b.deg);
+        return (
+          <button
+            key={b.label}
+            onClick={b.onClick}
+            aria-label={b.label}
+            className="press glass pointer-events-auto absolute grid h-12 w-12 place-items-center rounded-full"
+            style={{ right: p.right, bottom: p.bottom }}
+          >
+            <I size={23} weight="fill" className="text-white" />
+            {!!b.badge && (
+              <span className="absolute -right-1 -top-1 grid h-[19px] min-w-[19px] place-items-center rounded-full bg-sys-pink px-1 text-[11px] font-bold text-white shadow-[0_2px_6px_rgba(0,0,0,0.35)]">
+                {b.badge > 99 ? '99+' : b.badge}
+              </span>
+            )}
+          </button>
+        );
+      })}
+      <button
+        onClick={props.onUse}
+        disabled={!props.use.ready}
+        aria-label={props.use.label}
+        className={cn(
+          'press pointer-events-auto absolute inset-0 grid place-items-center rounded-full transition-opacity',
+          props.use.ready ? 'animate-[pulse-ring_1.4s_ease-out_infinite]' : 'glass opacity-60',
+        )}
+        style={
+          props.use.ready
+            ? {
+                background: 'linear-gradient(180deg,#ffe066,#ffc300)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 12px 30px rgba(0,0,0,0.45)',
+              }
+            : undefined
+        }
+      >
+        <span className="flex flex-col items-center gap-0.5">
+          <U size={32} weight="fill" className={props.use.ready ? 'text-[#15131f]' : 'text-white'} />
+          <span
+            className={cn(
+              'text-[11px] font-bold leading-none',
+              props.use.ready ? 'text-[#15131f]' : 'text-white/80',
+            )}
+          >
+            {props.use.label}
+          </span>
+        </span>
+      </button>
+    </div>
+  );
 }
 
 export interface BannerData {

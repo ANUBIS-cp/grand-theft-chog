@@ -26,7 +26,7 @@ import {
   type Walker,
 } from '@chog-city/game/city';
 import { X } from '@phosphor-icons/react';
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { GANG_COLOR } from '@/lib/theme';
 import { CityArt } from './art';
 import { CityRenderer, type Board, type Emote, type Person, type PlaceLook } from './city-render';
@@ -563,7 +563,10 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         lastAt.people = people;
         const layer = drawMap(s.x, s.y, people, p.places, now, home);
         drawLocal(miniCanvas(), layer, s.x, s.y);
-        if (p.mapOpen) drawBig(bigRef.current, layer, p.places, r.font, now);
+        if (p.mapOpen) {
+          drawBig(bigRef.current, p.places, r.font, now);
+          if (phoneMap.cv) drawBig(phoneMap.cv, p.places, r.font, now, phoneMap.view);
+        }
       }
       raf = requestAnimationFrame(frame);
     };
@@ -578,29 +581,76 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
   }, []);
 
   // Pointer: a tap walks you there (or to a building's door); press and drag steers like a joystick.
-  const press = useRef<{ x: number; y: number; id: number; dragged: boolean } | null>(null);
+  // On a touch screen the stick shows: a ring where your thumb landed and a knob under it. Past the rim the ring
+  // follows your thumb, so turning round is always a short move.
+  const press = useRef<{ x: number; y: number; id: number; dragged: boolean; touch: boolean } | null>(null);
+  const [joy, setJoy] = useState<{ bx: number; by: number; kx: number; ky: number } | null>(null);
+  const [walked, setWalked] = useState(true);
+  useEffect(() => {
+    try {
+      setWalked(localStorage.getItem('chog-world:walked') === '1');
+    } catch {
+      /* no storage */
+    }
+  }, []);
+  const RIM = 52;
+  // A phone gets its own full-screen map.
+  const [phone, setPhone] = useState(false);
+  useEffect(() => {
+    const q = matchMedia('(max-width: 639px)');
+    const on = () => setPhone(q.matches);
+    on();
+    q.addEventListener('change', on);
+    return () => q.removeEventListener('change', on);
+  }, []);
   function onDown(e: React.PointerEvent) {
     if (live.current.paused) return;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    press.current = { x: e.clientX, y: e.clientY, id: e.pointerId, dragged: false };
+    press.current = {
+      x: e.clientX,
+      y: e.clientY,
+      id: e.pointerId,
+      dragged: false,
+      touch: e.pointerType === 'touch',
+    };
   }
   function onMove(e: React.PointerEvent) {
     const p = press.current;
     if (!p || p.id !== e.pointerId) return;
-    const dx = e.clientX - p.x;
-    const dy = e.clientY - p.y;
-    const d = Math.hypot(dx, dy);
-    if (d > 14) {
+    let dx = e.clientX - p.x;
+    let dy = e.clientY - p.y;
+    let d = Math.hypot(dx, dy);
+    if (d > RIM) {
+      p.x += (dx / d) * (d - RIM);
+      p.y += (dy / d) * (d - RIM);
+      dx = e.clientX - p.x;
+      dy = e.clientY - p.y;
+      d = RIM;
+    }
+    if (d > 12 || p.dragged) {
+      if (!p.dragged && !walked) {
+        setWalked(true);
+        try {
+          localStorage.setItem('chog-world:walked', '1');
+        } catch {
+          /* no storage */
+        }
+      }
       p.dragged = true;
       state.current.path = [];
       state.current.target = null;
-      state.current.stick = { x: dx / Math.max(d, 50), y: dy / Math.max(d, 50) };
+      state.current.stick = d > 6 ? { x: dx / RIM, y: dy / RIM } : null;
+      if (p.touch) {
+        const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        setJoy({ bx: p.x - box.left, by: p.y - box.top, kx: dx, ky: dy });
+      }
     }
   }
   function onUp(e: React.PointerEvent) {
     const p = press.current;
     press.current = null;
     state.current.stick = null;
+    setJoy(null);
     if (!p || p.dragged || live.current.paused) return;
     const r = state.current.r;
     if (!r) return;
@@ -645,7 +695,40 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         onPointerUp={onUp}
         onPointerCancel={onUp}
       />
-      {props.mapOpen && (
+      {joy && (
+        <div className="pointer-events-none absolute z-10" style={{ left: joy.bx, top: joy.by }}>
+          <div className="absolute -left-[60px] -top-[60px] h-[120px] w-[120px] rounded-full bg-white/[0.07] shadow-[inset_0_0_0_1.5px_rgba(255,255,255,0.22),0_10px_30px_rgba(0,0,0,0.3)]" />
+          <div
+            className="absolute -left-[26px] -top-[26px] h-[52px] w-[52px] rounded-full bg-[linear-gradient(180deg,#ffffff,#d9d7e4)] shadow-[inset_0_1px_0_#fff,0_6px_16px_rgba(0,0,0,0.45)]"
+            style={{ transform: `translate(${joy.kx}px, ${joy.ky}px)` }}
+          />
+        </div>
+      )}
+      {/* First time on a phone: a ghost of the stick shows where your thumb goes. */}
+      {!joy && !walked && !props.paused && !props.hidden && (
+        <div className="pointer-events-none absolute bottom-[150px] left-[76px] z-10 sm:hidden">
+          <div className="absolute -left-[60px] -top-[60px] grid h-[120px] w-[120px] place-items-center rounded-full bg-white/[0.05] shadow-[inset_0_0_0_1.5px_rgba(255,255,255,0.18)]">
+            <div className="h-[52px] w-[52px] animate-[stick-hint_2.4s_ease-in-out_infinite] rounded-full bg-white/70" />
+          </div>
+          <p className="absolute -left-[70px] top-[68px] w-[140px] text-center text-[13px] font-semibold text-white/80 [text-shadow:0_1px_6px_rgba(0,0,0,0.8)]">
+            Drag anywhere to walk
+          </p>
+        </div>
+      )}
+      {props.mapOpen && phone && (
+        <PhoneMap
+          places={props.places}
+          font={state.current.r?.font ?? 'sans-serif'}
+          at={{ x: state.current.x, y: state.current.y }}
+          canWalk={!inJail()}
+          onWalk={(x, y, place) => {
+            goTo(x, y, place);
+            props.onCloseMap();
+          }}
+          onClose={props.onCloseMap}
+        />
+      )}
+      {props.mapOpen && !phone && (
         <div
           className="absolute inset-0 z-30 grid animate-[fade-in_200ms] place-items-center bg-black/55 p-3 backdrop-blur-[6px] sm:p-6"
           onPointerDown={(e) => e.target === e.currentTarget && props.onCloseMap()}
@@ -783,7 +866,10 @@ function paintMap(
   now: number,
   goal?: { x: number; y: number },
 ) {
-  g.drawImage(mapBase(k), 0, 0);
+  // One pixel per tile, scaled up without smoothing: crisp at any zoom, and nothing to rebuild while pinching.
+  g.imageSmoothingEnabled = false;
+  g.drawImage(mapBase(1), 0, 0, CITY.w * k, CITY.h * k);
+  g.imageSmoothingEnabled = true;
   const pulse = 0.5 + 0.5 * Math.sin(now / 300);
   for (const p of CITY.places) {
     const look = places[p.id];
@@ -914,30 +1000,64 @@ function drawLocal(cv: HTMLCanvasElement | null, src: HTMLCanvasElement, x: numb
 }
 
 /** The big map, with every building's name on it. */
+/** The phone map's view: zoom (1 = the whole city fits), offset in CSS px, and the building picked. */
+export interface MapView {
+  zoom: number;
+  tx: number;
+  ty: number;
+  sel: string | null;
+}
+
+/** CSS px per tile with the whole city fitting a cw by ch box. */
+export const mapFit = (cw: number, ch: number) => Math.min(cw / CITY.w, ch / CITY.h);
+
 function drawBig(
   cv: HTMLCanvasElement | null,
-  _src: HTMLCanvasElement,
   places: Record<string, PlaceLook>,
   font: string,
   now: number,
+  view?: MapView,
 ) {
   if (!cv) return;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const w = Math.round(cv.clientWidth * dpr);
   if (!w) return;
-  const k = w / CITY.w;
-  if (cv.width !== w) {
-    cv.width = w;
-    cv.height = Math.round(CITY.h * k);
-  }
+  let k: number;
   const g = cv.getContext('2d')!;
+  if (view) {
+    // The phone map: the canvas fills its box and the city is zoomed and slid inside it.
+    const h = Math.round(cv.clientHeight * dpr);
+    if (cv.width !== w || cv.height !== h) {
+      cv.width = w;
+      cv.height = h;
+    }
+    k = mapFit(cv.clientWidth, cv.clientHeight) * view.zoom * dpr;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = '#0b0918';
+    g.fillRect(0, 0, w, h);
+    g.translate(Math.round(view.tx * dpr), Math.round(view.ty * dpr));
+  } else {
+    k = w / CITY.w;
+    if (cv.width !== w) {
+      cv.width = w;
+      cv.height = Math.round(CITY.h * k);
+    }
+  }
   // Redraw at this size from the last frame's people (kept on the layer's paint call).
   paintMap(g, k, lastAt.x, lastAt.y, lastAt.people, places, now);
+  const sel = view?.sel ? CITY.places.find((p) => p.id === view.sel) : undefined;
+  if (sel) {
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = Math.max(2 * dpr, k * 0.4);
+    g.beginPath();
+    g.roundRect(sel.x * k - k * 0.6, sel.y * k - k * 0.6, sel.w * k + k * 1.2, sel.h * k + k * 3.9, k * 1.3);
+    g.stroke();
+  }
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  // Names fit their block whatever the screen: on a phone the whole city fits the width, so the word "Gang"
-  // is dropped ("Lazoor Gang" reads "Lazoor") and the rank sits in its own little badge.
-  const narrow = cv.clientWidth < 600;
+  // Names fit their block whatever the size: when the whole city fits a phone the word "Gang" is dropped
+  // ("Lazoor Gang" reads "Lazoor") and the rank sits in its own little badge; zoomed in, the full names show.
+  const narrow = (k / dpr) * CITY.w < 600;
   const nameOf = (p: (typeof CITY.places)[number]) => {
     const n = p.kind === 'jail' ? 'Jail' : p.kind === 'training' ? 'Practice' : (places[p.id]?.name ?? '');
     return narrow ? n.replace(/ Gang$/, '') : n;
@@ -990,6 +1110,298 @@ function drawBig(
       g.fillText(String(rank), bx, by + 0.5);
     }
   }
+  if (view) g.setTransform(1, 0, 0, 1, 0, 0);
 }
 
+const money = (n: number) => `$${n.toLocaleString('en-US')}`;
 const lastAt = { x: 0, y: 0, people: [] as Person[] };
+
+/** The phone map's canvas and view, so the city's frame loop can keep its people moving. */
+const phoneMap: { cv: HTMLCanvasElement | null; view: MapView; font: string } = {
+  cv: null,
+  view: { zoom: 1, tx: 0, ty: 0, sel: null },
+  font: 'sans-serif',
+};
+
+/**
+ * The map on a phone: the whole screen, like a maps app. Pinch to zoom, drag to look round, double-tap to zoom
+ * in. Tapping a building picks it (a card at the bottom says what it is, with a button to walk there) rather
+ * than walking off at once, so a slip of the thumb doesn't send you across the city.
+ */
+function PhoneMap(props: {
+  places: Record<string, PlaceLook>;
+  font: string;
+  /** Where you are (tiles). */
+  at: { x: number; y: number };
+  canWalk: boolean;
+  onWalk: (x: number, y: number, place: string | null) => void;
+  onClose: () => void;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const cv = useRef<HTMLCanvasElement>(null);
+  const [sel, setSel] = useState<{ id: string | null; x: number; y: number } | null>(null);
+  const pts = useRef(new Map<number, { x: number; y: number }>());
+  const gest = useRef<{
+    x: number;
+    y: number;
+    tx: number;
+    ty: number;
+    zoom: number;
+    dist: number;
+    moved: boolean;
+    pinched: boolean;
+  } | null>(null);
+  const lastTap = useRef(0);
+  const anim = useRef(0);
+
+  const size = () => {
+    const b = box.current!.getBoundingClientRect();
+    return { w: b.width, h: b.height, left: b.left, top: b.top };
+  };
+  // Keep the city on screen: centred on an axis where it's smaller than the screen, edge to edge otherwise.
+  const clamp = (v: MapView) => {
+    const { w, h } = size();
+    const k = mapFit(w, h) * v.zoom;
+    const mw = CITY.w * k;
+    const mh = CITY.h * k;
+    v.tx = mw <= w ? (w - mw) / 2 : Math.min(0, Math.max(w - mw, v.tx));
+    v.ty = mh <= h ? (h - mh) / 2 : Math.min(0, Math.max(h - mh, v.ty));
+  };
+  const draw = () => drawBig(cv.current, props.places, props.font, performance.now(), phoneMap.view);
+  /** Zoom to `zoom` keeping the screen point (sx, sy) still. */
+  const zoomAt = (zoom: number, sx: number, sy: number, from = phoneMap.view) => {
+    const { w, h } = size();
+    const f = mapFit(w, h);
+    const z = Math.max(1, Math.min(4, zoom));
+    const wx = (sx - from.tx) / (f * from.zoom);
+    const wy = (sy - from.ty) / (f * from.zoom);
+    return { ...phoneMap.view, zoom: z, tx: sx - wx * f * z, ty: sy - wy * f * z };
+  };
+  const animateTo = (to: MapView) => {
+    cancelAnimationFrame(anim.current);
+    clamp(to);
+    const from = { ...phoneMap.view };
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / 280);
+      const e = 1 - Math.pow(1 - t, 3);
+      phoneMap.view = {
+        ...phoneMap.view,
+        zoom: from.zoom + (to.zoom - from.zoom) * e,
+        tx: from.tx + (to.tx - from.tx) * e,
+        ty: from.ty + (to.ty - from.ty) * e,
+      };
+      draw();
+      if (t < 1) anim.current = requestAnimationFrame(step);
+    };
+    anim.current = requestAnimationFrame(step);
+  };
+
+  useEffect(() => {
+    phoneMap.cv = cv.current;
+    phoneMap.font = props.font;
+    // Open like a maps app: close enough to read every name, centred on you; pinch out for the whole city.
+    {
+      const { w, h } = size();
+      // At least tall enough to fill the screen top to bottom, so there are no empty bands.
+      const zoom = Math.min(4, Math.max(1.6, h / CITY.h / mapFit(w, h)));
+      const k = mapFit(w, h) * zoom;
+      phoneMap.view = { zoom, tx: w / 2 - props.at.x * k, ty: h / 2 - props.at.y * k, sel: null };
+    }
+    clamp(phoneMap.view);
+    draw();
+    const ro = new ResizeObserver(() => {
+      clamp(phoneMap.view);
+      draw();
+    });
+    ro.observe(box.current!);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(anim.current);
+      phoneMap.cv = null;
+    };
+  }, []);
+
+  const pick = (sx: number, sy: number) => {
+    const { w, h } = size();
+    const k = mapFit(w, h) * phoneMap.view.zoom;
+    const x = (sx - phoneMap.view.tx) / k;
+    const y = (sy - phoneMap.view.ty) / k;
+    if (x < 0 || y < 0 || x > CITY.w || y > CITY.h) {
+      setSel(null);
+      phoneMap.view.sel = null;
+      return draw();
+    }
+    const place = CITY.places.find(
+      (pl) => x >= pl.x - 1 && x < pl.x + pl.w + 1 && y >= pl.y - 1 && y < pl.y + pl.h + 3,
+    );
+    setSel(place ? { id: place.id, x: place.door.x, y: place.door.y } : { id: null, x, y });
+    phoneMap.view.sel = place?.id ?? null;
+    navigator.vibrate?.(4);
+    draw();
+  };
+
+  const place = sel?.id ? CITY.places.find((p) => p.id === sel.id) : undefined;
+  const look = place ? props.places[place.id] : undefined;
+  const title = !sel
+    ? null
+    : !place
+      ? 'This spot'
+      : place.kind === 'jail'
+        ? 'Jail'
+        : place.kind === 'training'
+          ? 'Practice vault'
+          : (look?.name ?? place.id);
+
+  return (
+    <div className="fixed inset-0 z-30 flex animate-[fade-in_200ms] flex-col bg-[#0b0918] text-white">
+      <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-[max(14px,env(safe-area-inset-top))]">
+        <h2 className="font-display text-[26px] leading-none">Chog World</h2>
+        <button
+          onClick={props.onClose}
+          aria-label="Close the map"
+          className="press grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fill text-label-2"
+        >
+          <X size={15} weight="bold" />
+        </button>
+      </div>
+      <div
+        ref={box}
+        className="relative min-h-0 flex-1 touch-none select-none overflow-hidden"
+        onPointerDown={(e) => {
+          cancelAnimationFrame(anim.current);
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            /* gone */
+          }
+          const { left, top } = size();
+          pts.current.set(e.pointerId, { x: e.clientX - left, y: e.clientY - top });
+          const ps = [...pts.current.values()];
+          const v = phoneMap.view;
+          if (ps.length === 1)
+            gest.current = { x: ps[0]!.x, y: ps[0]!.y, tx: v.tx, ty: v.ty, zoom: v.zoom, dist: 0, moved: false, pinched: false };
+          else if (ps.length === 2 && gest.current) {
+            const [a, b] = ps as [{ x: number; y: number }, { x: number; y: number }];
+            Object.assign(gest.current, {
+              x: (a.x + b.x) / 2,
+              y: (a.y + b.y) / 2,
+              tx: v.tx,
+              ty: v.ty,
+              zoom: v.zoom,
+              dist: Math.hypot(a.x - b.x, a.y - b.y),
+              pinched: true,
+              moved: true,
+            });
+          }
+        }}
+        onPointerMove={(e) => {
+          if (!pts.current.has(e.pointerId) || !gest.current) return;
+          const { left, top } = size();
+          pts.current.set(e.pointerId, { x: e.clientX - left, y: e.clientY - top });
+          const ps = [...pts.current.values()];
+          const gs = gest.current;
+          const start = { ...phoneMap.view, zoom: gs.zoom, tx: gs.tx, ty: gs.ty };
+          if (ps.length >= 2) {
+            const [a, b] = ps as [{ x: number; y: number }, { x: number; y: number }];
+            const mx = (a.x + b.x) / 2;
+            const my = (a.y + b.y) / 2;
+            const z = zoomAt((gs.zoom * Math.hypot(a.x - b.x, a.y - b.y)) / Math.max(1, gs.dist), gs.x, gs.y, start);
+            z.tx += mx - gs.x;
+            z.ty += my - gs.y;
+            clamp(z);
+            phoneMap.view = z;
+          } else if (!gs.pinched) {
+            const p = ps[0]!;
+            if (!gs.moved && Math.hypot(p.x - gs.x, p.y - gs.y) < 7) return;
+            gs.moved = true;
+            const v = { ...start, tx: gs.tx + p.x - gs.x, ty: gs.ty + p.y - gs.y };
+            clamp(v);
+            phoneMap.view = v;
+          }
+          draw();
+        }}
+        onPointerUp={(e) => {
+          const p = pts.current.get(e.pointerId);
+          pts.current.delete(e.pointerId);
+          const gs = gest.current;
+          if (pts.current.size === 0) gest.current = null;
+          if (!p || !gs || gs.moved || gs.pinched) return;
+          const now = performance.now();
+          if (now - lastTap.current < 280) {
+            // Double-tap: zoom in there, or back out to the whole city.
+            lastTap.current = 0;
+            const v = phoneMap.view;
+            animateTo(v.zoom < 1.6 ? zoomAt(2.4, p.x, p.y) : { ...v, zoom: 1 });
+            return;
+          }
+          lastTap.current = now;
+          pick(p.x, p.y);
+        }}
+        onPointerCancel={(e) => {
+          pts.current.delete(e.pointerId);
+          if (pts.current.size === 0) gest.current = null;
+        }}
+      >
+        <canvas ref={cv} className="absolute inset-0 h-full w-full" aria-label="Map of the city" />
+      </div>
+
+      {/* Bottom: what you picked, or the key to the dots. */}
+      <div className="px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-2">
+        {sel ? (
+          <div
+            key={`${sel.id}${sel.x}`}
+            className="glass-strong flex animate-[slide-up_360ms_cubic-bezier(.32,.72,0,1)] items-center gap-3 rounded-[24px] p-3"
+          >
+            {place?.kind === 'gang' && place.gang ? (
+              <img
+                src={`/art/city/small/gang-${place.gang}.webp`}
+                alt=""
+                className="h-14 w-16 shrink-0 object-contain"
+              />
+            ) : (
+              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-[16px] bg-white/[0.08] font-display text-[22px]">
+                {place?.kind === 'jail' ? '⛓' : place?.kind === 'training' ? '★' : '•'}
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-display text-[19px] leading-tight">{title}</p>
+              <p className="truncate text-[13px] text-label-2">
+                {look
+                  ? `#${look.rank} richest · ${money(look.cash)}${look.mine ? ' · your gang' : ''}${look.alarm ? ' · being robbed!' : ''}`
+                  : place?.kind === 'jail'
+                    ? 'Caught robbers sit here'
+                    : place?.kind === 'training'
+                      ? 'Learn to rob, no risk'
+                      : 'Somewhere on the streets'}
+              </p>
+            </div>
+            <button
+              onClick={() => props.onWalk(sel.x, sel.y, sel.id)}
+              disabled={!props.canWalk}
+              className="btn btn-sm btn-primary press shrink-0 disabled:opacity-40"
+            >
+              Walk there
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2 px-1 py-2 text-[12px] font-medium text-label-2">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-sys-pink ring-2 ring-white" /> You
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-white/80 ring-2 ring-white" /> Players
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-sys-red" /> Getaway
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-sys-blue" /> Police
+            </span>
+            <span className="text-label-3">Pinch to zoom</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

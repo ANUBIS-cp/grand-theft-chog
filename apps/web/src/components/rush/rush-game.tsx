@@ -31,6 +31,7 @@ import { Fx } from '../heist/fx';
 import { Sound } from '../heist/sound';
 import type { RaidLink, RaidResult } from './raid-link';
 import { powerHint } from './power-fx';
+import { stickWay } from './stick';
 import { ThumbStick } from './thumb-stick';
 import { RushRenderer, rushSnapshot, type RushPrev } from './rush-render';
 
@@ -181,6 +182,8 @@ export function RushGame(props: RushGameProps) {
     /** Defenders whose own Chog is already on their guard. */
     faces: Set<string>;
     held: Dir[];
+    /** The way is coming from the phone's stick (see `stickWay`). */
+    stick: boolean;
     tap: { d: Dir; until: number } | null;
     use: boolean;
     power: number;
@@ -207,6 +210,7 @@ export function RushGame(props: RushGameProps) {
       tapUntil: 0,
       faces: new Set<string>(),
       held: [] as Dir[],
+      stick: false,
       tap: null,
       use: false,
       power: -1,
@@ -453,6 +457,7 @@ export function RushGame(props: RushGameProps) {
         return script[st.inputs.length] ?? { d: -1 };
       }
       let d: Dir | -1 = st.held.at(-1) ?? -1;
+      if (d !== -1 && st.stick) d = stickWay(map, st.s, d);
       if (d === -1 && st.tap) {
         d = st.tap.d;
         if (st.s.tick >= st.tap.until) st.tap = null;
@@ -604,6 +609,7 @@ export function RushGame(props: RushGameProps) {
       sound.current?.unlock();
       if (d !== undefined) {
         g.started = true;
+        g.stick = false;
         if (!g.held.includes(d)) g.held.push(d);
         g.tap = { d, until: g.s.tick + 5 };
         g.tapUntil = performance.now() + 170;
@@ -694,9 +700,9 @@ export function RushGame(props: RushGameProps) {
     }
     if (g.s.phase !== 'play') return;
     g.started = true;
+    g.stick = true;
     g.held = [d];
-    g.tap = { d, until: g.s.tick + 5 };
-    g.tapUntil = performance.now() + 170;
+    g.tap = null;
   };
   const [touch, setTouch] = useState(false);
   useEffect(() => setTouch(matchMedia('(pointer: coarse)').matches), []);
@@ -1509,3 +1515,4 @@ function EndCard(props: {
 }
 
 export { TPS as RUSH_TPS };
+

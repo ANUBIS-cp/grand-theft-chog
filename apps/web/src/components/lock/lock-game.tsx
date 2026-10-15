@@ -405,6 +405,9 @@ function Wires({ s, onCut }: { s: LockState; onCut: (i: number) => void }) {
   );
 }
 
+/** Faces -3 .. FACES+2: enough above and below that the window is always covered as the reel wraps. */
+const STRIP = Array.from({ length: FACES + 6 }, (_, i) => i - 3);
+
 /** Three reels of gang buildings: stop each on the robbed gang's. */
 function Reels({ s, gang }: { s: LockState; gang: GangId }) {
   const others = GANG_IDS.filter((g) => g !== gang);
@@ -415,14 +418,12 @@ function Reels({ s, gang }: { s: LockState; gang: GangId }) {
       <div className="mb-3 flex items-center justify-center gap-2 font-display text-[12px] leading-none">
         <span className="pt-0.5">Stop on</span>
         <span className="grid h-10 w-14 place-items-center rounded-[8px] bg-white">
-          <img src={`/art/city/gang-${gang}.webp`} alt="" className="max-h-8 max-w-12 object-contain" />
+          <img src={`/art/city/small/gang-${gang}.webp`} alt="" className="max-h-8 max-w-12 object-contain" />
         </span>
       </div>
       <div className="flex justify-center gap-2.5">
         {s.reels.map((r, i) => {
           const pos = r.at / SPAN;
-          // The face in the window, counted without wrapping, so the strip scrolls smoothly past the last face.
-          const centre = Math.floor(pos + 0.5);
           const now = i === s.done;
           return (
             <div
@@ -433,25 +434,28 @@ function Reels({ s, gang }: { s: LockState; gang: GangId }) {
               )}
               style={{ height: H * 2.2 }}
             >
-              {[-2, -1, 0, 1, 2].map((d) => {
-                const f = (((centre + d) % FACES) + FACES) % FACES;
-                // How far this face sits from the window's middle, in faces.
-                const off = centre + d - pos;
-                return (
+              {/* One strip of every face, mounted once and slid with a transform: no pictures swapped or laid
+                  out while it spins, which is what made it stutter on phones. */}
+              <div
+                className="absolute inset-x-0 top-0 will-change-transform"
+                style={{ transform: `translate3d(0, ${H * 1.1 - H / 2 - pos * H}px, 0)` }}
+              >
+                {STRIP.map((k) => (
                   <div
-                    key={d}
+                    key={k}
                     className="absolute inset-x-0 grid place-items-center"
-                    style={{ height: H, top: H * 1.1 - H / 2 + off * H }}
+                    style={{ height: H, top: k * H }}
                   >
                     <img
-                      src={`/art/city/gang-${faceGang(f)}.webp`}
+                      src={`/art/city/small/gang-${faceGang((((k % FACES) + FACES) % FACES))}.webp`}
                       alt=""
                       draggable={false}
+                      decoding="sync"
                       className="max-h-[60px] max-w-[88px] object-contain"
                     />
                   </div>
-                );
-              })}
+                ))}
+              </div>
               <div className="pointer-events-none absolute inset-x-0 top-0 h-[34%] bg-gradient-to-b from-black/45 to-transparent" />
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[34%] bg-gradient-to-t from-black/45 to-transparent" />
               <div className="pointer-events-none absolute inset-x-1 top-1/2 h-[64px] -translate-y-1/2 rounded-[8px] border-2 border-dashed border-ink/50" />

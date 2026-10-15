@@ -341,3 +341,17 @@ canvas {
   -webkit-user-drag: none;
   -webkit-touch-callout: none;
 }
+
+/* The ghost stick: the knob nudges out and back to show you can drag it. */
+@keyframes stick-hint {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  30% {
+    transform: translate(26px, -10px);
+  }
+  60% {
+    transform: translate(0, 0);
+  }
+}
