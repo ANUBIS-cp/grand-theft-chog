@@ -783,6 +783,8 @@ export function CityApp() {
     setRaidView(null);
     setRun(null);
     setPractice(null);
+    // The door's card was still open under the vault: close it, or it pops up over you as you run.
+    setDoorOpen(false);
     // The city remounts after the heist; put your Chog back at the door it went in by.
     requestAnimationFrame(() => view.current?.appearAt(place));
   };
@@ -1269,7 +1271,8 @@ export function CityApp() {
       )}
 
       {/* At a door */}
-      {door && doorOpen && !sheet && !peek && (
+      {/* No building cards while you're running a bag home: nothing should cover you on a getaway. */}
+      {door && doorOpen && !sheet && !peek && !practiceRun && !myChase && (
         <Card onClose={() => setDoorOpen(false)}>
           <DoorCard
             place={door}

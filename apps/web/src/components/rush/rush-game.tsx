@@ -31,7 +31,7 @@ import { Fx } from '../heist/fx';
 import { Sound } from '../heist/sound';
 import type { RaidLink, RaidResult } from './raid-link';
 import { powerHint } from './power-fx';
-import { stickWay } from './stick';
+import { stickPick } from './stick';
 import { ThumbStick } from './thumb-stick';
 import { RushRenderer, rushSnapshot, type RushPrev } from './rush-render';
 
@@ -182,8 +182,9 @@ export function RushGame(props: RushGameProps) {
     /** Defenders whose own Chog is already on their guard. */
     faces: Set<string>;
     held: Dir[];
-    /** The way is coming from the phone's stick (see `stickWay`). */
+    /** The phone's stick is steering, and the ways it holds (a diagonal holds two; see `stickPick`). */
     stick: boolean;
+    stickHeld: Dir[];
     tap: { d: Dir; until: number } | null;
     use: boolean;
     power: number;
@@ -211,6 +212,7 @@ export function RushGame(props: RushGameProps) {
       faces: new Set<string>(),
       held: [] as Dir[],
       stick: false,
+      stickHeld: [] as Dir[],
       tap: null,
       use: false,
       power: -1,
@@ -279,7 +281,7 @@ export function RushGame(props: RushGameProps) {
         // Defending or watching: draw the server's picture, eased between its last two.
         st.started = true;
         if (link.role === 'defend') {
-          link.move(st.held.at(-1) ?? st.tap?.d ?? -1, st.use);
+          link.move(st.stick ? (st.stickHeld[0] ?? -1) : (st.held.at(-1) ?? st.tap?.d ?? -1), st.use);
           st.use = false;
           if (st.tap && performance.now() > st.tapUntil) st.tap = null;
         }
@@ -457,7 +459,7 @@ export function RushGame(props: RushGameProps) {
         return script[st.inputs.length] ?? { d: -1 };
       }
       let d: Dir | -1 = st.held.at(-1) ?? -1;
-      if (d !== -1 && st.stick) d = stickWay(map, st.s, d);
+      if (st.stick) d = stickPick(map, st.s, st.stickHeld);
       if (d === -1 && st.tap) {
         d = st.tap.d;
         if (st.s.tick >= st.tap.until) st.tap = null;
@@ -689,19 +691,16 @@ export function RushGame(props: RushGameProps) {
     drag.current = null;
     setJoy(null);
   };
-  /** The phone's stick: hold a way to move, let go to stop, like an arrow key. */
-  const onStick = (d: Dir | -1) => {
+  /** The phone's stick: hold a way (or two, on a diagonal) to move, let go to stop. */
+  const onStick = (held: Dir[]) => {
     const g = game.current;
     sound.current?.unlock();
     if (!g || scriptRef.current) return;
-    if (d === -1) {
-      g.held = [];
-      return;
-    }
-    if (g.s.phase !== 'play') return;
+    g.stickHeld = held;
+    if (!held.length || g.s.phase !== 'play') return;
     g.started = true;
     g.stick = true;
-    g.held = [d];
+    g.held = [];
     g.tap = null;
   };
   const [touch, setTouch] = useState(false);

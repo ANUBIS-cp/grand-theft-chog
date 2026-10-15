@@ -5,16 +5,17 @@ import { RING, readStick, type Dir } from './stick';
 
 // The phone's stick, in its own strip under the vault so your thumb never covers a guard. Put your thumb down
 // anywhere in the strip: the ring appears there and stays put. Move your thumb inside it the way you want to
-// go; hold to keep moving, let go (or come back to the middle) to stop, like holding an arrow key. The way it
-// reads is exactly where the knob sits, and that slice of the ring lights up.
+// go; hold to keep moving, let go (or come back to the middle) to stop, like holding an arrow key. Between two
+// ways it holds both, like two arrow keys, so a turn is taken the moment it opens. What it reads is exactly
+// where the knob sits, and those slices of the ring light up.
 
 const ROT: Record<Dir, number> = { 0: 0, 1: 90, 2: 180, 3: 270 };
 
-export function ThumbStick({ onDir, className }: { onDir: (d: Dir | -1) => void; className?: string }) {
+export function ThumbStick({ onDir, className }: { onDir: (held: Dir[]) => void; className?: string }) {
   const zone = useRef<HTMLDivElement>(null);
-  const live = useRef<{ id: number; cx: number; cy: number; d: Dir | -1 } | null>(null);
+  const live = useRef<{ id: number; cx: number; cy: number; held: Dir[] } | null>(null);
   const [view, setView] = useState<{ cx: number; cy: number; kx: number; ky: number } | null>(null);
-  const [dir, setDir] = useState<Dir | -1>(-1);
+  const [held, setHeld] = useState<Dir[]>([]);
 
   const show = (fx: number, fy: number) => {
     const l = live.current!;
@@ -34,8 +35,8 @@ export function ThumbStick({ onDir, className }: { onDir: (d: Dir | -1) => void;
     if (!l || l.id !== id) return;
     live.current = null;
     setView(null);
-    setDir(-1);
-    onDir(-1);
+    setHeld([]);
+    onDir([]);
   };
 
   return (
@@ -49,17 +50,17 @@ export function ThumbStick({ onDir, className }: { onDir: (d: Dir | -1) => void;
         } catch {
           /* no live pointer */
         }
-        live.current = { id: e.pointerId, cx: e.clientX, cy: e.clientY, d: -1 };
+        live.current = { id: e.pointerId, cx: e.clientX, cy: e.clientY, held: [] };
         show(e.clientX, e.clientY);
       }}
       onPointerMove={(e) => {
         const l = live.current;
         if (!l || l.id !== e.pointerId) return;
-        const was = l.d;
-        const d = readStick(l, e.clientX, e.clientY);
-        if (d !== was) {
-          setDir(d);
-          onDir(d);
+        const was = l.held.join();
+        const now = readStick(l, e.clientX, e.clientY);
+        if (now.join() !== was) {
+          setHeld(now);
+          onDir(now);
         }
         show(e.clientX, e.clientY);
       }}
@@ -81,17 +82,18 @@ export function ThumbStick({ onDir, className }: { onDir: (d: Dir | -1) => void;
           }}
         >
           {/* The slice you're in, lit. */}
-          {dir !== -1 && (
+          {held.map((d) => (
             <svg
+              key={d}
               width="128"
               height="128"
               viewBox="0 0 128 128"
               className="absolute inset-0"
-              style={{ rotate: `${ROT[dir]}deg` }}
+              style={{ rotate: `${ROT[d]}deg` }}
             >
               <path d="M64 64 L19 19 A64 64 0 0 1 109 19 Z" fill="rgba(255,92,147,0.28)" />
             </svg>
-          )}
+          ))}
           {([0, 1, 2, 3] as Dir[]).map((d) => (
             <svg
               key={d}
@@ -99,12 +101,12 @@ export function ThumbStick({ onDir, className }: { onDir: (d: Dir | -1) => void;
               height="128"
               viewBox="0 0 128 128"
               className="absolute inset-0"
-              style={{ rotate: `${ROT[d]}deg`, opacity: dir === d ? 1 : 0.4 }}
+              style={{ rotate: `${ROT[d]}deg`, opacity: held.includes(d) ? 1 : 0.4 }}
             >
               <path
                 d="M55 18 64 9l9 9"
                 fill="none"
-                stroke={dir === d ? '#ff5c93' : '#ffffff'}
+                stroke={held.includes(d) ? '#ff5c93' : '#ffffff'}
                 strokeWidth="3.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"

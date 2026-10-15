@@ -1751,7 +1751,8 @@ export class CityRenderer {
     for (const p of people)
       if (!p.me && inView(p.x, p.y, 2) && !(opts.goal && p.npc && !p.bag)) this.drawTag(p, now);
     for (const p of people) if (p.me) this.drawTag(p, now);
-    if (opts.door) this.drawDoorHint(opts.door, now);
+    // On a getaway the only door that matters is home, and the arrow shows it.
+    if (opts.door && !opts.goal) this.drawDoorHint(opts.door, now);
     if (opts.goal) this.drawGoal(opts.goal, now);
   }
 
