@@ -19,6 +19,8 @@ MAIN=${HOSTS%%,*}
 caddy validate --config /etc/caddy/Caddyfile.new --adapter caddyfile >/dev/null
 mv /etc/caddy/Caddyfile.new /etc/caddy/Caddyfile
 grep -q '^IMAGES_DIR=' /etc/chog-city/app.env || echo 'IMAGES_DIR=/srv/chog-city/images' >> /etc/chog-city/app.env
+# Where the live server keeps the last chat messages between restarts.
+grep -q '^CHAT_FILE=' /etc/chog-city/app.env || echo 'CHAT_FILE=/var/lib/chog-city/chat.json' >> /etc/chog-city/app.env
 # The key that signs live-city tickets: made once on the server, never printed, never in the repo.
 grep -q '^CITY_SECRET=' /etc/chog-city/app.env || echo "CITY_SECRET=$(openssl rand -hex 32)" >> /etc/chog-city/app.env
 chown root:chogcity /etc/chog-city/app.env && chmod 0640 /etc/chog-city/app.env
