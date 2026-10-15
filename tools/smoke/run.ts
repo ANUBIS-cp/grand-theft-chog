@@ -1,5 +1,6 @@
 // End-to-end smoke test against a running server with a throwaway wallet (made in memory, never saved).
 // Usage: npx tsx tools/smoke/run.ts https://chogcity.35-212-31-75.sslip.io
+import { GANG_IDS } from '@chog-city/data';
 import { createSiweMessage } from 'viem/siwe';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import WebSocket from 'ws';
@@ -25,7 +26,7 @@ check('health', health.status === 200);
 const board = await call('/api/war');
 check(
   'gang vaults',
-  board.status === 200 && board.body.board.length === 16,
+  board.status === 200 && board.body.board.length === GANG_IDS.length,
   `${board.body?.board?.length} vaults`,
 );
 const before = await call('/api/war/me');
