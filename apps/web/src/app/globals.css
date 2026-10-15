@@ -319,3 +319,25 @@
     display: none !important;
   }
 }
+
+/* A game, not a document: holding a button must not select text or pop up the copy / look-up menu on a
+   phone. Typing and reading still work where it matters. */
+html {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+input,
+textarea,
+[contenteditable='true'],
+.selectable {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+img,
+canvas {
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
