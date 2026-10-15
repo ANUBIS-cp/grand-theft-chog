@@ -46,6 +46,20 @@ export function ChatPanel(props: {
     [props.msgs, room],
   );
   const canGang = !!props.me.gang;
+  // On a phone the keyboard covers the bottom of the screen: lift the chat above it.
+  const [kb, setKb] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv || !props.open) return;
+    const on = () => setKb(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    on();
+    vv.addEventListener('resize', on);
+    vv.addEventListener('scroll', on);
+    return () => {
+      vv.removeEventListener('resize', on);
+      vv.removeEventListener('scroll', on);
+    };
+  }, [props.open]);
   useEffect(() => {
     if (room === 'gang' && !canGang) setRoom('city');
   }, [room, canGang]);
@@ -84,7 +98,8 @@ export function ChatPanel(props: {
 
   return (
     <div
-      className="glass-strong pointer-events-auto flex h-[min(460px,62dvh)] w-[min(380px,calc(100vw-24px))] origin-bottom-left animate-[glass-in_380ms_cubic-bezier(.2,.9,.3,1)] flex-col overflow-hidden rounded-[28px] text-white"
+      className="glass-strong pointer-events-auto flex h-[min(460px,62dvh)] w-[min(380px,calc(100vw-24px))] origin-bottom-left animate-[glass-in_380ms_cubic-bezier(.2,.9,.3,1)] flex-col overflow-hidden rounded-[28px] text-white max-sm:w-full"
+      style={{ marginBottom: kb, maxHeight: kb ? `calc(100dvh - ${kb + 80}px)` : undefined }}
       onKeyDown={(e) => {
         if (e.key === 'Escape') props.onClose();
         e.stopPropagation();
@@ -222,7 +237,7 @@ export function ChatPanel(props: {
               placeholder={placeholder}
               enterKeyHint="send"
               maxLength={240}
-              className="h-8 min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-label-3"
+              className="h-8 min-w-0 flex-1 bg-transparent text-[16px] text-white outline-none placeholder:text-label-3"
             />
             {text.length > 200 && (
               <span className="text-[11px] tabular-nums text-label-3">{240 - text.length}</span>

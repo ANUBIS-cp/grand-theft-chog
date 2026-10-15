@@ -677,6 +677,32 @@ export function RushGame(props: RushGameProps) {
     drag.current = null;
     setJoy(null);
   };
+  // The direction pad under the maze (touch screens): steer by where your thumb is from its middle, so your
+  // finger never covers the maze.
+  const [pad, setPad] = useState<Dir | -1>(-1);
+  const padAt = (e: React.PointerEvent) => {
+    const g = game.current;
+    if (!g || g.s.phase !== 'play' || scriptRef.current) return;
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const dx = e.clientX - (box.left + box.width / 2);
+    const dy = e.clientY - (box.top + box.height / 2);
+    if (Math.hypot(dx, dy) < 12) return;
+    const d: Dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : dy > 0 ? 2 : 0;
+    if (d === g.held[0]) return;
+    g.started = true;
+    g.held = [d];
+    g.tap = { d, until: g.s.tick + 5 };
+    g.tapUntil = performance.now() + 170;
+    setPad(d);
+    navigator.vibrate?.(8);
+  };
+  const padUp = () => {
+    if (game.current) game.current.held = [];
+    setPad(-1);
+  };
+  const [touch, setTouch] = useState(false);
+  useEffect(() => setTouch(matchMedia('(pointer: coarse)').matches), []);
+
   const press = (what: 'use' | number) => {
     const g = game.current;
     if (!g) return;
@@ -882,7 +908,56 @@ export function RushGame(props: RushGameProps) {
           role === 'watch' && 'hidden',
         )}
       >
-        <div className="flex min-w-0 flex-1 items-end gap-3">
+        {touch && role !== 'watch' && (
+          <div
+            className="relative h-[136px] w-[136px] shrink-0 touch-none select-none rounded-full bg-white/[0.07] ring-1 ring-inset ring-white/10 backdrop-blur-xl"
+            onPointerDown={(e) => {
+              sound.current?.unlock();
+              try {
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              } catch {
+                /* no live pointer to capture */
+              }
+              padAt(e);
+            }}
+            onPointerMove={(e) => e.buttons && padAt(e)}
+            onPointerUp={padUp}
+            onPointerCancel={padUp}
+            aria-label="Direction pad"
+          >
+            {([0, 1, 2, 3] as const).map((d) => (
+              <span
+                key={d}
+                className={cn(
+                  'absolute grid h-11 w-11 place-items-center rounded-full text-white transition-all duration-100',
+                  d === 0 && 'left-1/2 top-1.5 -translate-x-1/2',
+                  d === 1 && 'right-1.5 top-1/2 -translate-y-1/2',
+                  d === 2 && 'bottom-1.5 left-1/2 -translate-x-1/2',
+                  d === 3 && 'left-1.5 top-1/2 -translate-y-1/2',
+                  pad === d ? 'scale-110 bg-white text-[#15131f]' : 'bg-white/10',
+                )}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" style={{ rotate: `${d * 90}deg` }}>
+                  <path
+                    d="M3 10.5 8 5.5l5 5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+            ))}
+            <span className="absolute left-1/2 top-1/2 h-9 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/[0.12]" />
+          </div>
+        )}
+        <div
+          className={cn(
+            'flex min-w-0 flex-1 items-end gap-3',
+            touch && 'justify-end max-sm:flex-col max-sm:items-end max-sm:gap-2',
+          )}
+        >
           {role === 'defend' && (
             <p className="self-center text-[13px] leading-snug text-white/70">
               Steer with the arrow keys or drag. Touch the robber to catch them. Space dashes.
@@ -896,7 +971,7 @@ export function RushGame(props: RushGameProps) {
                   <div
                     key={id}
                     title={def.does}
-                    className="flex h-11 items-center gap-2 self-center rounded-full bg-white/[0.07] py-1 pl-1.5 pr-3 text-white/80 ring-1 ring-inset ring-white/10 backdrop-blur-xl"
+                    className="flex h-11 items-center gap-2 self-center rounded-full bg-white/[0.07] py-1 pl-1.5 pr-3 text-white/80 ring-1 ring-inset ring-white/10 backdrop-blur-xl max-sm:hidden"
                   >
                     <SkillIcon skill={ICON[id]} width={22} height={22} />
                     <span className="text-[13px] font-semibold">{def.name}</span>
@@ -921,7 +996,7 @@ export function RushGame(props: RushGameProps) {
                 >
                   <span
                     className={cn(
-                      'relative grid h-[68px] w-[68px] place-items-center rounded-full transition-transform duration-200 ease-[cubic-bezier(.2,.9,.3,1.4)] group-active:scale-90 sm:h-[76px] sm:w-[76px]',
+                      'relative grid h-[68px] w-[68px] place-items-center rounded-full transition-transform duration-200 ease-[cubic-bezier(.2,.9,.3,1.4)] group-active:scale-90 max-sm:h-[54px] max-sm:w-[54px] sm:h-[76px] sm:w-[76px]',
                       hinted && 'scale-110',
                     )}
                     style={{
@@ -976,7 +1051,12 @@ export function RushGame(props: RushGameProps) {
                       {POWER_KEY_LABEL[i] ?? i + 1}
                     </span>
                   </span>
-                  <span className={cn('text-[12px] font-semibold', off ? 'text-white/40' : 'text-white/90')}>
+                  <span
+                    className={cn(
+                      'text-[12px] font-semibold max-sm:hidden',
+                      off ? 'text-white/40' : 'text-white/90',
+                    )}
+                  >
                     {active > 0 ? 'On' : def.name}
                   </span>
                 </button>
@@ -1155,7 +1235,7 @@ function Goal({ hud, rescue, safeValue }: { hud: Hud; rescue?: RushChog; safeVal
 /** Practice: the steps, ticked off as you do them. */
 function Coach({ hud }: { hud: Hud }) {
   const steps = [
-    { label: 'Move', tip: 'Arrow keys or WASD. On a phone, drag anywhere.', done: hud.started },
+    { label: 'Move', tip: 'Arrow keys or WASD. On a phone, use the round pad.', done: hud.started },
     {
       label: 'Grab coins in a row',
       tip: 'Keep collecting without stopping: the combo multiplies them.',

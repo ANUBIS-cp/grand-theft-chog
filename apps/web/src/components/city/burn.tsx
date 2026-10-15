@@ -125,7 +125,9 @@ export function PosterPicker(props: {
             onClick={() => setLine(i)}
             className={cn(
               'press rounded-full border px-2.5 py-1 text-[13px] font-medium',
-              i === line ? 'border-transparent bg-white text-[#15131f]' : 'border-white/15 text-label-2 hover:text-white',
+              i === line
+                ? 'border-transparent bg-white text-[#15131f]'
+                : 'border-white/15 text-label-2 hover:text-white',
             )}
           >
             {l}

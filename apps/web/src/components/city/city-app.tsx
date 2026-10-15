@@ -31,7 +31,7 @@ import { chogImage } from '@/lib/images';
 import { useLive } from '@/lib/live';
 import { GANG_COLOR } from '@/lib/theme';
 import { ago, formatLeft } from '@/lib/time';
-import { logOut } from '@/lib/wallet';
+import { hasWalletConnectSession, logOut } from '@/lib/wallet';
 import { BurnButton, PosterPicker, type Burns } from './burn';
 import { ChatPanel } from './chat';
 import type { PlaceLook } from './city-render';
@@ -241,7 +241,20 @@ export function CityApp() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatRefused, setChatRefused] = useState<string | null>(null);
   const [chatSeen, setChatSeen] = useState(0);
+  // Back from a phone wallet with it connected but the login not signed yet: pick up where it stopped.
+  useEffect(() => {
+    if (me && !me.address && hasWalletConnectSession()) setSheet((s) => s ?? 'connect');
+  }, [me]);
   const chatOpenRef = useRef(false);
+  // Phone-size screen: the action buttons go in one row and make room for the chat.
+  const [small, setSmall] = useState(false);
+  useEffect(() => {
+    const m = matchMedia('(max-width: 639px)');
+    const on = () => setSmall(m.matches);
+    on();
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
   chatOpenRef.current = chatOpen;
   useEffect(() => {
     if (chatOpen) setChatSeen((s) => Math.max(s, chat.at(-1)?.id ?? 0));
@@ -1045,7 +1058,7 @@ export function CityApp() {
       </div>
 
       {practiceRun && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[160px] z-30 flex justify-center px-3 xl:bottom-auto xl:top-[96px]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-[160px] z-30 flex justify-center px-3 max-sm:bottom-auto max-sm:top-[84px] xl:bottom-auto xl:top-[96px]">
           <RunBar
             line={`Practice: get to ${practiceRun.to}. Follow the arrow, dodge the police.`}
             since={practiceRun.since}
@@ -1056,7 +1069,7 @@ export function CityApp() {
 
       {/* Getaways: yours (run it home), one from your vault (stop them), or anyone's (a heads-up). */}
       {chases.length > 0 && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[160px] z-30 flex flex-col items-center gap-2 px-3 xl:bottom-auto xl:top-[96px]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-[160px] z-30 flex flex-col items-center gap-2 px-3 max-sm:bottom-auto max-sm:top-[84px] xl:bottom-auto xl:top-[96px]">
           {chases
             .filter((c) => c === myChase || (chog?.gang && c.from === chog.gang) || chases.length < 3)
             .slice(0, 3)
@@ -1104,7 +1117,15 @@ export function CityApp() {
 
       {/* Bottom left: the chat (closed, the newest city messages float up for a moment) */}
       {!anyCard && (
-        <div className="pointer-events-none absolute bottom-4 left-3 z-20 sm:bottom-5 sm:left-5">
+        <div
+          className={cn(
+            'pointer-events-none absolute left-3 z-20 sm:bottom-5 sm:left-5',
+            // On a phone: closed, the floating messages sit above the button row; open, it's a sheet.
+            chatOpen
+              ? 'bottom-[max(8px,env(safe-area-inset-bottom))] max-sm:right-3'
+              : 'bottom-[104px] sm:bottom-5',
+          )}
+        >
           <ChatPanel
             open={chatOpen}
             onOpen={() => setChatOpen(true)}
@@ -1123,8 +1144,8 @@ export function CityApp() {
       )}
 
       {/* Bottom right: action buttons */}
-      {!anyCard && (
-        <div className="pointer-events-none absolute bottom-4 right-3 z-20 flex items-end gap-3 sm:bottom-5 sm:right-5 sm:gap-4">
+      {!anyCard && !(chatOpen && small) && (
+        <div className="pointer-events-none absolute bottom-[max(12px,env(safe-area-inset-bottom))] right-3 z-20 flex items-end gap-2.5 max-sm:left-3 max-sm:justify-between sm:bottom-5 sm:right-5 sm:gap-4">
           {emoteOpen && (
             <div className="glass-strong pointer-events-auto absolute bottom-[calc(100%+14px)] right-0 z-30 w-max origin-bottom-right animate-[pop-in_340ms_cubic-bezier(.2,.9,.3,1.2)] rounded-[26px] p-2">
               <div className="grid grid-cols-4 gap-1">
@@ -1154,14 +1175,14 @@ export function CityApp() {
               </div>
             </div>
           )}
-          <div className="relative flex flex-col items-center gap-3">
+          <div className="relative flex items-end gap-2 sm:flex-col sm:items-center sm:gap-3">
             <ChatButton
               unread={chat.filter((m) => m.id > chatSeen && m.chog !== chog?.id).length}
               onClick={() => setChatOpen((o) => !o)}
             />
             <EmoteButton onClick={() => setEmoteOpen((o) => !o)} />
           </div>
-          <div className="flex flex-col items-center gap-3">
+          <div className="flex items-end gap-2 sm:flex-col sm:items-center sm:gap-3">
             <MapButton onClick={() => setMapOpen(true)} />
             <GangsButton onClick={() => setSheet('gangs')} />
           </div>
@@ -1211,6 +1232,8 @@ export function CityApp() {
               setDoorOpen(false);
               setPeek(who);
             }}
+            myChogs={chogs}
+            onSwitch={(id) => setPicked(id)}
           />
         </Card>
       )}
@@ -1731,6 +1754,8 @@ function DoorCard(props: {
   address: string | null;
   onBurned: () => void;
   onPoster: (who: Tapped) => void;
+  myChogs: MyChog[];
+  onSwitch: (id: number) => void;
 }) {
   const { place, row, chog } = props;
   if (place.kind === 'training')
@@ -1757,9 +1782,96 @@ function DoorCard(props: {
       <>
         <h2 className="font-display text-[21px] leading-none text-[#ff5a4f]">Jail</h2>
         <p className="mt-1.5 text-[14px] text-white/70">
-          Chogs caught robbing sit here for 30 minutes. Sneak in and open a gang-mate’s cell to get them out
-          early.
+          Chogs caught robbing sit here for 30 minutes. A free Chog of the same gang can sneak in and open the
+          cell to get them out early (one try a day).
         </p>
+        {chog && props.jailedNow && (
+          <div className="mt-3 rounded-[20px] bg-sys-red/10 p-3.5 ring-1 ring-inset ring-sys-red/25">
+            <p className="text-[15px] font-semibold">
+              {chog.name} is inside: out in {formatLeft((chog.jailedUntil ?? 0) - props.now)}
+            </p>
+            {(() => {
+              const mate = props.myChogs.find(
+                (c) =>
+                  c.id !== chog.id && c.gang === chog.gang && !(c.jailedUntil && c.jailedUntil > props.now),
+              );
+              return mate ? (
+                <button
+                  onClick={() => props.onSwitch(mate.id)}
+                  className="btn btn-sm press btn-glass mt-2.5 w-full"
+                >
+                  Switch to {mate.name} and break it out
+                </button>
+              ) : (
+                <p className="mt-1 text-[13px] leading-snug text-label-2">
+                  A free gang-mate can break it out from here, or bail it out with $CHOG now.
+                </p>
+              );
+            })()}
+            {props.burns && (
+              <BurnButton
+                kind="bail"
+                chogId={chog.id}
+                address={props.address}
+                price={props.burns.prices.bail}
+                label="Bail out now"
+                className="mt-2.5"
+                onDone={props.onBurned}
+              />
+            )}
+          </div>
+        )}
+        {chog?.gang && !props.jailedNow && (
+          <p className="mt-3 text-[14px] leading-snug text-label-2">
+            {inside.some((j) => j.gang === chog.gang && j.id !== chog.id)
+              ? 'Tap Break out next to a gang-mate to sneak in.'
+              : `Nobody from ${GANGS[chog.gang].name} is in here, so there's nobody for ${chog.name} to break out.`}
+          </p>
+        )}
+        {/* Your own Chogs inside that this one can't free (another gang): say why, and offer bail. */}
+        {!props.jailedNow &&
+          inside
+            .filter((j) => props.myChogs.some((c) => c.id === j.id) && j.gang !== chog?.gang)
+            .slice(0, 2)
+            .map((j) => (
+              <div
+                key={j.id}
+                className="mt-3 rounded-[20px] bg-white/[0.05] p-3.5 ring-1 ring-inset ring-white/[0.06]"
+              >
+                <p className="text-[14px] leading-snug">
+                  Your <strong>{j.name}</strong> is in here. Only a {GANGS[j.gang].name} Chog can break it out
+                  {props.myChogs.some((c) => c.id !== j.id && c.gang === j.gang)
+                    ? ': switch to one of yours.'
+                    : ', or bail it out now.'}
+                </p>
+                {props.myChogs
+                  .filter(
+                    (c) =>
+                      c.id !== j.id && c.gang === j.gang && !(c.jailedUntil && c.jailedUntil > props.now),
+                  )
+                  .slice(0, 1)
+                  .map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => props.onSwitch(c.id)}
+                      className="btn btn-sm press btn-glass mt-2.5 w-full"
+                    >
+                      Switch to {c.name}
+                    </button>
+                  ))}
+                {props.burns && (
+                  <BurnButton
+                    kind="bail"
+                    chogId={j.id}
+                    address={props.address}
+                    price={props.burns.prices.bail}
+                    label={`Bail out ${j.name}`}
+                    className="mt-2.5"
+                    onDone={props.onBurned}
+                  />
+                )}
+              </div>
+            ))}
         {inside.length === 0 ? (
           <p className="mt-3 text-[15px]">Nobody inside right now.</p>
         ) : (
@@ -2174,14 +2286,16 @@ function RunBar({ line, since, until }: { line: string; since: number; until: nu
   const k = left / total;
   const low = left <= 10;
   return (
-    <div className="glass-strong pointer-events-none w-full max-w-[460px] animate-[banner-drop_480ms_cubic-bezier(.2,1.2,.3,1)] rounded-[26px] py-3 pl-4 pr-3 text-white ring-1 ring-sys-gold/35">
+    <div className="glass-strong pointer-events-none w-full max-w-[460px] animate-[banner-drop_480ms_cubic-bezier(.2,1.2,.3,1)] rounded-[26px] py-3 pl-4 pr-3 text-white ring-1 ring-sys-gold/35 max-sm:rounded-[20px] max-sm:py-2 max-sm:pl-3 max-sm:pr-2">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-display text-[22px] leading-tight text-sys-gold">Run it home!</p>
-          <p className="text-[14px] leading-snug text-label-2">{line}</p>
+          <p className="font-display text-[22px] leading-tight text-sys-gold max-sm:text-[17px]">
+            Run it home!
+          </p>
+          <p className="text-[14px] leading-snug text-label-2 max-sm:truncate max-sm:text-[12px]">{line}</p>
           <PoliceIn since={since} />
         </div>
-        <span className="relative grid h-[58px] w-[58px] shrink-0 place-items-center">
+        <span className="relative grid h-[58px] w-[58px] shrink-0 place-items-center max-sm:h-[46px] max-sm:w-[46px]">
           <svg className="absolute inset-0 -rotate-90" viewBox="0 0 100 100">
             <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="8" />
             <circle

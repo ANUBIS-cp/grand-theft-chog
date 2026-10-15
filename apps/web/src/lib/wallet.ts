@@ -85,8 +85,13 @@ export const onPhone = () =>
 
 export class LoginError extends Error {}
 
-/** Connect, sign one message (no gas, no tokens move), and start a session. */
-export async function logIn(wallet: WalletOption): Promise<string> {
+export interface LoginPrep {
+  address: string;
+  message: string;
+}
+
+/** Step 1: connect and build the login message (asks the server for a fresh nonce). */
+export async function prepareLogin(wallet: WalletOption): Promise<LoginPrep> {
   let accounts: string[];
   try {
     accounts = (await wallet.provider.request({ method: 'eth_requestAccounts' })) as string[];
@@ -107,11 +112,19 @@ export async function logIn(wallet: WalletOption): Promise<string> {
     version: '1',
     statement: 'Log in to Chog World. This costs nothing and does not move any tokens.',
   });
+  return { address, message };
+}
+
+/**
+ * Step 2: sign the message (no gas, no tokens move) and start a session. On a phone this is its own tap, so
+ * the request goes out (and the wallet app can open) straight from the tap.
+ */
+export async function finishLogin(wallet: WalletOption, prep: LoginPrep): Promise<string> {
   let signature: string;
   try {
     signature = (await wallet.provider.request({
       method: 'personal_sign',
-      params: [toHex(message), address],
+      params: [toHex(prep.message), prep.address],
     })) as string;
   } catch {
     throw new LoginError('You did not sign the login message, so you are not logged in.');
@@ -119,10 +132,43 @@ export async function logIn(wallet: WalletOption): Promise<string> {
   const res = await fetch('/api/auth/verify', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ message, signature }),
+    body: JSON.stringify({ message: prep.message, signature }),
   });
   if (!res.ok) throw new LoginError('The login signature was not accepted. Try again.');
-  return address.toLowerCase();
+  return prep.address.toLowerCase();
+}
+
+/** Connect, sign one message (no gas, no tokens move), and start a session. */
+export async function logIn(wallet: WalletOption): Promise<string> {
+  return finishLogin(wallet, await prepareLogin(wallet));
+}
+
+/** A phone wallet already connected through WalletConnect (it survives the page reloading). */
+export function hasWalletConnectSession(): boolean {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) ?? '';
+      if (
+        k.startsWith('wc@2:client') &&
+        k.endsWith('//session') &&
+        (localStorage.getItem(k) ?? '[]') !== '[]'
+      )
+        return true;
+    }
+  } catch {
+    /* storage blocked */
+  }
+  return false;
+}
+
+/** A link that opens the connected phone wallet app, to go and approve a request. */
+export async function walletAppLink(): Promise<string | null> {
+  if (!wc) return null;
+  const p = (await wc) as unknown as {
+    session?: { peer?: { metadata?: { redirect?: { native?: string; universal?: string } } } };
+  };
+  const r = p.session?.peer?.metadata?.redirect;
+  return r?.universal || r?.native || null;
 }
 
 export async function logOut(): Promise<void> {

@@ -1731,15 +1731,30 @@ export class CityRenderer {
     let y = gy - t * 1.6 + bob;
     let a = Math.PI / 2;
     if (!onScreen) {
+      // Off screen: the arrow circles your own Chog and points at the door, with how far it is, like a
+      // sat-nav. (At the screen's edge it hid under the map and buttons on a phone.)
       const fx = this.sx(goal.from.x);
-      const fy = this.sy(goal.from.y);
+      const fy = this.sy(goal.from.y) - t * 0.5;
       a = Math.atan2(gy - fy, gx - fx);
-      // Where the line to the door crosses the screen's edge, pulled in a little.
-      const kx = Math.cos(a) > 0 ? (view.w - m - fx) / Math.cos(a) : (m - fx) / Math.cos(a);
-      const ky = Math.sin(a) > 0 ? (view.h - m - fy) / Math.sin(a) : (m - fy) / Math.sin(a);
-      const k = Math.min(Math.abs(kx), Math.abs(ky));
-      x = fx + Math.cos(a) * k;
-      y = fy + Math.sin(a) * k;
+      const R = t * 1.55 + Math.sin(now / 150) * t * 0.08;
+      x = fx + Math.cos(a) * R;
+      y = fy + Math.sin(a) * R;
+      const dist = Math.round(Math.hypot(goal.x - goal.from.x, goal.y - goal.from.y));
+      const label = `${dist} m`;
+      g.save();
+      g.font = `800 ${Math.round(t * 0.3)}px ${this.font}`;
+      const lw = g.measureText(label).width + t * 0.4;
+      const lx = fx + Math.cos(a) * (R + t * 0.85);
+      const ly = fy + Math.sin(a) * (R + t * 0.85);
+      g.fillStyle = 'rgba(20,18,32,0.85)';
+      g.beginPath();
+      g.roundRect(lx - lw / 2, ly - t * 0.24, lw, t * 0.48, t * 0.24);
+      g.fill();
+      g.fillStyle = '#ffd60a';
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(label, lx, ly + 1);
+      g.restore();
     } else {
       g.strokeStyle = `rgba(255,210,63,${0.6 + 0.4 * Math.sin(now / 120)})`;
       g.lineWidth = 4;

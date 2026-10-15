@@ -125,6 +125,18 @@ const color = (gang: GangId | null) => (gang ? GANG_COLOR[gang] : GUEST);
 export const CityView = forwardRef<CityHandle, Props>(function CityView(props, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bigRef = useRef<HTMLCanvasElement>(null);
+  const bigWrap = useRef<HTMLDivElement>(null);
+  // Opening the map on a phone (where it's wider than the screen): start scrolled to where you are.
+  useEffect(() => {
+    if (!props.mapOpen) return;
+    requestAnimationFrame(() => {
+      const w = bigWrap.current;
+      const s = state.current;
+      if (!w || w.scrollWidth <= w.clientWidth) return;
+      w.scrollLeft = (s.x / CITY.w) * w.scrollWidth - w.clientWidth / 2;
+      w.scrollTop = (s.y / CITY.h) * w.scrollHeight - w.clientHeight / 2;
+    });
+  }, [props.mapOpen]);
   const live = useRef(props);
   live.current = props;
   const state = useRef({
@@ -610,7 +622,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
   }
 
   /** A tap on the big map walks you there (to the door, for a building). */
-  function onMap(e: React.PointerEvent<HTMLCanvasElement>) {
+  function onMap(e: React.MouseEvent<HTMLCanvasElement>) {
     if (inJail()) return;
     const box = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - box.left) / box.width) * CITY.w;
@@ -671,12 +683,12 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
                 <X size={14} weight="bold" />
               </button>
             </div>
-            <div className="min-h-0 overflow-auto px-3 pb-3">
+            <div ref={bigWrap} className="min-h-0 overflow-auto overscroll-contain px-3 pb-3">
               <canvas
                 ref={bigRef}
-                onPointerDown={onMap}
+                onClick={onMap}
                 aria-label="Map of the city. Tap a spot to walk there."
-                className="block w-full cursor-pointer rounded-[20px]"
+                className="block w-full cursor-pointer rounded-[20px] max-sm:w-[780px] max-sm:max-w-none"
                 style={{ aspectRatio: `${CITY.w} / ${CITY.h}` }}
               />
             </div>
@@ -926,7 +938,8 @@ function drawBig(
   for (const p of CITY.places) {
     const look = places[p.id];
     const name = p.kind === 'jail' ? 'Jail' : p.kind === 'training' ? 'Practice vault' : (look?.name ?? '');
-    const size = Math.round(Math.max(10, k * 1.05));
+    // At least 12 CSS px whatever the screen, so names read on a phone too.
+    const size = Math.round(Math.max(12 * dpr, k * 1.05));
     g.font = `700 ${size}px ${font}`;
     const cx = (p.x + p.w / 2) * k;
     const ly = (p.y + p.h + 2.2) * k;

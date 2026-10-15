@@ -5,7 +5,12 @@ import './globals.css';
 const koulen = Koulen({ weight: '400', subsets: ['latin'], variable: '--font-koulen', display: 'swap' });
 // On Apple devices the interface uses San Francisco (system font); Inter and Nunito stand in elsewhere.
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
-const nunito = Nunito({ subsets: ['latin'], weight: ['700', '800', '900'], variable: '--font-nunito', display: 'swap' });
+const nunito = Nunito({
+  subsets: ['latin'],
+  weight: ['700', '800', '900'],
+  variable: '--font-nunito',
+  display: 'swap',
+});
 const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains', display: 'swap' });
 
 export const metadata: Metadata = {
@@ -23,7 +28,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${koulen.variable} ${inter.variable} ${nunito.variable} ${jetbrains.variable}`}>
+    <html
+      lang="en"
+      className={`${koulen.variable} ${inter.variable} ${nunito.variable} ${jetbrains.variable}`}
+    >
       <body>{children}</body>
     </html>
   );

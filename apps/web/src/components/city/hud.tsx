@@ -36,7 +36,7 @@ export function RoleCard(props: {
   }, []);
   const left = props.duties.filter((d) => !d.done).length;
   return (
-    <div className="glass pointer-events-auto w-[min(312px,calc(100vw-150px))] animate-[glass-in_420ms_cubic-bezier(.2,.9,.3,1)] overflow-hidden rounded-[24px] text-white">
+    <div className="glass pointer-events-auto w-[min(312px,calc(100vw-140px))] animate-[glass-in_420ms_cubic-bezier(.2,.9,.3,1)] overflow-hidden rounded-[24px] text-white">
       <div className="flex items-center gap-3 p-2.5">
         <button
           onClick={props.onPortrait}
@@ -63,7 +63,9 @@ export function RoleCard(props: {
               <span className="truncate">{props.gang}</span>
             </span>
           )}
-          <span className="truncate font-display text-[19px] leading-tight">{props.name}</span>
+          <span className="truncate font-display text-[19px] leading-tight max-sm:text-[16px]">
+            {props.name}
+          </span>
           {props.vault && (
             <span className="mt-0.5 truncate text-[13px] font-medium tabular-nums text-sys-gold">
               {props.vault}
