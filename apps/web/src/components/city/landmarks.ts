@@ -38,6 +38,10 @@ export const FACADE: Record<GangId, Facade> = {
   'visor-gang': { wall: '#1b1830', pattern: 'panel', alt: '#ff4fd8', roof: '#120f22' },
   skulls: { wall: '#2e2a30', pattern: 'stone', alt: '#d8d2c0', roof: '#18161a' },
   radioactive: { wall: '#4d5246', pattern: 'panel', alt: '#9dff3b', roof: '#23261f' },
+  caps: { wall: '#24324f', pattern: 'brick', alt: '#5b8cff', roof: '#151d30' },
+  durags: { wall: '#4a3324', pattern: 'wood', alt: '#e0a96d', roof: '#24180f' },
+  naked: { wall: '#7a5450', pattern: 'tile', alt: '#ffd1c7', roof: '#3a2624' },
+  legends: { wall: '#2a1d55', pattern: 'stone', alt: '#ffd23f', roof: '#170f33' },
 };
 
 type G = CanvasRenderingContext2D;

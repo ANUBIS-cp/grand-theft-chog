@@ -75,7 +75,7 @@ describe('skill and gang tables', () => {
   it('give every Chog a gang it can join', () => {
     for (const c of CHOGS) {
       const o = gangOptions(c);
-      expect(o.anyGang || o.born.length > 0).toBe(true);
+      expect(o.born.length > 0).toBe(true);
     }
   });
 
@@ -89,7 +89,13 @@ describe('skill and gang tables', () => {
     expect(gangCount('lazoor')).toBe(278);
     expect(gangCount('gangstas')).toBe(115);
     expect(gangCount('robbers')).toBe(44);
-    expect(count((c) => !isOneOfOne(c) && gangOptions(c).born.length === 0)).toBe(456);
+    // Everyone belongs somewhere they visibly fit: no gang trait means the Naked Gang, a 1:1 is a Legend.
+    expect(count((c) => gangOptions(c).born.length === 0)).toBe(0);
+    expect(gangCount('caps')).toBe(1043);
+    expect(gangCount('durags')).toBe(116);
+    expect(gangCount('naked')).toBe(137);
+    expect(gangCount('legends')).toBe(10);
+    expect(count((c) => isOneOfOne(c) && gangOptions(c).born.join() !== 'legends')).toBe(0);
   });
 
   it('put every Chog in a home district', () => {

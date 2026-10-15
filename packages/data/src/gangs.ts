@@ -1,4 +1,5 @@
-// Gangs a Chog can join, by trait. Names are drafts: the community renames them while we build.
+// Gangs a Chog can join, by what it visibly wears. A Chog that matches two or more gangs picks one; one
+// that matches none is in the Naked Gang; the ten 1:1s are the Legends. Names are the owner's (15 Oct).
 import type { TraitMatch } from './traits.ts';
 
 export const GANG_IDS = [
@@ -18,6 +19,10 @@ export const GANG_IDS = [
   'visor-gang',
   'skulls',
   'radioactive',
+  'caps',
+  'durags',
+  'naked',
+  'legends',
 ] as const;
 export type GangId = (typeof GANG_IDS)[number];
 
@@ -25,6 +30,8 @@ export interface GangDef {
   id: GangId;
   name: string;
   from: TraitMatch[];
+  /** Also every Chog that matches no other gang. */
+  fallback?: true;
 }
 
 export const GANGS: Record<GangId, GangDef> = {
@@ -70,7 +77,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   suits: {
     id: 'suits',
-    name: 'Whales',
+    name: 'Tuxedo Gang',
     from: [
       ['Body', 'Tuxedo'],
       ['Body', 'Red Tuxedo'],
@@ -85,7 +92,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   royals: {
     id: 'royals',
-    name: 'Kings',
+    name: 'Royals',
     from: [
       ['Head', 'Crown'],
       ['Head', 'Silver wreath'],
@@ -97,7 +104,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   wizards: {
     id: 'wizards',
-    name: 'Chart Wizards',
+    name: 'Wizards',
     from: [
       ['Head', 'Wizard Hat'],
       ['Head', 'Wizard Beanie'],
@@ -107,7 +114,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   'squid-game': {
     id: 'squid-game',
-    name: 'Red Light',
+    name: 'Squid Gang',
     from: [
       ['Body', 'Squid Game Guard'],
       ['Body', 'Squid Game'],
@@ -115,7 +122,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   jailbirds: {
     id: 'jailbirds',
-    name: 'Lifers',
+    name: 'Inmates',
     from: [
       ['Body', 'Inmate'],
       ['Body', 'Prisoner'],
@@ -124,7 +131,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   clowns: {
     id: 'clowns',
-    name: 'Clown World',
+    name: 'Clown Gang',
     from: [
       ['Head', 'Clown Nose'],
       ['Head', 'Rainbow Wig'],
@@ -135,7 +142,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   'btc-maxis': {
     id: 'btc-maxis',
-    name: 'Sat Stackers',
+    name: 'BTC Gang',
     from: [
       ['Head', 'BTC Cap'],
       ['Head', 'BTC Beanie'],
@@ -146,7 +153,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   'mon-maxis': {
     id: 'mon-maxis',
-    name: 'Nads',
+    name: 'Mon Gang',
     from: [
       ['Head', 'Mon Cap'],
       ['Head', 'Mon Beanie'],
@@ -160,7 +167,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   crybabies: {
     id: 'crybabies',
-    name: 'Paper Hands',
+    name: 'Rekt Gang',
     from: [
       ['Eyes', 'Round Crying'],
       ['Eyes', 'Closed Eye Crying'],
@@ -170,7 +177,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   'visor-gang': {
     id: 'visor-gang',
-    name: 'MEV Bots',
+    name: 'VR Gang',
     from: [
       ['Eyes', 'Gradient visor'],
       ['Eyes', 'Sunset visor'],
@@ -183,12 +190,71 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   skulls: {
     id: 'skulls',
-    name: 'Rugged',
+    name: 'Skulls',
     from: [['Form', 'Skull']],
   },
   radioactive: {
     id: 'radioactive',
-    name: 'Meltdown',
+    name: 'Radioactive',
     from: [['Base', 'Radioactive']],
+  },
+  caps: {
+    id: 'caps',
+    name: 'Cap Gang',
+    // Any hat on the street: printed caps, beanies, bucket hats, the Russian hat, the Spartan helmet.
+    from: [
+      ['Head', 'Balls Cap'],
+      ['Head', 'Horny Cap'],
+      ['Head', 'Boob Cap'],
+      ['Head', 'BOOB Cap'],
+      ['Head', 'Dollar Cap'],
+      ['Head', 'Cloud Cap'],
+      ['Head', 'TISM Cap'],
+      ['Head', 'Thunder Cap'],
+      ['Head', 'Star Cap'],
+      ['Head', 'Choggie Cap'],
+      ['Head', 'Chog Cap'],
+      ['Head', 'Red Peace Cap'],
+      ['Head', 'Peace Cap'],
+      ['Head', 'Peace hat'],
+      ['Head', 'JEET Cap'],
+      ['Head', 'Jeet Cap'],
+      ['Head', 'RETARD Cap'],
+      ['Head', 'WAGMI Cap'],
+      ['Head', 'MMGA Cap'],
+      ['Head', 'MEGA Chog'],
+      ['Head', 'ETH Cap'],
+      ['Head', 'NEET'],
+      ['Head', 'Choggie Beanie'],
+      ['Head', 'RH Beanie'],
+      ['Head', '8 Ball Beanie'],
+      ['Head', 'Plumber'],
+      ['Head', 'Blue Bucket Cap'],
+      ['Head', 'Orange Bucket Cap'],
+      ['Head', 'Gray Bucket Cap'],
+      ['Head', 'Russian Hat'],
+      ['Head', 'Spartan Helmet'],
+    ],
+  },
+  durags: {
+    id: 'durags',
+    name: 'Durag Gang',
+    from: [
+      ['Head', 'Durag'],
+      ['Head', 'Red Headband'],
+      ['Head', 'Japan Headband'],
+      ['Head', 'Head Wrap'],
+    ],
+  },
+  naked: {
+    id: 'naked',
+    name: 'Naked Gang',
+    from: [['Naked', 'Yes']],
+    fallback: true,
+  },
+  legends: {
+    id: 'legends',
+    name: 'Legends',
+    from: [['Base', '1:1']],
   },
 };

@@ -137,7 +137,11 @@ export async function guardsFor(db: Db, gang: GangId, n: number): Promise<number
 
 export async function heistRecord(db: Db, chogId: number) {
   const [r] = await db.select().from(heistChogs).where(eq(heistChogs.id, chogId));
-  return r ?? null;
+  if (!r) return null;
+  // Gangs follow what a Chog visibly wears (15 Oct): one picked under the old rules that it no longer fits
+  // doesn't count, and its owner picks again.
+  const chog = getChog(chogId);
+  return r.gang && chog && !canJoinGang(chog, r.gang) ? { ...r, gang: null } : r;
 }
 
 export async function setGang(db: Db, address: string, chogId: number, gang: GangId): Promise<void> {

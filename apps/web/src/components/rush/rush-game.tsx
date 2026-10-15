@@ -12,6 +12,7 @@ import {
   decodeDefender,
   type DefenderInput,
   type DefenderLog,
+  laserOn,
   rushMap,
   startRush,
   stepRush,
@@ -29,6 +30,7 @@ import { chogImage } from '@/lib/images';
 import { Fx } from '../heist/fx';
 import { Sound } from '../heist/sound';
 import type { RaidLink, RaidResult } from './raid-link';
+import { powerHint } from './power-fx';
 import { RushRenderer, rushSnapshot, type RushPrev } from './rush-render';
 
 // Cash Rush on screen: the maze, the controls (keys, a drag stick, buttons), the safe dial, and the cards at
@@ -95,8 +97,10 @@ const KEYS: Record<string, Dir> = {
   ArrowLeft: 3,
   KeyA: 3,
 };
-const USE_KEYS = new Set(['Space', 'KeyE', 'Enter']);
-const POWER_KEYS: Record<string, number> = { Digit1: 0, KeyJ: 0, Digit2: 1, KeyK: 1 };
+const USE_KEYS = new Set(['Space', 'KeyF', 'Enter']);
+/** Powers on Q and E, right by the movement keys (and 1, 2). */
+const POWER_KEYS: Record<string, number> = { KeyQ: 0, Digit1: 0, KeyE: 1, Digit2: 1 };
+export const POWER_KEY_LABEL = ['Q', 'E'];
 
 const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 
@@ -121,6 +125,8 @@ interface Hud {
   coins: number;
   combo: boolean;
   flipped: boolean;
+  /** A ready power that would help right now (its slot), or -1. */
+  hint: number;
 }
 
 export function RushGame(props: RushGameProps) {
@@ -358,9 +364,16 @@ export function RushGame(props: RushGameProps) {
               );
           }
       const mine = linkRef.current?.role === 'defend' ? linkRef.current.you : -1;
+      // A ready power that would help right now: its key in a bubble over your head.
+      const hi =
+        mine < 0 && !scriptRef.current && st.started && st.s.phase === 'play'
+          ? powerHint(st.s, map, (i) => laserOn(st.s, i))
+          : -1;
+      const hp = hi >= 0 ? st.s.powers[hi] : undefined;
       st.r?.draw(st.s, st.prev, Math.min(1, acc / (DT * 1000)), st.fx, now, {
         defenders: humans,
         follow: mine >= 0 ? st.s.guards[mine] : undefined,
+        hint: hp && { key: POWER_KEY_LABEL[hi] ?? String(hi + 1), name: RUSH_POWERS[hp.id].name },
       });
       // The dial's needle turns every frame, outside React.
       const safe = st.s.safe;
@@ -418,6 +431,7 @@ export function RushGame(props: RushGameProps) {
         coins: s.coins.filter(Boolean).length,
         combo: st.seenCombo,
         flipped: st.seenFlip,
+        hint: s.phase === 'play' ? powerHint(s, map, (i) => laserOn(s, i)) : -1,
       };
       const key = JSON.stringify(next);
       if (key !== lastKey) {
@@ -527,8 +541,12 @@ export function RushGame(props: RushGameProps) {
             break;
           case 'power':
             sfx?.power();
-            st.fx.ring(me.x, me.y, t * 1.6, '#ff4f9a');
-            st.fx.float(me.x, me.y - t * 0.8, RUSH_POWERS[e.id].name.toUpperCase(), '#ff8fc0');
+            rr.pfx.on(e.id, performance.now(), me, {
+              guard: e.at,
+              from: e.from && { x: rr.X(e.from.x), y: rr.Y(e.from.y) },
+              noise: st.s.noise && at(st.s.noise.x - 0.5, st.s.noise.y - 0.5),
+            });
+            st.fx.float(me.x, me.y - t * 1.2, RUSH_POWERS[e.id].name.toUpperCase(), '#ff8fc0');
             break;
           case 'paid':
             sfx?.cash();
@@ -858,42 +876,40 @@ export function RushGame(props: RushGameProps) {
         )}
       </div>
 
-      {/* Buttons: your powers, and Use (the safe), or Dash for a defender */}
+      {/* Buttons: your powers on Q and E, and Use (the safe) on Space, or Dash for a defender */}
       <div
         className={cn(
-          'flex items-stretch gap-2 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 sm:px-4',
+          'flex items-end justify-between gap-3 px-4 pb-[max(14px,env(safe-area-inset-bottom))] pt-2',
           role === 'watch' && 'hidden',
         )}
       >
-        <div className="grid min-w-0 flex-1 auto-cols-fr grid-flow-col gap-2">
+        <div className="flex min-w-0 flex-1 items-end gap-3">
           {role === 'defend' && (
             <p className="self-center text-[13px] leading-snug text-white/70">
-              Steer with the arrow keys or drag. Touch the robber to catch them. Dash (E) gives a burst of
-              speed.
+              Steer with the arrow keys or drag. Touch the robber to catch them. Space dashes.
             </p>
           )}
           {!viewer &&
             player.powers.map((id, i) => {
               const def = RUSH_POWERS[id];
-              const wait = hud?.wait[i] ?? 0;
-              const active = hud?.active[i] ?? 0;
               if (def.passive)
                 return (
                   <div
                     key={id}
-                    className="flex min-w-0 items-center gap-2 rounded-[12px] border-2 border-white/15 p-1.5 pr-2 text-white/75"
                     title={def.does}
+                    className="flex h-11 items-center gap-2 self-center rounded-full bg-white/[0.07] py-1 pl-1.5 pr-3 text-white/80 ring-1 ring-inset ring-white/10 backdrop-blur-xl"
                   >
-                    <SkillIcon skill={ICON[id]} width={26} height={26} />
-                    <span className="min-w-0">
-                      <span className="block truncate font-display text-[16px] uppercase leading-none">
-                        {def.name}
-                      </span>
-                      <span className="line-clamp-2 text-[11px] leading-[1.2] opacity-80">{def.does}</span>
-                    </span>
+                    <SkillIcon skill={ICON[id]} width={22} height={22} />
+                    <span className="text-[13px] font-semibold">{def.name}</span>
+                    <span className="text-[11px] text-white/45">always on</span>
                   </div>
                 );
+              const wait = hud?.wait[i] ?? 0;
+              const active = hud?.active[i] ?? 0;
               const off = !active && wait > 0;
+              const ready = !off && !active;
+              const hinted = hud?.hint === i && ready;
+              const cool = off ? Math.min(1, wait / Math.max(1, def.cooldown)) : 0;
               return (
                 <button
                   key={id}
@@ -901,37 +917,69 @@ export function RushGame(props: RushGameProps) {
                   onClick={(e) => e.detail === 0 && press(i)}
                   disabled={off || over}
                   title={def.does}
-                  className={cn(
-                    'relative flex min-w-0 items-center gap-2 overflow-hidden rounded-[12px] border-[3px] border-ink p-1.5 pr-2 text-left transition active:translate-y-[2px]',
-                    off ? 'bg-white/10 text-white/50' : 'bg-pink text-ink shadow-[0_4px_0_0_#000]',
-                    active > 0 && 'bg-[#ffd666]',
-                  )}
+                  aria-label={`${def.name} (${POWER_KEY_LABEL[i] ?? i + 1})`}
+                  className="group flex flex-col items-center gap-1.5 [-webkit-tap-highlight-color:transparent]"
                 >
-                  <span className="relative grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border-2 border-ink bg-paper-raised">
-                    <SkillIcon skill={ICON[id]} width={26} height={26} className={cn(off && 'opacity-30')} />
+                  <span
+                    className={cn(
+                      'relative grid h-[68px] w-[68px] place-items-center rounded-full transition-transform duration-200 ease-[cubic-bezier(.2,.9,.3,1.4)] group-active:scale-90 sm:h-[76px] sm:w-[76px]',
+                      hinted && 'scale-110',
+                    )}
+                    style={{
+                      background: off
+                        ? 'rgba(255,255,255,0.06)'
+                        : active
+                          ? 'linear-gradient(180deg,#ffe58a,#ffb020)'
+                          : 'linear-gradient(180deg,#ff6fa8,#e0337a)',
+                      boxShadow: off
+                        ? 'inset 0 0 0 1px rgba(255,255,255,0.1)'
+                        : `inset 0 1px 0 rgba(255,255,255,0.45), 0 8px 24px ${active ? 'rgba(255,176,32,0.45)' : 'rgba(224,51,122,0.45)'}${hinted ? ', 0 0 0 4px rgba(255,255,255,0.9)' : ''}`,
+                    }}
+                  >
+                    {hinted && (
+                      <span className="absolute inset-[-6px] animate-ping rounded-full ring-2 ring-white/70" />
+                    )}
+                    {/* Cooldown: a dark sweep that unwinds as the power comes back. */}
                     {off && (
-                      <span className="absolute inset-0 grid place-items-center font-display text-[22px] leading-none text-ink">
+                      <span
+                        className="absolute inset-0 rounded-full"
+                        style={{
+                          background: `conic-gradient(rgba(10,8,20,0.75) ${cool * 360}deg, transparent 0)`,
+                        }}
+                      />
+                    )}
+                    {active > 0 && (
+                      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 100 100">
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="47"
+                          fill="none"
+                          stroke="rgba(255,255,255,0.9)"
+                          strokeWidth="5"
+                          strokeLinecap="round"
+                          strokeDasharray={`${active * 295} 295`}
+                        />
+                      </svg>
+                    )}
+                    <SkillIcon
+                      skill={ICON[id]}
+                      width={36}
+                      height={36}
+                      className={cn('relative drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)]', off && 'opacity-40')}
+                    />
+                    {off && (
+                      <span className="absolute inset-0 grid place-items-center text-[24px] font-bold tabular-nums text-white">
                         {wait}
                       </span>
                     )}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-baseline justify-between gap-1">
-                      <span className="truncate pt-0.5 font-display text-[18px] uppercase leading-none">
-                        {def.name}
-                      </span>
-                      <kbd className="hidden font-mono text-[10px] opacity-60 sm:inline">{i + 1}</kbd>
-                    </span>
-                    <span className="mt-0.5 line-clamp-2 text-[11px] leading-[1.2] opacity-80">
-                      {active > 0 ? 'On!' : def.does}
+                    <span className="absolute -right-1 -top-1 grid h-6 w-6 place-items-center rounded-[7px] bg-white text-[12px] font-bold text-[#111018] shadow-[0_2px_6px_rgba(0,0,0,0.35)]">
+                      {POWER_KEY_LABEL[i] ?? i + 1}
                     </span>
                   </span>
-                  {active > 0 && (
-                    <span
-                      className="absolute bottom-0 left-0 h-1.5 bg-ink"
-                      style={{ width: `${active * 100}%` }}
-                    />
-                  )}
+                  <span className={cn('text-[12px] font-semibold', off ? 'text-white/40' : 'text-white/90')}>
+                    {active > 0 ? 'On' : def.name}
+                  </span>
                 </button>
               );
             })}
@@ -940,17 +988,26 @@ export function RushGame(props: RushGameProps) {
           onPointerDown={() => press('use')}
           onClick={(e) => e.detail === 0 && press('use')}
           disabled={over}
-          className={cn(
-            'relative grid h-[64px] w-[64px] shrink-0 place-items-center rounded-full border-[3px] border-ink font-display text-[15px] uppercase leading-none text-ink shadow-[0_5px_0_0_#000] active:translate-y-[3px] active:shadow-[0_2px_0_0_#000] sm:h-[72px] sm:w-[72px]',
-            nearSafe || hud?.dialing
-              ? 'animate-[pulse-ring_1.4s_ease-out_infinite] bg-[#ffd666]'
-              : 'bg-white/90',
-          )}
           aria-label={role === 'defend' ? 'Dash' : hud?.dialing ? 'Crack' : 'Use'}
+          className="group flex flex-col items-center gap-1.5 [-webkit-tap-highlight-color:transparent]"
         >
-          <span className="pt-0.5">{role === 'defend' ? 'Dash' : hud?.dialing ? 'Crack' : 'Use'}</span>
-          <span className="absolute -right-1 -top-1 grid h-6 min-w-6 place-items-center rounded-[6px] border-2 border-ink bg-[#17132b] px-1 font-display text-[11px] leading-none text-white">
-            E
+          <span
+            className={cn(
+              'relative grid h-[78px] w-[78px] place-items-center rounded-full text-[15px] font-bold text-[#111018] transition-transform duration-200 ease-[cubic-bezier(.2,.9,.3,1.4)] group-active:scale-90 sm:h-[86px] sm:w-[86px]',
+              (nearSafe || hud?.dialing) && 'animate-[pulse-ring_1.4s_ease-out_infinite]',
+            )}
+            style={{
+              background:
+                nearSafe || hud?.dialing
+                  ? 'linear-gradient(180deg,#ffe58a,#ffc233)'
+                  : 'linear-gradient(180deg,#ffffff,#dcdbe6)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 10px 28px rgba(0,0,0,0.45)',
+            }}
+          >
+            {role === 'defend' ? 'Dash' : hud?.dialing ? 'Crack' : 'Use'}
+          </span>
+          <span className="rounded-[6px] bg-white/10 px-1.5 py-0.5 text-[11px] font-semibold text-white/70">
+            Space
           </span>
         </button>
       </div>

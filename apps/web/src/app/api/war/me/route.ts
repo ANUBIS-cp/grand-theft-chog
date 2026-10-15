@@ -1,4 +1,4 @@
-import { GANG_IDS, displayName, gangOptions, getChog } from '@chog-city/data';
+import { displayName, gangOptions, getChog } from '@chog-city/data';
 import { chogInfo } from '@chog-city/game';
 import { powersFor } from '@chog-city/game/heist';
 import { chogsFor, hitToday, revengeTargets } from '@chog-city/server';
@@ -35,8 +35,8 @@ export async function GET() {
       return {
         id: m.tokenId,
         name: displayName(chog),
-        gang: r?.gang ?? null,
-        gangChoices: opts.anyGang ? [...GANG_IDS] : opts.born,
+        gang: r?.gang && opts.born.includes(r.gang) ? r.gang : null,
+        gangChoices: opts.born,
         jailedUntil: r?.jailedUntil && r.jailedUntil.getTime() > now ? r.jailedUntil.getTime() : null,
         hitToday: hit.get(m.tokenId) ?? [],
         powers: powersFor(chogInfo(m.tokenId).skills),

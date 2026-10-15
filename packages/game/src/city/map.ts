@@ -66,7 +66,7 @@ export const PROP_RADIUS: Record<Prop['kind'], number> = {
 };
 
 export const COLS = 5;
-export const ROWS = 4;
+export const ROWS = 5;
 /** A block with its ring of pavement. */
 export const BW = 12;
 export const BH = 10;
@@ -108,7 +108,8 @@ function build(): City {
       for (const dx of [-1, ROAD]) fill(ix + dx, iy, 1, ROAD, Ground.Cross);
     }
 
-  // Which block holds what: the middle column is shared, the other sixteen are the gangs'.
+  // Which block holds what: the middle column is shared (jail, plaza, park, practice vault), the other twenty
+  // are the gangs'.
   const gangs = [...GANG_IDS];
   for (let r = 0; r < ROWS; r++)
     for (let c = 0; c < COLS; c++) {
@@ -128,7 +129,7 @@ function build(): City {
           places.push(p);
           fill(p.x, p.y, p.w, p.h, Ground.Block);
           fill(o.x + 1, o.y + 6, 10, 3, Ground.Pen);
-        } else if (r === 3) {
+        } else if (r === ROWS - 1) {
           const p: Place = {
             id: 'training',
             kind: 'training',
@@ -141,6 +142,18 @@ function build(): City {
           places.push(p);
           fill(p.x, p.y, p.w, p.h, Ground.Block);
           fill(o.x + 1, o.y + 6, 10, 3, Ground.Yard);
+        } else if (r === 3) {
+          // A park: grass, trees and a couple of benches.
+          fill(o.x + 1, o.y + 1, BW - 2, BH - 2, Ground.Grass);
+          for (const [dx, dy] of [
+            [2.5, 2.5],
+            [9.5, 2.5],
+            [2.5, 7.5],
+            [9.5, 7.5],
+            [6, 4.2],
+          ] as const)
+            props.push({ kind: 'tree', x: o.x + dx, y: o.y + dy });
+          props.push({ kind: 'bench', x: o.x + 4, y: o.y + 6.5 }, { kind: 'bench', x: o.x + 8, y: o.y + 6.5 });
         } else {
           // Two plaza blocks with the road between them paved over.
           fill(o.x + 1, o.y + 1, BW - 2, BH - 2, Ground.Plaza);

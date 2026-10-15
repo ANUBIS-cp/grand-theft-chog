@@ -147,7 +147,14 @@ export type RushEvent =
   | { t: 'safe'; value: number }
   | { t: 'laser' }
   | { t: 'hurry' }
-  | { t: 'power'; id: PowerId }
+  | {
+      t: 'power';
+      id: PowerId;
+      /** Laser eyes: the guard it hit. */
+      at?: number;
+      /** Blink: where you jumped from. */
+      from?: { x: number; y: number };
+    }
   | { t: 'paid'; lost: number }
   | { t: 'tag'; i: number; lost: number; hearts: number }
   | { t: 'escaped'; score: number }
@@ -702,6 +709,8 @@ function usePower(s: RushState, m: RushMap, slot: number, ev: RushEvent[]) {
   const def = RUSH_POWERS[pw.id];
   if (def.passive || pw.used || s.clock < pw.ready) return;
   const me = s.me;
+  const from = { x: me.x, y: me.y };
+  let at: number | undefined;
   switch (pw.id) {
     case 'hide':
     case 'sprint':
@@ -724,6 +733,7 @@ function usePower(s: RushState, m: RushMap, slot: number, ev: RushEvent[]) {
       const g = s.guards[best]!;
       g.mode = 'out';
       g.out = def.lasts;
+      at = best;
       ev.push({ t: 'knock', i: best, bonus: 0 });
       break;
     }
@@ -763,5 +773,10 @@ function usePower(s: RushState, m: RushMap, slot: number, ev: RushEvent[]) {
   }
   pw.used = !!def.once;
   pw.ready = s.clock + def.cooldown;
-  ev.push({ t: 'power', id: pw.id });
+  ev.push({
+    t: 'power',
+    id: pw.id,
+    ...(at !== undefined ? { at } : {}),
+    ...(pw.id === 'blink' ? { from } : {}),
+  });
 }

@@ -1,5 +1,6 @@
 import { Tile, type Level } from '@chog-city/game/heist';
 import { Cell, hunting, laserOn, type RushMap, type RushState } from '@chog-city/game/rush';
+import { PowerFx } from './power-fx';
 import { drawPiece } from '../chog/piece';
 import type { Fx } from '../heist/fx';
 import { VaultRenderer } from '../heist/render';
@@ -8,6 +9,8 @@ import { VaultRenderer } from '../heist/render';
 // renderer; on top go the coins and cash, the loudspeakers, the laser gates, the exit, and everyone as game
 // pieces: you, and the guards with their moods (hunting, patrolling, running scared, knocked out).
 
+/** The interface font: San Francisco on Apple devices, then Inter. */
+export const UI_FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif';
 const INK = '#0d0b1a';
 
 /** The maze as a heist level, so the heist renderer can draw its floors and walls. */
@@ -54,6 +57,8 @@ export const rushSnapshot = (s: RushState): RushPrev => ({
 
 export class RushRenderer {
   readonly v: VaultRenderer;
+  /** Each power's own look: beams, the box, after-images, streaks. */
+  readonly pfx = new PowerFx();
   private g: CanvasRenderingContext2D;
   private cam = { x: 0, y: 0, ready: false };
   private view = { w: 0, h: 0 };
@@ -153,7 +158,11 @@ export class RushRenderer {
     alpha: number,
     fx: Fx,
     now: number,
-    opts: { defenders?: Set<number>; follow?: { x: number; y: number } } = {},
+    opts: {
+      defenders?: Set<number>;
+      follow?: { x: number; y: number };
+      hint?: { key: string; name: string };
+    } = {},
   ) {
     const { g, map } = this;
     const v = this.v;
@@ -316,9 +325,34 @@ export class RushRenderer {
     });
     people.push({ y: my, draw: () => this.player(mx, my, s, now) });
     people.sort((a, b) => a.y - b.y);
+    const ghost = this.v.pieceOf('player');
+    this.pfx.under(g, t, s, { x: mx, y: my }, now, (x, y, alpha) => {
+      if (ghost) drawPiece(g, ghost, x, y + t * 0.3, { moving: false, seed: 0, face: s.me.face, alpha }, now);
+    });
     for (const p of people) p.draw();
 
     fx.draw(g, t, v.font);
+    {
+      // Your eyes, for laser beams: a little above the middle of your card.
+      const feet = my + t * 0.3;
+      const top = ghost?.top ?? t;
+      const ex = (ghost?.w ?? t) * 0.15;
+      const ey = feet - top * 0.55;
+      this.pfx.over(
+        g,
+        t,
+        { x: mx, y: my },
+        { l: { x: mx - ex, y: ey }, r: { x: mx + ex, y: ey } },
+        (i) => {
+          const gd = s.guards[i];
+          const p = prev.guards[i] ?? gd;
+          return gd && p ? { x: this.X(lerp(p.x, gd.x)), y: this.Y(lerp(p.y, gd.y)) } : null;
+        },
+        now,
+        { x: this.cam.x, y: this.cam.y, w: SW, h: SH },
+      );
+      if (opts.hint) this.hintBubble(mx, feet - top - t * 0.45, opts.hint, now);
+    }
 
     // Screen-space: a soft dark edge, red when the alarm rings, blue in a flip.
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -377,30 +411,66 @@ export class RushRenderer {
     g.restore();
   }
 
+  /** A key cap and the power's name in a glass bubble over your head, bobbing: "Q  Laser eyes". */
+  private hintBubble(x: number, y: number, h: { key: string; name: string }, now: number) {
+    const { g } = this;
+    const t = this.v.t;
+    const fs = Math.round(t * 0.3);
+    g.save();
+    g.font = `600 ${fs}px ${UI_FONT}`;
+    const nw = g.measureText(h.name).width;
+    const kw = fs * 1.5;
+    const pad = fs * 0.45;
+    const w = kw + pad * 3 + nw;
+    const bh = fs * 2;
+    const by = y - bh / 2 + Math.sin(now / 220) * t * 0.05;
+    const pop = 1 + Math.max(0, Math.sin(now / 160)) * 0.04;
+    g.translate(x, by + bh / 2);
+    g.scale(pop, pop);
+    g.translate(-x, -(by + bh / 2));
+    g.shadowColor = 'rgba(0,0,0,0.45)';
+    g.shadowBlur = 12;
+    g.shadowOffsetY = 4;
+    g.fillStyle = 'rgba(22,20,38,0.82)';
+    g.beginPath();
+    g.roundRect(x - w / 2, by, w, bh, bh / 2);
+    g.fill();
+    g.shadowColor = 'transparent';
+    g.strokeStyle = 'rgba(255,255,255,0.16)';
+    g.lineWidth = 1;
+    g.stroke();
+    // The key cap.
+    const kx = x - w / 2 + pad;
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.roundRect(kx, by + (bh - kw) / 2, kw, kw, fs * 0.35);
+    g.fill();
+    g.fillStyle = '#111018';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.font = `700 ${fs}px ${UI_FONT}`;
+    g.fillText(h.key, kx + kw / 2, by + bh / 2 + 1);
+    g.fillStyle = '#ffffff';
+    g.textAlign = 'left';
+    g.font = `600 ${fs}px ${UI_FONT}`;
+    g.fillText(h.name, kx + kw + pad, by + bh / 2 + 1);
+    // A little tail pointing down at you.
+    g.fillStyle = 'rgba(22,20,38,0.82)';
+    g.beginPath();
+    g.moveTo(x - fs * 0.35, by + bh - 1);
+    g.lineTo(x, by + bh + fs * 0.4);
+    g.lineTo(x + fs * 0.35, by + bh - 1);
+    g.fill();
+    g.restore();
+  }
+
   private player(x: number, y: number, s: RushState, now: number) {
     const { g } = this;
     const t = this.v.t;
     const piece = this.v.pieceOf('player');
     const flashing = s.safeTime > 0 && Math.floor(now / 90) % 2 === 0;
-    if (s.fx.sprint > 0 || s.fx.tackle > 0) {
-      g.save();
-      g.globalAlpha = 0.25;
-      g.fillStyle = s.fx.tackle > 0 ? '#ff9f1c' : '#ff4f9a';
-      g.beginPath();
-      g.arc(x, y, t * 0.6, 0, Math.PI * 2);
-      g.fill();
-      g.restore();
-    }
-    if (s.fx.magnet > 0) {
-      g.save();
-      g.strokeStyle = 'rgba(255, 214, 102, 0.5)';
-      g.lineWidth = 2;
-      const k = (now / 400) % 1;
-      g.beginPath();
-      g.arc(x, y, t * (2.5 - k * 2), 0, Math.PI * 2);
-      g.stroke();
-      g.restore();
-    }
+    // Hiding: you're a cardboard box.
+    if (this.pfx.box(g, t, x, y, s.me.dir !== -1, s.fx.hide > 0, now)) return;
     if (piece)
       drawPiece(
         g,
@@ -411,7 +481,7 @@ export class RushRenderer {
           moving: s.me.dir !== -1,
           seed: 0,
           face: s.me.face,
-          alpha: s.fx.hide > 0 ? 0.4 : flashing ? 0.35 : 1,
+          alpha: flashing ? 0.35 : 1,
         },
         now,
       );

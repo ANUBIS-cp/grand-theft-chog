@@ -167,7 +167,7 @@ describe('the gang war', () => {
 
   it('lists every gang vault, richest first, with guards from the gang', async () => {
     const board = await warBoard(db);
-    expect(board).toHaveLength(16);
+    expect(board).toHaveLength(20);
     expect(board.find((r) => r.gang === 'mcga')!.guards[0]).toBe(mcgaChog);
   });
 

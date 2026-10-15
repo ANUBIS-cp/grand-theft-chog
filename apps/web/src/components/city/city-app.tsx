@@ -402,8 +402,9 @@ export function CityApp() {
       lines: (board?.board ?? [])
         .slice(0, 3)
         .map((v) => ({ name: GANGS[v.gang].name, cash: v.cash, color: GANG_COLOR[v.gang].bg })),
+      burned: city?.burns.burned ?? 0,
     }),
-    [board],
+    [board, city?.burns.burned],
   );
   const meLook = useMemo(
     () =>

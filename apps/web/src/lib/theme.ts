@@ -12,7 +12,7 @@ export const DISTRICT_COLOR: Record<DistrictId, { bg: string; fg: string }> = {
   'radioactive-zone': { bg: '#292344', fg: '#c6d986' },
 };
 
-/** One colour per gang, picked from its trait (Bitcoin orange for BTC Maxis, Monad purple for Mon Maxis...). */
+/** One colour per gang, picked from its trait (Bitcoin orange for BTC Gang, Monad purple for Mon Gang...). */
 export const GANG_COLOR: Record<GangId, { bg: string; fg: string }> = {
   mcga: { bg: '#d7263d', fg: '#ffffff' },
   lazoor: { bg: '#c026d3', fg: '#ffffff' },
@@ -30,4 +30,8 @@ export const GANG_COLOR: Record<GangId, { bg: string; fg: string }> = {
   'visor-gang': { bg: '#14b8a6', fg: '#111111' },
   skulls: { bg: '#f5f0e1', fg: '#111111' },
   radioactive: { bg: '#9be33b', fg: '#111111' },
+  caps: { bg: '#2563eb', fg: '#ffffff' },
+  durags: { bg: '#8b5a2b', fg: '#ffffff' },
+  naked: { bg: '#ffb5a7', fg: '#111111' },
+  legends: { bg: '#3a0ca3', fg: '#ffd23f' },
 };

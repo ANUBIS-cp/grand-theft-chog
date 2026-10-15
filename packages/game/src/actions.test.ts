@@ -11,7 +11,6 @@ import {
   ROB,
 } from './constants.ts';
 import { roll, rollLabel } from './dice.ts';
-import { infoOf } from './info.ts';
 import { jobOdds, robOdds } from './odds.ts';
 import { addWanted, newChogState, sendToJail } from './state.ts';
 import { T0, chogWith, chogWithout, ctxAt, player, seedWhere } from './test-helpers.ts';
@@ -281,9 +280,9 @@ describe('gangs', () => {
     }
   });
 
-  it('lets free agents join any gang', () => {
-    const free = CHOGS.find((x) => gangOptions(x).born.length === 0)!;
-    expect(chooseGang(ctxAt(), free, newChogState(free.id, T0), 'robbers').ok).toBe(true);
-    expect(infoOf(free).skills.length).toBeGreaterThan(0);
+  it('puts a Chog with no gang trait in the Naked Gang, and nowhere else', () => {
+    const free = CHOGS.find((x) => gangOptions(x).born.join() === 'naked')!;
+    expect(chooseGang(ctxAt(), free, newChogState(free.id, T0), 'naked').ok).toBe(true);
+    expect(chooseGang(ctxAt(), free, newChogState(free.id, T0), 'robbers').ok).toBe(false);
   });
 });

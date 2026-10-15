@@ -30,6 +30,10 @@ const KIND: Record<GangId, LockKind> = {
   'btc-maxis': 'dial',
   wizards: 'dial',
   crybabies: 'dial',
+  caps: 'tumbler',
+  durags: 'wires',
+  naked: 'reels',
+  legends: 'dial',
 };
 export const lockFor = (gang: GangId): LockKind => KIND[gang] ?? 'tumbler';
 

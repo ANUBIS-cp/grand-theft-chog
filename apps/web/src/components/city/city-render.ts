@@ -55,6 +55,8 @@ export interface PlaceLook {
 export interface Board {
   /** The big screen in the plaza. */
   lines: { name: string; cash: number; color: string }[];
+  /** All the $CHOG the city has burned (bail, posters, banners). */
+  burned?: number;
 }
 
 type Img = HTMLImageElement;
@@ -1190,7 +1192,7 @@ export class CityRenderer {
   private drawScreen(p: Prop, now: number) {
     const { g, t } = this;
     const w = t * 6.4;
-    const h = t * 2.6;
+    const h = t * 3.2;
     const x = this.sx(p.x) - w / 2;
     const y = this.sy(p.y) - h + t * 0.4;
     // Legs.
@@ -1224,6 +1226,15 @@ export class CityRenderer {
       g.fillStyle = '#8be9a8';
       g.fillText(money(l.cash), x + w - t * 0.4, ly);
     });
+    // The city's $CHOG burned, on a strip along the bottom.
+    const by = y + h - t * 0.62;
+    g.fillStyle = '#2a1206';
+    g.fillRect(x + t * 0.15, by - t * 0.24, w - t * 0.3, t * 0.48);
+    g.font = `${Math.round(t * 0.3)}px ${this.font}`;
+    g.textAlign = 'center';
+    const flicker = 0.85 + 0.15 * Math.sin(now / 90) * Math.sin(now / 37);
+    g.fillStyle = `rgba(255,122,26,${flicker})`;
+    g.fillText(`${(this.board.burned ?? 0).toLocaleString('en-US')} $CHOG BURNED`, x + w / 2, by + 1);
     // Scan line.
     g.fillStyle = 'rgba(255,255,255,0.04)';
     const scan = ((now / 30) % (h - t * 0.3)) | 0;
