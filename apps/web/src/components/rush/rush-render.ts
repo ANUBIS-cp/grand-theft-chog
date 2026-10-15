@@ -370,6 +370,8 @@ export class RushRenderer {
     gr.addColorStop(1, `rgba(${edge}, ${0.2 + 0.25 * pulse})`);
     g.fillStyle = gr;
     g.fillRect(0, 0, SW, SH);
+    // Guards off screen (a phone shows only part of the vault): their face at the edge, pointing at them.
+    this.guardMarks(s, prev, alpha, SW, SH, now);
     // When the exit is off screen and you're carrying, an arrow at the edge points to it.
     if (s.carried > 0 && s.phase === 'play') this.exitArrow(SW, SH, now);
     if (fx.flash) {
@@ -554,6 +556,58 @@ export class RushRenderer {
       g.fillText('PLAYER', x, top - t * 0.4);
       g.restore();
     }
+  }
+
+  private guardMarks(s: RushState, prev: RushPrev, alpha: number, SW: number, SH: number, now: number) {
+    const { g } = this;
+    const t = this.v.t;
+    const lerp = (a: number, b: number) => (Math.abs(b - a) > 1.5 ? b : a + (b - a) * alpha);
+    const m = 26;
+    s.guards.forEach((gd, i) => {
+      if (gd.mode === 'out') return;
+      const p = prev.guards[i] ?? gd;
+      const gx = this.X(lerp(p.x, gd.x)) - this.cam.x;
+      const gy = this.Y(lerp(p.y, gd.y)) - this.cam.y;
+      if (gx >= -t * 0.2 && gy >= -t * 0.2 && gx <= SW + t * 0.2 && gy <= SH + t * 0.2) return;
+      const x = Math.max(m, Math.min(SW - m, gx));
+      const y = Math.max(m, Math.min(SH - m, gy));
+      // Closer guards are bigger and stronger.
+      const off = Math.hypot(gx - x, gy - y) / t;
+      const near = Math.max(0, Math.min(1, 1 - off / 8));
+      const r = 13 + near * 5;
+      const hunt = gd.mode === 'hunt';
+      const ring = gd.mode === 'panic' ? '#3a86ff' : hunt ? '#ff2d55' : '#ffffff';
+      const ang = Math.atan2(gy - y, gx - x);
+      g.save();
+      g.globalAlpha = 0.55 + near * 0.45;
+      g.translate(x, y);
+      if (hunt) g.scale(1 + 0.08 * Math.sin(now / 110), 1 + 0.08 * Math.sin(now / 110));
+      // The pointer towards the guard.
+      g.save();
+      g.rotate(ang);
+      g.fillStyle = ring;
+      g.beginPath();
+      g.moveTo(r + 8, 0);
+      g.lineTo(r - 2, -7);
+      g.lineTo(r - 2, 7);
+      g.closePath();
+      g.fill();
+      g.restore();
+      g.fillStyle = ring;
+      g.beginPath();
+      g.arc(0, 0, r + 2.5, 0, Math.PI * 2);
+      g.fill();
+      g.save();
+      g.beginPath();
+      g.arc(0, 0, r, 0, Math.PI * 2);
+      g.clip();
+      g.fillStyle = '#1b1830';
+      g.fillRect(-r, -r, r * 2, r * 2);
+      const img = this.v.guardImage(i);
+      if (img) g.drawImage(img, -r, -r, r * 2, r * 2);
+      g.restore();
+      g.restore();
+    });
   }
 
   private exitArrow(SW: number, SH: number, now: number) {

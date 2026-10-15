@@ -221,6 +221,16 @@ export function CityApp() {
     loud: boolean;
   } | null>(null);
   const [practiceRun, setPracticeRun] = useState<{ since: number; until: number; to: string } | null>(null);
+  // Local testing only: show the run bar and banners on demand (the test browser can't play a run quickly).
+  useEffect(() => {
+    if (location.hostname !== 'localhost') return;
+    (window as unknown as { __chogDemo: object }).__chogDemo = {
+      run: () => setPracticeRun({ since: Date.now(), until: Date.now() + 40_000, to: 'the fountain' }),
+      stop: () => setPracticeRun(null),
+      banner: () =>
+        setBanner({ id: `d${Date.now()}`, title: 'Got away!', line: 'You ran $420 home to your gang.', tone: 'win' }),
+    };
+  }, []);
   const startPractice = () => {
     const pool = GANG_IDS.filter((g) => g !== chog?.gang);
     setPractice({
@@ -1017,7 +1027,12 @@ export function CityApp() {
       />
 
       {/* Top left: who you are and today's jobs */}
-      <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-col items-start gap-2">
+      <div
+        className={cn(
+          'pointer-events-none absolute left-3 top-3 z-20 flex flex-col items-start gap-2',
+          (practiceRun || myChase) && 'max-sm:hidden',
+        )}
+      >
         <RoleCard
           chog={chog?.id ?? null}
           name={chog?.name ?? 'Guest'}
@@ -1057,44 +1072,41 @@ export function CityApp() {
         />
       </div>
 
-      {practiceRun && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[160px] z-30 flex justify-center px-3 max-sm:bottom-auto max-sm:top-[84px] xl:bottom-auto xl:top-[96px]">
-          <RunBar
-            line={`Practice: get to ${practiceRun.to}. Follow the arrow, dodge the police.`}
-            since={practiceRun.since}
-            until={practiceRun.until}
+      {/* Your run, other getaways and banners. On a phone they live along the top edge, out of the middle of
+          the screen where your Chog is: your run takes the place of your card, banners drop in over the top like
+          a notification. Bigger screens have them at the bottom middle, and at the top on a wide one. */}
+      {(() => {
+        const run = practiceRun
+          ? {
+              line: `Practice: get to ${practiceRun.to}. Dodge the police.`,
+              since: practiceRun.since,
+              until: practiceRun.until,
+            }
+          : myChase
+            ? {
+                line: `${money(myChase.bag)} to ${GANGS[myChase.home].name}’s door. Dodge the police.`,
+                since: myChase.since,
+                until: myChase.until,
+              }
+            : null;
+        const others = chases
+          .filter((c) => c !== myChase && ((chog?.gang && c.from === chog.gang) || chases.length < 3))
+          .sort((a, b) => Number(b.from === chog?.gang) - Number(a.from === chog?.gang));
+        const chaseBar = (c: Chase) => (
+          <ChaseBar
+            key={c.run}
+            c={c}
+            ours={!!chog?.gang && c.from === chog.gang}
+            canChase={!!chog && !jailedNow}
+            onChase={() => {
+              setDoorOpen(false);
+              setSheet(null);
+              view.current?.chaseAfter(c.id);
+            }}
           />
-        </div>
-      )}
-
-      {/* Getaways: yours (run it home), one from your vault (stop them), or anyone's (a heads-up). */}
-      {chases.length > 0 && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[160px] z-30 flex flex-col items-center gap-2 px-3 max-sm:bottom-auto max-sm:top-[84px] xl:bottom-auto xl:top-[96px]">
-          {chases
-            .filter((c) => c === myChase || (chog?.gang && c.from === chog.gang) || chases.length < 3)
-            .slice(0, 3)
-            .map((c) => (
-              <ChaseBar
-                key={c.run}
-                c={c}
-                mine={c === myChase}
-                ours={!!chog?.gang && c.from === chog.gang && c !== myChase}
-                canChase={!!chog && !jailedNow && c !== myChase}
-                onChase={() => {
-                  setDoorOpen(false);
-                  setSheet(null);
-                  view.current?.chaseAfter(c.id);
-                }}
-              />
-            ))}
-        </div>
-      )}
-
-      {/* Top middle: comic banners */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-[260px] z-30 flex justify-center px-3 xl:bottom-auto xl:top-4">
-        {raid ? (
-          <Banner
-            b={{
+        );
+        const shown: BannerData | null = raid
+          ? {
               id: `raid${raid.since}`,
               title: 'Raid!',
               line:
@@ -1103,17 +1115,50 @@ export function CityApp() {
                   : `${GANGS[raid.gang].name} ${verb(raid.gang)} robbing your vault. Tap to go there.`,
               chog: raid.chog,
               tone: 'alarm',
-            }}
-            onClick={() => {
-              if (raid.run && chog && !jailedNow) void defend(raid);
-              else view.current?.walkTo(raid.target);
-              setRaid(null);
-            }}
-          />
-        ) : (
-          banner && <Banner b={banner} onClick={() => setBanner(null)} />
-        )}
-      </div>
+            }
+          : banner;
+        const tapBanner = () => {
+          if (raid) {
+            if (raid.run && chog && !jailedNow) void defend(raid);
+            else view.current?.walkTo(raid.target);
+            setRaid(null);
+          } else setBanner(null);
+        };
+        return (
+          <>
+            {/* Phone */}
+            <div
+              className={cn(
+                'pointer-events-none absolute left-3 right-[128px] z-30 flex flex-col gap-2 sm:hidden',
+                run ? 'top-[max(12px,env(safe-area-inset-top))]' : 'top-[96px]',
+              )}
+            >
+              {run && <RunBar {...run} />}
+              {others.slice(0, 1).map(chaseBar)}
+            </div>
+            {shown && (
+              <div className="pointer-events-none absolute inset-x-3 top-[max(12px,env(safe-area-inset-top))] z-40 flex justify-center sm:hidden">
+                <Banner b={shown} onClick={tapBanner} />
+              </div>
+            )}
+            {/* Tablet and laptop: bottom middle; wide screens: top middle */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-6 z-30 hidden flex-col items-center gap-2 px-3 sm:flex xl:bottom-auto xl:top-[96px]">
+              {shown && (
+                <div className="xl:hidden">
+                  <Banner b={shown} onClick={tapBanner} />
+                </div>
+              )}
+              {run && <RunBar {...run} />}
+              {others.slice(0, 2).map(chaseBar)}
+            </div>
+            {shown && (
+              <div className="pointer-events-none absolute inset-x-0 top-4 z-30 hidden justify-center px-3 xl:flex">
+                <Banner b={shown} onClick={tapBanner} />
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Bottom left: the chat (closed, the newest city messages float up for a moment) */}
       {!anyCard && (
@@ -2235,33 +2280,25 @@ function Peek(props: {
 }
 
 /** A getaway in progress: your own (time left, where to), one from your vault (go after them), or anyone's. */
-function ChaseBar(props: { c: Chase; mine: boolean; ours: boolean; canChase: boolean; onChase: () => void }) {
-  const { c, mine, ours } = props;
+function ChaseBar(props: { c: Chase; ours: boolean; canChase: boolean; onChase: () => void }) {
+  const { c, ours } = props;
   const left = Math.max(0, Math.ceil((c.until - Date.now()) / 1000));
-  if (mine)
-    return (
-      <RunBar
-        line={`${money(c.bag)} to ${GANGS[c.home].name}’s door. Dodge the police.`}
-        since={c.since}
-        until={c.until}
-      />
-    );
   return (
     <div
       className={cn(
-        'glass-strong pointer-events-auto flex w-full max-w-[460px] animate-[banner-drop_480ms_cubic-bezier(.2,1.2,.3,1)] items-center gap-3 rounded-[24px] py-2 pl-2 pr-2.5 text-white',
+        'glass-strong pointer-events-auto flex w-full max-w-[460px] animate-[banner-drop_480ms_cubic-bezier(.2,1.2,.3,1)] items-center gap-3 rounded-[24px] py-2 pl-2 pr-2.5 text-white max-sm:gap-2 max-sm:rounded-[18px] max-sm:py-1.5 max-sm:pl-1.5',
         ours && 'ring-2 ring-sys-red/70',
       )}
     >
       <span className="relative shrink-0">
-        <img src={chogImage(c.chog, 96)} alt="" className="h-11 w-11 rounded-[14px] object-cover" />
+        <img src={chogImage(c.chog, 96)} alt="" className="h-11 w-11 rounded-[14px] object-cover max-sm:h-9 max-sm:w-9 max-sm:rounded-[11px]" />
         <span className="absolute -bottom-1 -right-1 rounded-full bg-sys-gold px-1.5 text-[10px] font-bold text-black">
           $
         </span>
       </span>
-      <p className="min-w-0 flex-1 text-[13px] leading-snug text-label-2">
+      <p className="min-w-0 flex-1 text-[13px] leading-snug text-label-2 max-sm:line-clamp-2 max-sm:text-[11px]">
         <span
-          className={cn('block font-display text-[16px] leading-tight', ours ? 'text-sys-red' : 'text-white')}
+          className={cn('block font-display text-[16px] leading-tight max-sm:text-[14px]', ours ? 'text-sys-red' : 'text-white')}
         >
           {ours ? 'Stop the robber!' : 'Getaway'}
         </span>
@@ -2286,7 +2323,7 @@ function RunBar({ line, since, until }: { line: string; since: number; until: nu
   const k = left / total;
   const low = left <= 10;
   return (
-    <div className="glass-strong pointer-events-none w-full max-w-[460px] animate-[banner-drop_480ms_cubic-bezier(.2,1.2,.3,1)] rounded-[26px] py-3 pl-4 pr-3 text-white ring-1 ring-sys-gold/35 max-sm:rounded-[20px] max-sm:py-2 max-sm:pl-3 max-sm:pr-2">
+    <div className="glass-strong pointer-events-none w-full max-w-[460px] animate-[banner-drop_480ms_cubic-bezier(.2,1.2,.3,1)] rounded-[26px] py-3 pl-4 pr-3 text-white ring-1 ring-sys-gold/35 max-sm:rounded-[22px] max-sm:py-2 max-sm:pl-3.5 max-sm:pr-2">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="font-display text-[22px] leading-tight text-sys-gold max-sm:text-[17px]">

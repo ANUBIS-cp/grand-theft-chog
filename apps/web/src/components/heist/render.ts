@@ -150,6 +150,12 @@ export class VaultRenderer {
     else img.addEventListener('load', () => this.buildFaces(), { once: true });
   }
 
+  /** Guard i's picture, for the markers at the screen edge. */
+  guardImage(i: number) {
+    const img = this.images.guards[i % Math.max(1, this.images.guards.length)];
+    return img?.complete && img.naturalWidth ? img : null;
+  }
+
   /** The game piece for your Chog, or for guard i. */
   pieceOf(who: 'player' | number) {
     return who === 'player'

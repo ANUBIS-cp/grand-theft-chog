@@ -31,6 +31,7 @@ import { Fx } from '../heist/fx';
 import { Sound } from '../heist/sound';
 import type { RaidLink, RaidResult } from './raid-link';
 import { powerHint } from './power-fx';
+import { ThumbStick } from './thumb-stick';
 import { RushRenderer, rushSnapshot, type RushPrev } from './rush-render';
 
 // Cash Rush on screen: the maze, the controls (keys, a drag stick, buttons), the safe dial, and the cards at
@@ -634,47 +635,21 @@ export function RushGame(props: RushGameProps) {
   const drag = useRef<{ id: number; ax: number; ay: number; d: Dir | -1; ox: number; oy: number } | null>(
     null,
   );
-  // Touch: swipe the way you want to go and your Chog keeps running that way (taking the turn as soon as it
-  // can), like Pac-Man on a phone. Swipe again to turn, keep the finger down to chain turns, tap to stop.
-  const swipe = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null);
   const onPointerDown = (e: React.PointerEvent) => {
     const g = game.current;
     sound.current?.unlock();
-    if (!g || g.s.phase !== 'play' || scriptRef.current) return;
+    // A phone steers with the stick under the vault, not on it.
+    if (!g || g.s.phase !== 'play' || scriptRef.current || e.pointerType === 'touch') return;
     try {
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     } catch {
       /* no live pointer */
-    }
-    if (e.pointerType === 'touch') {
-      swipe.current = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
-      return;
     }
     const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
     drag.current = { id: e.pointerId, ax: e.clientX, ay: e.clientY, d: -1, ox: box.left, oy: box.top };
     setJoy({ x: e.clientX - box.left, y: e.clientY - box.top, dx: 0, dy: 0 });
   };
   const onPointerMove = (e: React.PointerEvent) => {
-    const sw = swipe.current;
-    if (sw && sw.id === e.pointerId) {
-      const g = game.current;
-      const dx = e.clientX - sw.x;
-      const dy = e.clientY - sw.y;
-      if (!g || Math.hypot(dx, dy) < 16) return;
-      const d: Dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : dy > 0 ? 2 : 0;
-      // From here, the next bend of the finger is a new swipe.
-      sw.x = e.clientX;
-      sw.y = e.clientY;
-      sw.moved = true;
-      if (g.held[0] === d) return;
-      g.started = true;
-      g.held = [d];
-      g.tap = { d, until: g.s.tick + 5 };
-      g.tapUntil = performance.now() + 170;
-      setSwipeDir({ d, at: performance.now() });
-      navigator.vibrate?.(6);
-      return;
-    }
     const dr = drag.current;
     const g = game.current;
     if (!dr || !g || dr.id !== e.pointerId) return;
@@ -701,16 +676,6 @@ export function RushGame(props: RushGameProps) {
     setJoy({ x: dr.ax - dr.ox, y: dr.ay - dr.oy, dx, dy });
   };
   const onPointerUp = (e: React.PointerEvent) => {
-    const sw = swipe.current;
-    if (sw && sw.id === e.pointerId) {
-      swipe.current = null;
-      // A tap without a swipe stops you; after a swipe you keep running.
-      if (!sw.moved && game.current) {
-        game.current.held = [];
-        setSwipeDir(null);
-      }
-      return;
-    }
     const dr = drag.current;
     const g = game.current;
     if (!dr || !g || dr.id !== e.pointerId) return;
@@ -718,8 +683,21 @@ export function RushGame(props: RushGameProps) {
     drag.current = null;
     setJoy(null);
   };
-  /** The way you last swiped (touch), for the little arrow that confirms it. */
-  const [swipeDir, setSwipeDir] = useState<{ d: Dir; at: number } | null>(null);
+  /** The phone's stick: hold a way to move, let go to stop, like an arrow key. */
+  const onStick = (d: Dir | -1) => {
+    const g = game.current;
+    sound.current?.unlock();
+    if (!g || scriptRef.current) return;
+    if (d === -1) {
+      g.held = [];
+      return;
+    }
+    if (g.s.phase !== 'play') return;
+    g.started = true;
+    g.held = [d];
+    g.tap = { d, until: g.s.tick + 5 };
+    g.tapUntil = performance.now() + 170;
+  };
   const [touch, setTouch] = useState(false);
   useEffect(() => setTouch(matchMedia('(pointer: coarse)').matches), []);
 
@@ -780,7 +758,7 @@ export function RushGame(props: RushGameProps) {
   return (
     <div className="flex h-full flex-col bg-[#0b0918] text-white">
       {/* Top bar */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 pb-1.5 pt-2 sm:px-4">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-3 pb-1.5 pt-2 sm:px-4">
         <div className="flex min-w-0 items-center gap-2 justify-self-start">
           {onLeave && !real && (
             <button
@@ -849,23 +827,6 @@ export function RushGame(props: RushGameProps) {
         onPointerCancel={onPointerUp}
       >
         <canvas ref={canvasRef} className="absolute inset-0" />
-        {touch && swipeDir && (
-          <span
-            key={swipeDir.at}
-            className="pointer-events-none absolute bottom-3 left-1/2 grid h-10 w-10 -translate-x-1/2 animate-[pop-in_300ms_cubic-bezier(.2,.9,.3,1.3)] place-items-center rounded-full bg-black/45 text-white backdrop-blur-md"
-          >
-            <svg width="18" height="18" viewBox="0 0 16 16" style={{ rotate: `${swipeDir.d * 90}deg` }}>
-              <path
-                d="M3 10.5 8 5.5l5 5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
-        )}
         {hud?.started && !over && (
           <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center px-3">
             {viewer ? (
@@ -942,11 +903,24 @@ export function RushGame(props: RushGameProps) {
       <div
         className={cn(
           'flex items-end justify-between gap-3 px-4 pb-[max(14px,env(safe-area-inset-bottom))] pt-2',
+          // A phone: the stick on the left, powers and Use on the right, in a deck of their own.
+          touch && 'h-[178px] items-stretch gap-2.5 px-3 pb-[max(10px,env(safe-area-inset-bottom))]',
           role === 'watch' && 'hidden',
         )}
       >
-        <div className="flex min-w-0 flex-1 items-end gap-3">
-          {role === 'defend' && (
+        {touch && (
+          <ThumbStick
+            onDir={onStick}
+            className="min-w-0 flex-1 rounded-[30px] bg-white/[0.035] ring-1 ring-inset ring-white/[0.07]"
+          />
+        )}
+        <div
+          className={cn(
+            'flex min-w-0 flex-1 items-end gap-3',
+            touch && 'flex-none flex-col-reverse items-center justify-start gap-2.5 self-end',
+          )}
+        >
+          {role === 'defend' && !touch && (
             <p className="self-center text-[13px] leading-snug text-white/70">
               Steer with the arrow keys or drag. Touch the robber to catch them. Space dashes.
             </p>
@@ -1056,7 +1030,10 @@ export function RushGame(props: RushGameProps) {
           onClick={(e) => e.detail === 0 && press('use')}
           disabled={over}
           aria-label={role === 'defend' ? 'Dash' : hud?.dialing ? 'Crack' : 'Use'}
-          className="group flex flex-col items-center gap-1.5 [-webkit-tap-highlight-color:transparent]"
+          className={cn(
+            'group flex flex-col items-center gap-1.5 [-webkit-tap-highlight-color:transparent]',
+            touch && 'self-end',
+          )}
         >
           <span
             className={cn(
@@ -1225,7 +1202,7 @@ function Coach({ hud }: { hud: Hud }) {
   const steps = [
     {
       label: 'Move',
-      tip: 'Arrow keys or WASD. On a phone, swipe the way you want to go; tap to stop.',
+      tip: 'Arrow keys or WASD. On a phone, hold the stick under the vault and slide it; let go to stop.',
       done: hud.started,
     },
     {

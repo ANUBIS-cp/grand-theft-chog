@@ -688,7 +688,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
                 ref={bigRef}
                 onClick={onMap}
                 aria-label="Map of the city. Tap a spot to walk there."
-                className="block w-full cursor-pointer rounded-[20px] max-sm:w-[780px] max-sm:max-w-none"
+                className="block w-full cursor-pointer rounded-[20px]"
                 style={{ aspectRatio: `${CITY.w} / ${CITY.h}` }}
               />
             </div>
@@ -935,28 +935,60 @@ function drawBig(
   paintMap(g, k, lastAt.x, lastAt.y, lastAt.people, places, now);
   g.textAlign = 'center';
   g.textBaseline = 'middle';
+  // Names fit their block whatever the screen: on a phone the whole city fits the width, so the word "Gang"
+  // is dropped ("Lazoor Gang" reads "Lazoor") and the rank sits in its own little badge.
+  const narrow = cv.clientWidth < 600;
+  const nameOf = (p: (typeof CITY.places)[number]) => {
+    const n = p.kind === 'jail' ? 'Jail' : p.kind === 'training' ? 'Practice' : (places[p.id]?.name ?? '');
+    return narrow ? n.replace(/ Gang$/, '') : n;
+  };
+  // One size for every name: the largest that lets the longest one fit its block (never below 10 CSS px).
+  let size = Math.round(Math.max(12 * dpr, k * 1.05));
+  const fits = () =>
+    CITY.places.every((p) => {
+      const look = places[p.id];
+      const rank = look && p.kind === 'gang' && !narrow ? `${look.rank}  ` : '';
+      return g.measureText(rank + nameOf(p)).width + size * 1.1 <= p.w * k * 1.12;
+    });
+  g.font = `700 ${size}px ${font}`;
+  while (size > 10 * dpr && !fits()) {
+    size -= 1;
+    g.font = `700 ${size}px ${font}`;
+  }
   for (const p of CITY.places) {
     const look = places[p.id];
-    const name = p.kind === 'jail' ? 'Jail' : p.kind === 'training' ? 'Practice vault' : (look?.name ?? '');
-    // At least 12 CSS px whatever the screen, so names read on a phone too.
-    const size = Math.round(Math.max(12 * dpr, k * 1.05));
-    g.font = `700 ${size}px ${font}`;
+    const name = nameOf(p);
     const cx = (p.x + p.w / 2) * k;
     const ly = (p.y + p.h + 2.2) * k;
-    const label = look && p.kind === 'gang' ? `${look.rank}  ${name}` : name;
-    const w = Math.min(p.w * k * 1.15, g.measureText(label).width + size * 1.4);
-    const h = size * 1.7;
-    // A frosted label under each building, with its rank.
+    const room = p.w * k * 1.12;
+    g.font = `700 ${size}px ${font}`;
+    const rank = look && p.kind === 'gang' ? look.rank : 0;
+    const label = rank && !narrow ? `${rank}  ${name}` : name;
+    const w = Math.min(room, g.measureText(label).width + size * 1.2);
+    const h = size * 1.65;
     g.save();
     g.shadowColor = 'rgba(0,0,0,0.5)';
     g.shadowBlur = 8;
-    g.fillStyle = look?.mine ? 'rgba(255,45,106,0.92)' : 'rgba(22,20,34,0.82)';
+    g.fillStyle = look?.mine ? 'rgba(255,45,106,0.95)' : 'rgba(22,20,34,0.86)';
     g.beginPath();
     g.roundRect(cx - w / 2, ly - h / 2, w, h, h / 2);
     g.fill();
     g.restore();
     g.fillStyle = '#ffffff';
-    g.fillText(label, cx, ly + 0.5, w - size * 0.8);
+    g.fillText(label, cx, ly + 0.5, w - size * 0.5);
+    if (rank && narrow) {
+      // The rank as a badge on the block's top-left corner.
+      const r = Math.round(9 * dpr);
+      const bx = p.x * k + r * 0.6;
+      const by = p.y * k + r * 0.6;
+      g.fillStyle = rank <= 3 ? '#ffd60a' : 'rgba(22,20,34,0.9)';
+      g.beginPath();
+      g.arc(bx, by, r, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = rank <= 3 ? '#111111' : '#ffffff';
+      g.font = `800 ${Math.round(10 * dpr)}px ${font}`;
+      g.fillText(String(rank), bx, by + 0.5);
+    }
   }
 }
 

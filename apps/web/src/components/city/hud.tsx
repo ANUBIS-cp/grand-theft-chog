@@ -275,12 +275,12 @@ export function Banner({ b, onClick }: { b: BannerData; onClick?: () => void }) 
     <button
       key={b.id}
       onClick={onClick}
-      className="glass-strong press pointer-events-auto flex max-w-[min(520px,calc(100vw-24px))] animate-[banner-drop_520ms_cubic-bezier(.2,1.2,.3,1)] items-center gap-3 rounded-[26px] py-2.5 pl-2.5 pr-5 text-left text-white"
+      className="glass-strong press pointer-events-auto flex max-w-[min(520px,calc(100vw-24px))] animate-[banner-drop_520ms_cubic-bezier(.2,1.2,.3,1)] items-center gap-3 rounded-[26px] py-2.5 pl-2.5 pr-5 text-left text-white max-sm:w-full max-sm:rounded-[22px] max-sm:py-2 max-sm:pl-2 max-sm:pr-4"
       style={{ boxShadow: `0 18px 50px ${t.glow}, inset 0 0.5px 0 rgba(255,255,255,0.2)` }}
     >
       {b.chog !== undefined ? (
         <span className="relative shrink-0">
-          <img src={chogImage(b.chog, 256)} alt="" className="h-12 w-12 rounded-[15px] object-cover" />
+          <img src={chogImage(b.chog, 256)} alt="" className="h-12 w-12 rounded-[15px] object-cover max-sm:h-10 max-sm:w-10 max-sm:rounded-[12px]" />
           <span
             className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full ring-2 ring-[#141220]"
             style={{ background: t.accent }}
@@ -290,10 +290,10 @@ export function Banner({ b, onClick }: { b: BannerData; onClick?: () => void }) 
         <span className="h-12 w-1.5 shrink-0 rounded-full" style={{ background: t.accent }} />
       )}
       <span className="min-w-0">
-        <span className="block font-display text-[20px] leading-tight" style={{ color: t.accent }}>
+        <span className="block font-display text-[20px] leading-tight max-sm:text-[17px]" style={{ color: t.accent }}>
           {b.title}
         </span>
-        <span className="mt-0.5 block text-[14px] leading-snug text-label-2">{b.line}</span>
+        <span className="mt-0.5 block text-[14px] leading-snug text-label-2 max-sm:line-clamp-2 max-sm:text-[13px]">{b.line}</span>
       </span>
     </button>
   );
