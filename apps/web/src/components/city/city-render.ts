@@ -2,7 +2,16 @@ import type { GangId } from '@chog-city/data';
 import { BH, BW, CITY, Ground, ROAD, groundAt, type Place, type Prop } from '@chog-city/game/city';
 import { chogImage } from '@/lib/images';
 import { makePiece, type Piece } from '../chog/piece';
-import { TRAIL_OF, WALK_OF, drawWalker, newWalk, stepWalk, type Dust, type WalkState } from '../chog/walk';
+import {
+  TRAIL_OF,
+  WALK_OF,
+  drawWalker,
+  newWalk,
+  stepWalk,
+  type Dust,
+  type WalkState,
+  type WalkStyle,
+} from '../chog/walk';
 import { CityArt } from './art';
 import { FACADE, LANDMARK_RISE, paintLandmark, paintWall, paintYard, treeOf } from './landmarks';
 
@@ -1323,6 +1332,9 @@ export class CityRenderer {
   /** Dust and sparkles from walking, in tiles. */
   private dust: Dust[] = [];
 
+  /** Called for your own Chog's footsteps and turns, for their sounds. */
+  onStep: ((what: 'step' | 'turn', style: WalkStyle) => void) | null = null;
+
   private walkOf(p: Person, now: number) {
     let w = this.walks.get(p.key);
     if (!w) this.walks.set(p.key, (w = { ...newWalk(p.x, p.y, p.face), at: now }));
@@ -1331,8 +1343,15 @@ export class CityRenderer {
       w.at = now;
       const style = p.cop ? 'zip' : p.gang ? WALK_OF[p.gang] : 'swagger';
       const trail = p.gang && !p.cop ? TRAIL_OF[p.gang] : undefined;
+      const step = w.lastStep;
+      const turned = w.turnedAt;
       const out = stepWalk(w, p.x, p.y, p.moving, p.face, style, trail, now, dt);
       if (out.length && this.dust.length < 400) this.dust.push(...out);
+      // Your own steps and turns make a sound.
+      if (p.me && this.onStep) {
+        if (w.moving && w.lastStep !== step) this.onStep('step', style);
+        if (w.turnedAt !== turned) this.onStep('turn', style);
+      }
     }
     return w;
   }

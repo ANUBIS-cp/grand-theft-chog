@@ -21,7 +21,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ConnectPanel } from '@/components/connect-panel';
 import type { RealResult } from '@/components/heist/heist-game';
-import { Sound } from '@/components/heist/sound';
+import { prepareSound, Sound } from '@/components/heist/sound';
 import { LockGame } from '@/components/lock/lock-game';
 import { RaidLink } from '@/components/rush/raid-link';
 import { RushGame } from '@/components/rush/rush-game';
@@ -223,6 +223,8 @@ export function CityApp() {
     loud: boolean;
   } | null>(null);
   const [practiceRun, setPracticeRun] = useState<{ since: number; until: number; to: string } | null>(null);
+  // Get the sound engine ready now, so the first tap anywhere switches sound on (see sound.ts).
+  useEffect(() => prepareSound(), []);
   // Local testing only: show the run bar and banners on demand (the test browser can't play a run quickly).
   useEffect(() => {
     if (location.hostname !== 'localhost') return;

@@ -17,7 +17,16 @@ export interface PieceLook {
 
 /** A pre-drawn piece. Its feet (the middle of the base) are at (fx, fy) inside the canvas, in CSS px. */
 export interface Piece {
+  /** The whole piece in one picture. */
   c: HTMLCanvasElement;
+  /** The same piece in layers, so the card can spin while the base stays put: the base behind the card,
+   *  the card (front and back), and the base's front lip that the card stands in. All the size of `c`. */
+  under: HTMLCanvasElement;
+  card: HTMLCanvasElement;
+  back: HTMLCanvasElement;
+  over: HTMLCanvasElement;
+  /** The card's box (CSS px, inside the canvas), for the thin edge you see mid-spin. */
+  cardBox: { x: number; y: number; w: number; h: number; edge: string };
   w: number;
   h: number;
   fx: number;
@@ -50,11 +59,19 @@ export function makePiece(img: HTMLImageElement | undefined, look: PieceLook, dp
   const pad = 3;
   const w = Math.ceil(Math.max(cw, bw) + pad * 2);
   const h = Math.ceil(capH + ch + edge + bh * 0.5 + lip + pad * 2);
-  const c = document.createElement('canvas');
-  c.width = Math.ceil(w * dpr);
-  c.height = Math.ceil(h * dpr);
-  const g = c.getContext('2d')!;
-  g.scale(dpr, dpr);
+  const layer = () => {
+    const cv = document.createElement('canvas');
+    cv.width = Math.ceil(w * dpr);
+    cv.height = Math.ceil(h * dpr);
+    const lg = cv.getContext('2d')!;
+    lg.scale(dpr, dpr);
+    return [cv, lg] as const;
+  };
+  const [under, gu] = layer();
+  const [card, gc] = layer();
+  const [back, gb] = layer();
+  const [over, go] = layer();
+  let g = gu;
   const fx = w / 2;
   const fy = h - pad - lip - bh * 0.5; // middle of the base's top face
   const cx = fx - cw / 2;
@@ -82,6 +99,7 @@ export function makePiece(img: HTMLImageElement | undefined, look: PieceLook, dp
   g.ellipse(fx, fy - bh * 0.04, cw * 0.36, bh * 0.16, 0, 0, Math.PI * 2);
   g.fill();
 
+  g = gc;
   // The card's thickness.
   g.fillStyle = look.gold ? '#a8761a' : '#2a2540';
   g.beginPath();
@@ -139,6 +157,7 @@ export function makePiece(img: HTMLImageElement | undefined, look: PieceLook, dp
   g.roundRect(cx + border, cy + border, s, s, Math.max(2, r - border));
   g.stroke();
 
+  g = go;
   // The front lip of the base, over the bottom of the card, so the card stands in a slot.
   g.lineWidth = 2;
   g.strokeStyle = INK;
@@ -154,6 +173,7 @@ export function makePiece(img: HTMLImageElement | undefined, look: PieceLook, dp
   g.ellipse(fx - bw * 0.22, fy - bh * 0.18, bw * 0.08, bh * 0.08, -0.3, 0, Math.PI * 2);
   g.fill();
 
+  g = gc;
   if (look.cap) {
     // A guard's cap sitting on the card's top edge.
     const kw = cw * 0.7;
@@ -180,7 +200,103 @@ export function makePiece(img: HTMLImageElement | undefined, look: PieceLook, dp
     g.lineWidth = 1.5;
     g.stroke();
   }
-  return { c, w, h, fx, fy, top: fy - cy + capH * 0.8 };
+  // The card's back, seen for a moment as it spins round: the owner's colour, an inset frame and a pale Chog.
+  {
+    const bg = gb;
+    const thick = look.gold ? '#a8761a' : '#2a2540';
+    bg.lineWidth = 2;
+    bg.strokeStyle = INK;
+    bg.fillStyle = thick;
+    bg.beginPath();
+    bg.roundRect(cx, cy + edge, cw, ch, r);
+    bg.fill();
+    bg.stroke();
+    const gr = bg.createLinearGradient(0, cy, 0, cy + ch);
+    gr.addColorStop(0, shade(base, 0.15));
+    gr.addColorStop(1, shade(base, -0.3));
+    bg.fillStyle = gr;
+    bg.beginPath();
+    bg.roundRect(cx, cy, cw, ch, r);
+    bg.fill();
+    bg.strokeStyle = 'rgba(255,255,255,0.55)';
+    bg.lineWidth = Math.max(1.5, s * 0.025);
+    bg.beginPath();
+    bg.roundRect(cx + border * 1.6, cy + border * 1.6, cw - border * 3.2, ch - border * 3.2, Math.max(2, r - border));
+    bg.stroke();
+    const hx = fx;
+    const hy = cy + ch * 0.6;
+    bg.fillStyle = 'rgba(255,255,255,0.42)';
+    bg.beginPath();
+    for (let i = 0; i <= 14; i++) {
+      const a = Math.PI + (i / 14) * Math.PI;
+      const rr = i % 2 ? s * 0.3 : s * 0.22;
+      bg.lineTo(hx + Math.cos(a) * rr, hy + Math.sin(a) * rr * 0.9);
+    }
+    bg.closePath();
+    bg.fill();
+    bg.lineWidth = Math.max(2, s * 0.04);
+    bg.strokeStyle = INK;
+    bg.beginPath();
+    bg.roundRect(cx, cy, cw, ch, r);
+    bg.stroke();
+    // The cap stays on, seen from behind.
+    if (look.cap) bg.drawImage(card, 0, 0, card.width, Math.max(1, Math.round(cy * dpr)), 0, 0, w, cy);
+  }
+  const [c, gall] = layer();
+  for (const l of [under, card, over]) gall.drawImage(l, 0, 0, w, h);
+  return {
+    c,
+    under,
+    card,
+    back,
+    over,
+    cardBox: { x: cx, y: cy, w: cw, h: ch + edge, edge: look.gold ? '#a8761a' : '#2a2540' },
+    w,
+    h,
+    fx,
+    fy,
+    top: fy - cy + capH * 0.8,
+  };
+}
+
+/** The spin when a piece turns round (ms): a full turn, so the picture ends the right way up and unmirrored. */
+export const SPIN_MS = 260;
+
+/**
+ * Draws a piece's layers with its feet at the origin (already translated, rotated and squashed by the caller):
+ * the base steady, the card spinning round its middle by `spin` (0..1 of a full turn), showing its back halfway
+ * and a sliver of its edge as it passes side-on, like a paper cut-out turning.
+ */
+export function drawLayers(g: CanvasRenderingContext2D, p: Piece, sx: number, sy: number, spin: number) {
+  const x0 = -p.fx;
+  const y0 = -p.fy;
+  g.save();
+  g.scale(sx, sy);
+  g.drawImage(p.under, x0, y0, p.w, p.h);
+  g.restore();
+  const cos = Math.cos(spin * Math.PI * 2);
+  const k = Math.abs(cos);
+  g.save();
+  g.scale(sx, sy);
+  if (k < 0.09) {
+    // Side-on: just the card's edge.
+    const b = p.cardBox;
+    g.fillStyle = b.edge;
+    g.strokeStyle = INK;
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.roundRect(-2.5, y0 + b.y, 5, b.h, 2.5);
+    g.fill();
+    g.stroke();
+  } else {
+    g.scale(k, 1);
+    g.drawImage(cos > 0 ? p.card : p.back, x0, y0, p.w, p.h);
+  }
+  g.restore();
+  g.save();
+  g.scale(sx, sy);
+  g.drawImage(p.over, x0, y0, p.w, p.h);
+  g.restore();
 }
 
 export interface Motion {
@@ -218,8 +334,8 @@ export function drawPiece(
   let sy = 1;
   if (m.moving) sy = k < 0.12 || k > 0.92 ? 0.9 : 1 + Math.sin(k * Math.PI) * 0.05;
   else sy = 1 + Math.sin(now / 700 + m.seed * 6) * 0.012;
-  let sx = 1 / sy;
-  if (m.turned !== undefined && m.turned < 220) sx *= Math.abs(Math.cos((m.turned / 220) * Math.PI));
+  const sx = 1 / sy;
+  const spin = m.turned !== undefined && m.turned < SPIN_MS ? m.turned / SPIN_MS : 0;
   let rot = m.moving ? m.face * 0.07 : 0;
   if (m.emoted !== undefined && m.emoted < 700) rot += Math.sin(m.emoted / 45) * 0.12 * (1 - m.emoted / 700);
 
@@ -234,7 +350,6 @@ export function drawPiece(
   if (m.alpha !== undefined) g.globalAlpha = m.alpha;
   g.translate(x, y - lift);
   g.rotate(rot);
-  g.scale(Math.max(0.04, sx), sy);
-  g.drawImage(p.c, -p.fx, -p.fy, p.w, p.h);
+  drawLayers(g, p, sx, sy, spin);
   g.restore();
 }

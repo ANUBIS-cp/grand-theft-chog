@@ -1,5 +1,45 @@
-// Small synthesised sounds (no files to load). Browsers only allow audio after a tap or key press, so
-// `unlock()` is called from the first input.
+// Small synthesised sounds (no files to load).
+//
+// One audio engine for the whole game, made once and shared by every screen. (Each vault and lock used to make
+// its own and never close it; phones only allow a few, so after a few robberies the new ones stayed silent.)
+// Phones only switch audio on from a real tap: on iPhone the tap counts when the finger LIFTS (touchend), not
+// when it lands, so the engine is woken from any touchend, click or key anywhere on the page, with a silent
+// blip that fully unlocks it. Sounds asked for while it's still asleep are skipped rather than queued, so
+// nothing plays late; and it's woken again when you come back to the tab (iPhone pauses it in the background).
+
+let shared: AudioContext | null = null;
+let noiseBuf: AudioBuffer | null = null;
+
+function context(): AudioContext | null {
+  if (shared) return shared;
+  if (typeof window === 'undefined') return null;
+  const Ctx =
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctx) return null;
+  shared = new Ctx({ latencyHint: 'interactive' });
+  const wake = () => {
+    const ac = shared!;
+    if (ac.state !== 'running') void ac.resume().catch(() => {});
+    // A one-sample silent sound, played inside the tap: what finally unlocks audio on iPhone.
+    const b = ac.createBuffer(1, 1, ac.sampleRate);
+    const src = ac.createBufferSource();
+    src.buffer = b;
+    src.connect(ac.destination);
+    src.start(0);
+  };
+  for (const ev of ['touchend', 'click', 'keydown'])
+    window.addEventListener(ev, wake, { capture: true, passive: true });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && shared?.state !== 'running') void shared?.resume().catch(() => {});
+  });
+  return shared;
+}
+
+/** Make the engine early (on page load), so the first tap anywhere already unlocks it. */
+export function prepareSound() {
+  context();
+}
 
 export class Sound {
   private ac: AudioContext | null = null;
@@ -7,19 +47,23 @@ export class Sound {
   private siren: { osc: OscillatorNode; lfo: OscillatorNode; gain: GainNode } | null = null;
   muted = false;
 
-  unlock() {
+  constructor() {
+    this.ac = context();
     if (this.ac) {
-      if (this.ac.state === 'suspended') void this.ac.resume();
-      return;
+      this.master = this.ac.createGain();
+      this.master.gain.value = this.muted ? 0 : 0.5;
+      this.master.connect(this.ac.destination);
     }
-    const Ctx =
-      window.AudioContext ??
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    this.ac = new Ctx();
-    this.master = this.ac.createGain();
-    this.master.gain.value = this.muted ? 0 : 0.5;
-    this.master.connect(this.ac.destination);
+  }
+
+  /** Called from taps and keys: wakes the shared engine if it's asleep. */
+  unlock() {
+    if (this.ac && this.ac.state !== 'running') void this.ac.resume().catch(() => {});
+  }
+
+  /** Only make sounds while audio is actually on, so none come out late. */
+  private get live() {
+    return !!this.ac && !!this.master && this.ac.state === 'running';
   }
 
   setMuted(m: boolean) {
@@ -29,7 +73,7 @@ export class Sound {
 
   private tone(freq: number, at: number, dur: number, type: OscillatorType, vol: number, slideTo?: number) {
     const ac = this.ac;
-    if (!ac || !this.master) return;
+    if (!ac || !this.master || !this.live) return;
     const t0 = ac.currentTime + at;
     const o = ac.createOscillator();
     const g = ac.createGain();
@@ -46,13 +90,16 @@ export class Sound {
 
   private noise(at: number, dur: number, vol: number, from: number, to: number) {
     const ac = this.ac;
-    if (!ac || !this.master) return;
+    if (!ac || !this.master || !this.live) return;
     const t0 = ac.currentTime + at;
-    const buf = ac.createBuffer(1, Math.ceil(ac.sampleRate * dur), ac.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    // One second of noise made once and reused (making a fresh buffer each time costs a frame on a phone).
+    if (!noiseBuf || noiseBuf.sampleRate !== ac.sampleRate) {
+      noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+      const data = noiseBuf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    }
     const src = ac.createBufferSource();
-    src.buffer = buf;
+    src.buffer = noiseBuf;
     const f = ac.createBiquadFilter();
     f.type = 'bandpass';
     f.frequency.setValueAtTime(from, t0);
@@ -61,7 +108,7 @@ export class Sound {
     g.gain.setValueAtTime(vol, t0);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     src.connect(f).connect(g).connect(this.master);
-    src.start(t0);
+    src.start(t0, Math.random() * 0.5, dur + 0.02);
   }
 
   coin() {
@@ -151,6 +198,7 @@ export class Sound {
   alarmOn() {
     const ac = this.ac;
     if (!ac || !this.master || this.siren) return;
+    // The siren is a held sound, so it may start before audio wakes: it simply comes in when it does.
     const osc = ac.createOscillator();
     const lfo = ac.createOscillator();
     const lfoGain = ac.createGain();
@@ -200,6 +248,28 @@ export class Sound {
   }
   unlocked() {
     [784, 1175, 1568].forEach((f, i) => this.tone(f, i * 0.07, 0.16, 'triangle', 0.07));
+  }
+
+  /** A footstep in the city: soft and short; heavier for stompers, a springy tick for bouncers, none floating. */
+  step(style: string) {
+    if (style === 'float') return;
+    const v = 0.7 + Math.random() * 0.3;
+    if (style === 'stomp') {
+      this.tone(90, 0, 0.09, 'sine', 0.14 * v, 60);
+      this.noise(0, 0.05, 0.05 * v, 500, 200);
+    } else if (style === 'bounce') {
+      this.tone(420, 0, 0.07, 'sine', 0.05 * v, 640);
+    } else if (style === 'glide') {
+      this.noise(0, 0.05, 0.025 * v, 2500, 1500);
+    } else {
+      this.noise(0, 0.04, 0.05 * v, 1400 + Math.random() * 400, 500);
+      this.tone(140, 0, 0.04, 'sine', 0.05 * v, 90);
+    }
+  }
+
+  /** The card spinning round: a quick paper flick. */
+  flick() {
+    this.noise(0, 0.09, 0.07, 1200, 5000);
   }
 
   busted() {

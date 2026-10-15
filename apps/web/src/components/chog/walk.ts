@@ -1,5 +1,5 @@
 import type { GangId } from '@chog-city/data';
-import type { Piece } from './piece';
+import { drawLayers, SPIN_MS, type Piece } from './piece';
 
 // How a Chog moves in the city. Every gang walks its own way (Royals glide, Clowns bounce, Wizards float,
 // Skulls stomp), and every walk has weight: steps keyed to the distance covered, a lean into the way you're
@@ -245,9 +245,12 @@ export function drawWalker(
   // Floaters hover and bob, even standing still.
   const hover = f.hover ? H * f.hover + Math.sin(now / 420 + opts.seed * 5) * H * 0.04 : 0;
   lift += hover;
-  let sx = 1 / sy;
+  const sx = 1 / sy;
+  // Turning round: the card spins a full turn on its base like a paper cut-out (its back and edge show for a
+  // moment), with a little pop up off the ground.
   const turned = now - w.turnedAt;
-  if (turned < 220) sx *= Math.abs(Math.cos((turned / 220) * Math.PI));
+  const spin = turned < SPIN_MS ? turned / SPIN_MS : 0;
+  if (spin) lift += Math.sin(spin * Math.PI) * H * 0.07;
   if (opts.emoted !== undefined && opts.emoted < 700)
     rot += Math.sin(opts.emoted / 45) * 0.12 * (1 - opts.emoted / 700);
   w.lift = lift;
@@ -275,8 +278,7 @@ export function drawWalker(
   // Rotate about the feet, so a lean tips the whole piece like a real standee.
   g.translate(x, y - lift);
   g.rotate(rot);
-  g.scale(Math.max(0.04, sx), sy);
-  g.drawImage(p.c, -p.fx, -p.fy, p.w, p.h);
+  drawLayers(g, p, sx, sy, spin);
   g.restore();
   return lift;
 }

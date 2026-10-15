@@ -28,7 +28,7 @@ import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
 import { chogImage } from '@/lib/images';
 import { Fx } from '../heist/fx';
-import { Sound } from '../heist/sound';
+import { prepareSound, Sound } from '../heist/sound';
 import type { RaidLink, RaidResult } from './raid-link';
 import { powerHint } from './power-fx';
 import { stickPick } from './stick';
@@ -234,6 +234,7 @@ export function RushGame(props: RushGameProps) {
     const cv = canvasRef.current;
     const stage = stageRef.current;
     if (!cv || !stage) return;
+    prepareSound();
     sound.current ??= new Sound();
     try {
       const m = localStorage.getItem('heist-muted') === '1';

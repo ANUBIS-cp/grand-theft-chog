@@ -485,10 +485,26 @@ export class RushRenderer {
           moving: s.me.dir !== -1,
           seed: 0,
           face: s.me.face,
+          turned: this.turnedFor('me', s.me.face, now),
           alpha: flashing ? 0.35 : 1,
         },
         now,
       );
+  }
+
+  /** Which way each piece last faced and when it turned round, for the card's spin. */
+  private faced = new Map<string, { face: number; at: number }>();
+  private turnedFor(key: string, face: number, now: number) {
+    const f = this.faced.get(key);
+    if (!f) {
+      this.faced.set(key, { face, at: -1e9 });
+      return Infinity;
+    }
+    if (f.face !== face) {
+      f.face = face;
+      f.at = now;
+    }
+    return now - f.at;
   }
 
   private guard(x: number, y: number, i: number, s: RushState, now: number, hunt: boolean, human: boolean) {
@@ -526,6 +542,7 @@ export class RushRenderer {
           moving: gd.dir !== -1 && gd.mode !== 'out',
           seed: i * 0.37,
           face: gd.face,
+          turned: this.turnedFor(`g${i}`, gd.face, now),
           alpha: gd.mode === 'out' ? 0.6 : 1,
         },
         now,

@@ -26,6 +26,7 @@ import {
   type Walker,
 } from '@chog-city/game/city';
 import { X } from '@phosphor-icons/react';
+import { Sound } from '@/components/heist/sound';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { GANG_COLOR } from '@/lib/theme';
 import { CityArt } from './art';
@@ -296,6 +297,20 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     s.r = r;
     const body = getComputedStyle(document.body);
     r.font = body.getPropertyValue('--font-display').trim() || 'Impact, sans-serif';
+    // Your footsteps and turns, quiet. The vault's sound button mutes these too.
+    const steps = new Sound();
+    const muted = () => {
+      try {
+        return localStorage.getItem('heist-muted') === '1';
+      } catch {
+        return false;
+      }
+    };
+    r.onStep = (what, style) => {
+      if (live.current.hidden || live.current.paused || muted()) return;
+      if (what === 'step') steps.step(style);
+      else steps.flick();
+    };
     r.bodyFont = body.getPropertyValue('--font-sans').trim() || 'Arial, sans-serif';
     const fit = () => {
       const b = cv.parentElement!.getBoundingClientRect();
