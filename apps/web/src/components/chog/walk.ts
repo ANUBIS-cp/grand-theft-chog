@@ -57,14 +57,16 @@ interface Feel {
   dusty: boolean;
 }
 
+// Steps per tile are kept low: at walking speed (about 4.4 tiles a second) that's 2.5 to 4 steps a second, a
+// calm rhythm. More than that reads as the piece vibrating.
 const FEEL: Record<WalkStyle, Feel> = {
-  swagger: { steps: 1.5, hop: 0.05, squash: 0.04, sway: 0.11, lean: 0.04, hover: 0, dusty: false },
-  glide: { steps: 1.1, hop: 0.015, squash: 0.01, sway: 0.015, lean: 0.12, hover: 0, dusty: false },
-  bounce: { steps: 1.15, hop: 0.3, squash: 0.17, sway: 0.03, lean: 0.05, hover: 0, dusty: false },
-  float: { steps: 0.8, hop: 0.03, squash: 0, sway: 0.03, lean: 0.1, hover: 0.16, dusty: false },
-  stomp: { steps: 2.1, hop: 0.07, squash: 0.13, sway: 0.05, lean: 0.03, hover: 0, dusty: true },
-  zip: { steps: 2.5, hop: 0.11, squash: 0.06, sway: 0.03, lean: 0.11, hover: 0, dusty: false },
-  mope: { steps: 1.3, hop: 0.04, squash: 0.05, sway: 0.06, lean: -0.05, hover: 0, dusty: false },
+  swagger: { steps: 0.75, hop: 0.06, squash: 0.04, sway: 0.09, lean: 0.04, hover: 0, dusty: false },
+  glide: { steps: 0.6, hop: 0.012, squash: 0.01, sway: 0.012, lean: 0.1, hover: 0, dusty: false },
+  bounce: { steps: 0.62, hop: 0.26, squash: 0.14, sway: 0.025, lean: 0.05, hover: 0, dusty: false },
+  float: { steps: 0.5, hop: 0.02, squash: 0, sway: 0.02, lean: 0.08, hover: 0.16, dusty: false },
+  stomp: { steps: 0.85, hop: 0.07, squash: 0.1, sway: 0.04, lean: 0.03, hover: 0, dusty: true },
+  zip: { steps: 0.9, hop: 0.1, squash: 0.05, sway: 0.025, lean: 0.09, hover: 0, dusty: false },
+  mope: { steps: 0.65, hop: 0.04, squash: 0.04, sway: 0.05, lean: -0.05, hover: 0, dusty: false },
 };
 
 export interface WalkState {
@@ -144,9 +146,12 @@ export function stepWalk(
   w.y = y;
   w.dist += moved;
   const sp = dt > 0 ? moved / dt : 0;
-  w.speed += (sp - w.speed) * Math.min(1, dt * 10);
-  w.vx += ((dt > 0 && d < 1.5 ? dx / dt : 0) - w.vx) * Math.min(1, dt * 10);
-  const nowMoving = moving && w.speed > 0.25;
+  // Smoothed hard: other players' positions arrive ten times a second in little jumps, and raw speed
+  // from those flickers, which would make their lean and hop shake.
+  w.speed += (sp - w.speed) * Math.min(1, dt * 4);
+  w.vx += ((dt > 0 && d < 1.5 ? dx / dt : 0) - w.vx) * Math.min(1, dt * 4);
+  // Set off above one speed, stop below a lower one, so it never flips between walking and standing.
+  const nowMoving = w.moving ? moving || w.speed > 0.6 : moving && w.speed > 1.2;
   if (nowMoving !== w.moving) {
     w.moving = nowMoving;
     if (nowMoving) w.startAt = now;
@@ -179,7 +184,15 @@ export function stepWalk(
   if (step !== w.lastStep) {
     w.lastStep = step;
     if (f.dusty && w.moving)
-      out.push({ x, y: y + 0.32, vx: (Math.random() - 0.5) * 0.4, at: now, r: 0.09, color: 'rgba(200,190,220,0.5)', life: 360 });
+      out.push({
+        x,
+        y: y + 0.32,
+        vx: (Math.random() - 0.5) * 0.4,
+        at: now,
+        r: 0.09,
+        color: 'rgba(200,190,220,0.5)',
+        life: 360,
+      });
   }
   if (trail && w.moving && now - w.lastTrail > 70) {
     w.lastTrail = now;
@@ -235,7 +248,8 @@ export function drawWalker(
   let sx = 1 / sy;
   const turned = now - w.turnedAt;
   if (turned < 220) sx *= Math.abs(Math.cos((turned / 220) * Math.PI));
-  if (opts.emoted !== undefined && opts.emoted < 700) rot += Math.sin(opts.emoted / 45) * 0.12 * (1 - opts.emoted / 700);
+  if (opts.emoted !== undefined && opts.emoted < 700)
+    rot += Math.sin(opts.emoted / 45) * 0.12 * (1 - opts.emoted / 700);
   w.lift = lift;
 
   // Shadow: stays on the ground, smaller the higher they are.

@@ -413,6 +413,31 @@ export class CityRenderer {
   }
 
   /** The gang whose front yard (x, y) is in, or null. */
+  private tinted = new Map<string, HTMLCanvasElement>();
+
+  /** The drawn tree with its leaves pushed towards a gang's colour (kept per gang). */
+  private tintedTree(img: HTMLImageElement, gang: GangId): HTMLCanvasElement | HTMLImageElement {
+    const have = this.tinted.get(gang);
+    if (have) return have;
+    const look = treeOf(gang);
+    if (look === treeOf(null)) return img;
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    const g = c.getContext('2d')!;
+    g.drawImage(img, 0, 0);
+    // Recolour with the gang's leaf colour (keeps the drawing's light and shade), then cut back to the tree.
+    g.globalCompositeOperation = 'color';
+    g.globalAlpha = gang === 'skulls' ? 0.9 : 0.7;
+    g.fillStyle = gang === 'skulls' ? '#5a5560' : look.leaves[1]!;
+    g.fillRect(0, 0, c.width, c.height);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'destination-in';
+    g.drawImage(img, 0, 0);
+    this.tinted.set(gang, c);
+    return c;
+  }
+
   private yardGang(x: number, y: number) {
     for (const p of CITY.places)
       if (p.kind === 'gang' && x >= p.x - 1 && x <= p.x + p.w + 1 && y >= p.y + p.h && y <= p.y + p.h + 3.5)
@@ -894,23 +919,32 @@ export class CityRenderer {
     const { g, t } = this;
     const x = this.sx(p.x);
     const y = this.sy(p.y);
-    // Drawn art stands on the prop's spot; trees in a gang's yard keep their code-drawn gang look.
-    const art =
-      p.kind === 'screen' || p.kind === 'post' || (p.kind === 'tree' && this.yardGang(p.x, p.y))
+    // Drawn art stands on the prop's spot; a tree in a gang's yard is the drawn tree tinted in that gang's colours.
+    const yard = p.kind === 'tree' ? this.yardGang(p.x, p.y) : null;
+    const raw =
+      p.kind === 'screen' || p.kind === 'post'
         ? undefined
         : this.art.get(p.kind === 'car' ? `car-${(p.n ?? 0) % 4}` : p.kind);
-    if (art) {
+    const art = raw && yard ? this.tintedTree(raw, yard) : raw;
+    if (art && raw) {
       const tall = ART_TALL[p.kind] * t;
       const wide = ART_WIDE[p.kind] * t;
-      const k = wide ? wide / art.naturalWidth : tall / art.naturalHeight;
-      const w = art.naturalWidth * k;
-      const h = art.naturalHeight * k;
+      const k = wide ? wide / raw.naturalWidth : tall / raw.naturalHeight;
+      const w = raw.naturalWidth * k;
+      const h = raw.naturalHeight * k;
       const foot = p.kind === 'fountain' ? h * 0.5 : t * 0.15;
       g.fillStyle = 'rgba(0,0,0,0.3)';
       g.beginPath();
       g.ellipse(x, y + t * 0.12, Math.max(w * 0.35, t * 0.2), t * 0.14, 0, 0, Math.PI * 2);
       g.fill();
-      g.drawImage(art, x - w / 2, y + foot - h, w, h);
+      if (p.kind === 'tree') {
+        // A gentle sway from the trunk, each tree in its own time.
+        g.save();
+        g.translate(x, y + foot);
+        g.rotate(Math.sin(now / 1700 + p.x * 1.3) * 0.025);
+        g.drawImage(art, -w / 2, -h, w, h);
+        g.restore();
+      } else g.drawImage(art, x - w / 2, y + foot - h, w, h);
       return;
     }
     g.lineWidth = 2;
