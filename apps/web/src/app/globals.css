@@ -312,3 +312,10 @@
     transform: translateY(-28px) scale(0.92);
   }
 }
+
+/* Keyboard hints mean nothing on a touch screen. */
+@media (hover: none) and (pointer: coarse) {
+  .kbd {
+    display: none !important;
+  }
+}

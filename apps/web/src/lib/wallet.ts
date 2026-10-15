@@ -47,6 +47,42 @@ export function discoverWallets(onChange: (list: WalletOption[]) => void): () =>
   };
 }
 
+/** WalletConnect (Reown) project: lets phone browsers log in with a wallet app. Not a secret. */
+const WC_PROJECT = process.env.NEXT_PUBLIC_WC_PROJECT_ID ?? 'da4e2d280f0359a97043c8c1ad3122a0';
+type WcProvider = Eip1193 & { connected?: boolean; accounts?: string[] };
+let wc: Promise<WcProvider> | null = null;
+
+/** WalletConnect as one more wallet: a QR code on a computer, or straight into the wallet app on a phone. */
+export function walletConnectOption(): WalletOption {
+  const provider: Eip1193 = {
+    async request(args) {
+      wc ??= import('@walletconnect/ethereum-provider').then(({ EthereumProvider }) =>
+        EthereumProvider.init({
+          projectId: WC_PROJECT,
+          chains: [143],
+          showQrModal: true,
+          rpcMap: { 143: 'https://rpc.monad.xyz' },
+          metadata: {
+            name: 'Chog World',
+            description: 'Rob rival gangs with your Chog.',
+            url: window.location.origin,
+            icons: [`${window.location.origin}/icon.png`],
+          },
+        }),
+      ) as unknown as Promise<WcProvider>;
+      const p = await wc!;
+      if (args.method === 'eth_requestAccounts' && !p.connected)
+        await (p as unknown as { enable(): Promise<string[]> }).enable();
+      return p.request(args);
+    },
+  };
+  return { id: 'walletconnect', name: 'Phone wallet (WalletConnect)', icon: null, provider };
+}
+
+/** True on a phone or tablet browser. */
+export const onPhone = () =>
+  typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
 export class LoginError extends Error {}
 
 /** Connect, sign one message (no gas, no tokens move), and start a session. */
@@ -106,6 +142,10 @@ const MONAD = {
 
 /** The wallet that holds `address` (the one you logged in with), found again after a page load. */
 async function walletFor(address: string): Promise<Eip1193> {
+  if (wc) {
+    const p = await wc;
+    if (p.connected && p.accounts?.some((a) => a.toLowerCase() === address.toLowerCase())) return p;
+  }
   const list = await new Promise<WalletOption[]>((ok) => {
     let last: WalletOption[] = [];
     const stop = discoverWallets((l) => (last = l));
@@ -119,8 +159,8 @@ async function walletFor(address: string): Promise<Eip1193> {
     if (acc.some((a) => a.toLowerCase() === address.toLowerCase())) return w.provider;
   }
   const first = list[0]?.provider;
-  if (!first) throw new LoginError('No wallet found in this browser.');
-  return first;
+  // No wallet in this browser (a phone): use WalletConnect.
+  return first ?? walletConnectOption().provider;
 }
 
 /**

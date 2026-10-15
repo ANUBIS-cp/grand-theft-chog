@@ -303,6 +303,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         s.keys.add(e.code);
         s.path = [];
         s.target = null;
+        s.intent = null;
       } else s.keys.delete(e.code);
     };
     const kd = (e: KeyboardEvent) => onKey(e, true);
@@ -380,7 +381,8 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       if (door !== s.door) {
         s.door = door;
         p.onDoor(door, !!door && s.intent === door.id);
-        if (door) s.intent = null;
+        // Passing someone else's door on the way doesn't count: only arriving at the one you asked for.
+        if (door && s.intent === door.id) s.intent = null;
       }
       const area = areaAt(s.x, s.y);
       if (area !== s.area) {

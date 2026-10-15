@@ -1,4 +1,4 @@
-import { displayName, gangOptions, getChog } from '@chog-city/data';
+import { GANGS, displayName, gangOptions, getChog, hasTrait } from '@chog-city/data';
 import { chogInfo } from '@chog-city/game';
 import { powersFor } from '@chog-city/game/heist';
 import { chogsFor, hitToday, revengeTargets } from '@chog-city/server';
@@ -37,6 +37,13 @@ export async function GET() {
         name: displayName(chog),
         gang: r?.gang && opts.born.includes(r.gang) ? r.gang : null,
         gangChoices: opts.born,
+        // What it wears that puts it in each gang, for the gang picker ("Crown", "Purple laser").
+        gangWhy: Object.fromEntries(
+          opts.born.map((g) => {
+            const hit = GANGS[g].from.filter((m) => hasTrait(chog.traits, m)).map(([, v]) => v);
+            return [g, hit.length ? hit : ['No gang trait']];
+          }),
+        ),
         jailedUntil: r?.jailedUntil && r.jailedUntil.getTime() > now ? r.jailedUntil.getTime() : null,
         hitToday: hit.get(m.tokenId) ?? [],
         powers: powersFor(chogInfo(m.tokenId).skills),

@@ -47,8 +47,8 @@ export default async function ReplayPage({ params }: Props) {
   };
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-[#0b0918]">
-      <header className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-1.5 text-[13px] text-white/70 sm:px-4">
-        <Link href="/" className="font-display text-[18px] uppercase leading-none text-white">
+      <header className="glass z-10 m-2 flex items-center justify-between gap-3 rounded-full px-4 py-2 text-[13px] text-label-2">
+        <Link href="/" className="font-display text-[13px] leading-none text-white">
           Chog World
         </Link>
         <p className="min-w-0 truncate">

@@ -47,7 +47,7 @@ export default async function HeistPage({
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-[#0b0918]">
       <header className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-1.5 text-[13px] text-white/70 sm:px-4">
-        <Link href="/" className="font-display text-[18px] uppercase leading-none text-white">
+        <Link href="/" className="font-display text-[13px] leading-none text-white">
           Chog World
         </Link>
         <form action="/heist" className="flex items-center gap-1.5">

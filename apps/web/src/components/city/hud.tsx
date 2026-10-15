@@ -153,7 +153,7 @@ export function MiniMap(props: { area: string; online: string; dot: string; onOp
       >
         <canvas id="city-minimap" className="h-full w-full rounded-full" />
         <span className="pointer-events-none absolute inset-[5px] rounded-full shadow-[inset_0_0_0_0.5px_rgba(255,255,255,0.2),inset_0_0_20px_rgba(0,0,0,0.55)]" />
-        <span className="absolute bottom-1 right-1 grid h-6 min-w-6 place-items-center rounded-[7px] bg-white px-1 text-[12px] font-bold text-black shadow-[0_2px_8px_rgba(0,0,0,0.4)]">
+        <span className="kbd absolute bottom-1 right-1 grid h-6 min-w-6 place-items-center rounded-[7px] bg-white px-1 text-[12px] font-bold text-black shadow-[0_2px_8px_rgba(0,0,0,0.4)]">
           M
         </span>
       </button>
@@ -221,7 +221,7 @@ export function RoundButton(props: {
           style={props.tone && !solid ? { color: props.tone } : undefined}
         />
         {props.hotkey && (
-          <span className="absolute -right-0.5 -top-0.5 grid h-[20px] min-w-[20px] place-items-center rounded-[6px] bg-white/90 px-1 text-[11px] font-bold text-black shadow-[0_2px_6px_rgba(0,0,0,0.35)]">
+          <span className="kbd absolute -right-0.5 -top-0.5 grid h-[20px] min-w-[20px] place-items-center rounded-[6px] bg-white/90 px-1 text-[11px] font-bold text-black shadow-[0_2px_6px_rgba(0,0,0,0.35)]">
             {props.hotkey}
           </span>
         )}

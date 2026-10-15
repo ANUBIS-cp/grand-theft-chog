@@ -76,6 +76,7 @@ interface MyChog {
   name: string;
   gang: GangId | null;
   gangChoices: GangId[];
+  gangWhy?: Record<string, string[]>;
   jailedUntil: number | null;
   hitToday: GangId[];
   powers: PowerId[];
@@ -755,7 +756,7 @@ export function CityApp() {
             </p>
             {link.status === 'failed' && (
               <button onClick={leave} className={cn(btn, 'mt-5 btn-gold')}>
-                <span className="pt-0.5">Back to the city</span>
+                <span>Back to the city</span>
               </button>
             )}
           </div>
@@ -997,7 +998,7 @@ export function CityApp() {
               onClick={() => setSheet('connect')}
               className={cn(btn, 'pointer-events-auto btn-sm btn-gold')}
             >
-              <span className="pt-0.5">Connect wallet</span>
+              <span>Connect wallet</span>
             </button>
           </div>
         )}
@@ -1016,7 +1017,7 @@ export function CityApp() {
       </div>
 
       {practiceRun && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[118px] z-30 flex justify-center px-3 sm:bottom-auto sm:top-[96px]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-[160px] z-30 flex justify-center px-3 xl:bottom-auto xl:top-[96px]">
           <RunBar
             line={`Practice: get to ${practiceRun.to}. Follow the arrow, dodge the police.`}
             since={practiceRun.since}
@@ -1027,7 +1028,7 @@ export function CityApp() {
 
       {/* Getaways: yours (run it home), one from your vault (stop them), or anyone's (a heads-up). */}
       {chases.length > 0 && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[118px] z-30 flex flex-col items-center gap-2 px-3 sm:bottom-auto sm:top-[96px]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-[160px] z-30 flex flex-col items-center gap-2 px-3 xl:bottom-auto xl:top-[96px]">
           {chases
             .filter((c) => c === myChase || (chog?.gang && c.from === chog.gang) || chases.length < 3)
             .slice(0, 3)
@@ -1049,7 +1050,7 @@ export function CityApp() {
       )}
 
       {/* Top middle: comic banners */}
-      <div className="pointer-events-none absolute inset-x-0 top-[148px] z-30 flex justify-center px-3 sm:top-4">
+      <div className="pointer-events-none absolute inset-x-0 bottom-[260px] z-30 flex justify-center px-3 xl:bottom-auto xl:top-4">
         {raid ? (
           <Banner
             b={{
@@ -1198,11 +1199,11 @@ export function CityApp() {
             Walk with the arrow keys or WASD, or tap where you want to go.
           </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
-            <button onClick={() => setSheet('connect')} className={cn(btn, 'btn-gold')}>
-              <span className="pt-0.5">Connect wallet</span>
+            <button onClick={() => setSheet('connect')} className={cn(btn, 'btn-gold whitespace-nowrap')}>
+              <span>Connect</span>
             </button>
             <button onClick={closeWelcome} className={cn(btn, 'btn-glass')}>
-              <span className="pt-0.5">Look around</span>
+              <span>Look around</span>
             </button>
           </div>
         </Card>
@@ -1213,18 +1214,29 @@ export function CityApp() {
         <Card>
           <h2 className="font-display text-[21px] leading-none">Pick {chog.name}’s gang</h2>
           <p className="mt-1.5 text-[14px] text-white/70">
-            From its traits. This is for good: a Chog reps one gang.
+            Its gang comes from what it wears. Pick carefully: a Chog reps one gang for good.
           </p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {chog.gangChoices.map((g) => (
+          <div className={cn('mt-4 grid gap-2.5', chog.gangChoices.length > 1 && 'grid-cols-2')}>
+            {chog.gangChoices.map((g, i) => (
               <button
                 key={g}
                 disabled={busy === 'gang'}
                 onClick={() => void pickGang(g)}
-                className="rounded-[10px] px-3 pb-2 pt-3 text-left font-display text-[15px] leading-none"
-                style={{ background: GANG_COLOR[g].bg, color: GANG_COLOR[g].fg }}
+                className="press group relative overflow-hidden rounded-[22px] p-3 text-left ring-1 ring-inset ring-white/10 hover:ring-white/30 disabled:opacity-50"
+                style={{
+                  background: `linear-gradient(165deg, ${GANG_COLOR[g].bg}66, ${GANG_COLOR[g].bg}14)`,
+                  animation: `glass-in 420ms ${i * 60}ms cubic-bezier(.2,.9,.3,1) both`,
+                }}
               >
-                {GANGS[g].name}
+                <img
+                  src={`/art/city/gang-${g}.webp`}
+                  alt=""
+                  className="mx-auto h-[74px] w-full object-contain drop-shadow-[0_8px_12px_rgba(0,0,0,0.45)] transition-transform duration-500 ease-[cubic-bezier(.2,.9,.3,1.2)] group-hover:scale-105"
+                />
+                <span className="mt-2 block font-display text-[17px] leading-tight">{GANGS[g].name}</span>
+                <span className="mt-0.5 block truncate text-[12px] text-label-2">
+                  {(chog.gangWhy?.[g] ?? []).map((t) => t.charAt(0).toUpperCase() + t.slice(1)).join(', ')}
+                </span>
               </button>
             ))}
           </div>
@@ -1252,18 +1264,13 @@ export function CityApp() {
 
       {sheet === 'connect' && (
         <Sheet title="Connect wallet" onClose={() => setSheet(null)}>
-          <p className="mb-3 text-[14px] text-white/70">
-            Walk in as your own Chog. Logging in is free and moves no tokens.
-          </p>
-          <div className="rounded-[20px] bg-white text-[#15131f]">
-            <ConnectPanel
-              onLoggedIn={() => {
-                setSheet(null);
-                closeWelcome();
-                void loadMe();
-              }}
-            />
-          </div>
+          <ConnectPanel
+            onLoggedIn={() => {
+              setSheet(null);
+              closeWelcome();
+              void loadMe();
+            }}
+          />
         </Sheet>
       )}
 
@@ -1712,7 +1719,7 @@ function DoorCard(props: {
             'mt-4 w-full btn-gold !bg-[linear-gradient(180deg,#7cf0c4,#34c79a)] !text-[#032a1e]',
           )}
         >
-          <span className="pt-0.5">Start practice</span>
+          <span>Start practice</span>
         </button>
       </>
     );
@@ -1827,14 +1834,14 @@ function DoorCard(props: {
         <div className="mt-2 grid grid-cols-2 gap-2">
           {mine && props.loggedIn && !props.jailedNow && (
             <button onClick={() => props.onDefendRaid(props.robbing!)} className={cn(btn, 'btn-primary')}>
-              <span className="pt-0.5">Defend</span>
+              <span>Defend</span>
             </button>
           )}
           <button
             onClick={() => props.onWatch(props.robbing!)}
             className={cn(btn, 'btn-glass', !(mine && props.loggedIn) && 'col-span-2')}
           >
-            <span className="pt-0.5">Watch live</span>
+            <span>Watch live</span>
           </button>
         </div>
       )}
@@ -1861,7 +1868,7 @@ function DoorCard(props: {
         </>
       ) : block === 'connect' ? (
         <button onClick={props.onConnect} className={cn(btn, 'mt-4 w-full btn-gold')}>
-          <span className="pt-0.5">Connect wallet to rob it</span>
+          <span>Connect wallet to rob it</span>
         </button>
       ) : (
         <>
@@ -1880,7 +1887,7 @@ function DoorCard(props: {
             )}
           >
             <Vault size={20} weight="fill" />
-            <span className="pt-0.5">{props.busy === gang ? 'Opening…' : 'Rob the vault'}</span>
+            <span>{props.busy === gang ? 'Opening…' : 'Rob the vault'}</span>
           </button>
           {block && <p className="mt-2 text-center text-[13px] text-white/60">{block}</p>}
         </>

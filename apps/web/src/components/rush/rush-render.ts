@@ -419,7 +419,7 @@ export class RushRenderer {
     g.save();
     g.font = `600 ${fs}px ${UI_FONT}`;
     const nw = g.measureText(h.name).width;
-    const kw = fs * 1.5;
+    const kw = h.key ? fs * 1.5 : -fs * 0.45;
     const pad = fs * 0.45;
     const w = kw + pad * 3 + nw;
     const bh = fs * 2;
@@ -439,12 +439,14 @@ export class RushRenderer {
     g.strokeStyle = 'rgba(255,255,255,0.16)';
     g.lineWidth = 1;
     g.stroke();
-    // The key cap.
+    // The key cap (none on a touch screen).
     const kx = x - w / 2 + pad;
     g.fillStyle = '#ffffff';
-    g.beginPath();
-    g.roundRect(kx, by + (bh - kw) / 2, kw, kw, fs * 0.35);
-    g.fill();
+    if (h.key) {
+      g.beginPath();
+      g.roundRect(kx, by + (bh - kw) / 2, kw, kw, fs * 0.35);
+      g.fill();
+    }
     g.fillStyle = '#111018';
     g.textAlign = 'center';
     g.textBaseline = 'middle';

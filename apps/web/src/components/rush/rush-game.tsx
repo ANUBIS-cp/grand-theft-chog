@@ -373,7 +373,11 @@ export function RushGame(props: RushGameProps) {
       st.r?.draw(st.s, st.prev, Math.min(1, acc / (DT * 1000)), st.fx, now, {
         defenders: humans,
         follow: mine >= 0 ? st.s.guards[mine] : undefined,
-        hint: hp && { key: POWER_KEY_LABEL[hi] ?? String(hi + 1), name: RUSH_POWERS[hp.id].name },
+        // On a touch screen there are no keys: the bubble just names the power (its button glows too).
+        hint: hp && {
+          key: matchMedia('(pointer: coarse)').matches ? '' : (POWER_KEY_LABEL[hi] ?? String(hi + 1)),
+          name: RUSH_POWERS[hp.id].name,
+        },
       });
       // The dial's needle turns every frame, outside React.
       const safe = st.s.safe;
@@ -968,7 +972,7 @@ export function RushGame(props: RushGameProps) {
                         {wait}
                       </span>
                     )}
-                    <span className="absolute -right-1 -top-1 grid h-6 w-6 place-items-center rounded-[7px] bg-white text-[12px] font-bold text-[#111018] shadow-[0_2px_6px_rgba(0,0,0,0.35)]">
+                    <span className="kbd absolute -right-1 -top-1 grid h-6 w-6 place-items-center rounded-[7px] bg-white text-[12px] font-bold text-[#111018] shadow-[0_2px_6px_rgba(0,0,0,0.35)]">
                       {POWER_KEY_LABEL[i] ?? i + 1}
                     </span>
                   </span>
@@ -1001,7 +1005,7 @@ export function RushGame(props: RushGameProps) {
           >
             {role === 'defend' ? 'Dash' : hud?.dialing ? 'Crack' : 'Use'}
           </span>
-          <span className="rounded-[6px] bg-white/10 px-1.5 py-0.5 text-[11px] font-semibold text-white/70">
+          <span className="kbd rounded-[6px] bg-white/10 px-1.5 py-0.5 text-[11px] font-semibold text-white/70">
             Space
           </span>
         </button>
@@ -1259,10 +1263,7 @@ function ViewerEnd(props: {
             ? `${viewer.robber} got out${viewer.result?.moved ? ` with ${money(viewer.result.moved)}` : ''}.`
             : `${viewer.robber} is off to jail${viewer.result?.moved ? ` and their gang paid ${money(viewer.result.moved)}` : ''}.`}
         </p>
-        <button
-          onClick={props.onLeave}
-          className="btn press btn-primary mt-5 w-full"
-        >
+        <button onClick={props.onLeave} className="btn press btn-primary mt-5 w-full">
           <span className="pt-1">Back to the city</span>
         </button>
       </div>
@@ -1422,10 +1423,7 @@ function EndCard(props: {
           </>
         ) : props.onGetaway && escaped && !replay ? (
           <>
-            <button
-              onClick={props.onGetaway}
-              className="btn press btn-gold mt-5 w-full animate-pulse"
-            >
+            <button onClick={props.onGetaway} className="btn press btn-gold mt-5 w-full animate-pulse">
               <span className="pt-1">Now run it home!</span>
             </button>
             <p className="mt-2 text-[13px] text-label-2">
@@ -1440,10 +1438,7 @@ function EndCard(props: {
           </>
         ) : (
           <>
-            <button
-              onClick={props.onAgain}
-              className="btn press btn-primary mt-5 w-full"
-            >
+            <button onClick={props.onAgain} className="btn press btn-primary mt-5 w-full">
               <ArrowClockwise size={20} weight="bold" />
               <span className="pt-1">{replay ? 'Watch again' : 'Again'}</span>
             </button>
