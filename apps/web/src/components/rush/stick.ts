@@ -62,7 +62,6 @@ export function readStick(l: StickState, fx: number, fy: number): Dir[] {
   return (l.held = a < 45 ? [h, v] : [v, h]);
 }
 
-const sameAxis = (a: Dir, b: Dir) => (DIRS[a][0] !== 0) === (DIRS[b][0] !== 0);
 const centre = (v: number) => Math.floor(v) + 0.5;
 
 /** Could you turn `d` right now (the same rule the vault uses: near enough a tile's middle, and open)? */
