@@ -30,6 +30,8 @@ export interface Person {
   cop?: boolean;
   /** Carrying a bag of stolen cash home: how much (shown over their head for everyone). */
   bag?: number;
+  /** A Wanted poster ($CHOG) is up on this Chog: a poster tag next to its name. */
+  wanted?: boolean;
 }
 
 export type { Emote } from '@chog-city/game/city';
@@ -46,6 +48,8 @@ export interface PlaceLook {
   /** Someone is robbing it right now. */
   alarm: boolean;
   mine: boolean;
+  /** The gang flies a banner ($CHOG) today: a flag over the building. */
+  banner?: boolean;
 }
 
 export interface Board {
@@ -484,6 +488,40 @@ export class CityRenderer {
     g.roundRect(W / 2 - rw / 2, ry - size * 0.75, rw, size * 1.5, size * 0.4);
     g.fill();
     g.stroke();
+    if (look.banner) {
+      // A banner bought with $CHOG: a big waving flag in the gang's colour on a pole above the sign.
+      const px = W / 2 - rw / 2 + size * 0.3;
+      const top = ry - size * 4.2;
+      const wave = performance.now() / 260;
+      g.lineWidth = 3;
+      g.strokeStyle = INK;
+      g.beginPath();
+      g.moveTo(px, ry - size * 0.75);
+      g.lineTo(px, top);
+      g.stroke();
+      g.fillStyle = '#ffd23f';
+      g.beginPath();
+      g.arc(px, top, size * 0.22, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+      const fw = size * 3.4;
+      const fh = size * 1.9;
+      g.fillStyle = look.color;
+      g.lineWidth = 2.5;
+      g.beginPath();
+      g.moveTo(px, top + size * 0.2);
+      for (let i = 1; i <= 8; i++) g.lineTo(px + (fw * i) / 8, top + size * 0.2 + Math.sin(wave + i * 0.7) * size * 0.18);
+      g.lineTo(px + fw - size * 0.6, top + size * 0.2 + fh / 2);
+      for (let i = 8; i >= 0; i--)
+        g.lineTo(px + (fw * i) / 8, top + size * 0.2 + fh + Math.sin(wave + i * 0.7) * size * 0.18);
+      g.closePath();
+      g.fill();
+      g.stroke();
+      g.fillStyle = look.ink;
+      g.font = `${Math.round(size * 1.1)}px ${this.font}`;
+      g.fillText('★', px + fw * 0.42, top + size * 0.2 + fh / 2 + Math.sin(wave + 3) * size * 0.18);
+      g.font = `${size}px ${this.font}`;
+    }
     g.fillStyle = look.ink;
     g.fillText(name, W / 2, ry + 1, rw - size);
     // Rank badge, gold for the richest.
@@ -1336,6 +1374,30 @@ export class CityRenderer {
       g.stroke();
       g.fillStyle = INK;
       g.fillText(label, x, by + 1);
+    }
+    if (p.wanted) {
+      // A little torn poster pinned beside the name: WANTED in red.
+      const ps = Math.round(size * 0.95);
+      g.font = `${ps}px ${this.font}`;
+      const pw = g.measureText('WANTED').width + ps * 0.9;
+      const ph = ps * 1.5;
+      g.save();
+      g.translate(x + w / 2 + pw / 2 + 2, ty);
+      g.rotate(0.12 + Math.sin(now / 420) * 0.04);
+      g.fillStyle = '#f3e3b5';
+      g.strokeStyle = INK;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.roundRect(-pw / 2, -ph / 2, pw, ph, 2);
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#c1121f';
+      g.fillText('WANTED', 0, 1);
+      g.fillStyle = INK;
+      g.beginPath();
+      g.arc(0, -ph / 2 + 1, 2, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
     }
     if (p.emote && now - p.emote.at < 3500)
       this.drawEmote(p.emote.kind, x, ty - h / 2 - t * 0.5, now - p.emote.at);

@@ -1,5 +1,5 @@
 'use client';
-import { GANGS, GANG_IDS, type GangId } from '@chog-city/data';
+import { GANGS, GANG_IDS, metadataIdFor, type GangId } from '@chog-city/data';
 import { CITY, EMOTES, HEAD_START, getawayTime, placeOf, type Emote, type Place } from '@chog-city/game/city';
 import { encodeLock, lockFor, type LockKind } from '@chog-city/game/lock';
 import { RUSH_BANK, rushRules, rushSeed } from '@chog-city/game/rush';
@@ -32,6 +32,7 @@ import { useLive } from '@/lib/live';
 import { GANG_COLOR } from '@/lib/theme';
 import { ago, formatLeft } from '@/lib/time';
 import { logOut } from '@/lib/wallet';
+import { BurnButton, PosterPicker, type Burns } from './burn';
 import type { PlaceLook } from './city-render';
 import { CityView, type CityHandle, type Jailed, type Stroller, type Tapped } from './city-view';
 import {
@@ -111,6 +112,7 @@ interface CityData {
   strollers: Stroller[];
   jailed: Jailed[];
   practice: { id: number; name: string; powers: PowerId[] };
+  burns: Burns;
 }
 
 const POWER_ICON: Record<PowerId, Parameters<typeof SkillIcon>[0]['skill']> = {
@@ -252,6 +254,11 @@ export function CityApp() {
     const r = await fetch('/api/city', { cache: 'no-store' });
     if (r.ok) setCity(await r.json());
   }, []);
+  /** A $CHOG burn went through: fresh posters, banners and jail time. */
+  const burned = useCallback(() => {
+    void loadCity();
+    void loadMe();
+  }, [loadCity, loadMe]);
 
   useEffect(() => {
     void loadBoard();
@@ -385,10 +392,11 @@ export function CityApp() {
         rank: i + 1,
         alarm: !!alarms[v.gang] && alarms[v.gang]!.since > now - 180_000,
         mine: chog?.gang === v.gang,
+        banner: !!city?.burns.banners.some((b) => b.gang === v.gang && b.until > now),
       };
     });
     return out;
-  }, [board, chog?.gang, alarms, now]);
+  }, [board, chog?.gang, alarms, now, city?.burns]);
   const screen = useMemo(
     () => ({
       lines: (board?.board ?? [])
@@ -603,7 +611,8 @@ export function CityApp() {
       duties.push({
         key: 'jail',
         label: 'Sit out your jail time',
-        sub: `Out in ${formatLeft(chog.jailedUntil! - now)}`,
+        sub: `Out in ${formatLeft(chog.jailedUntil! - now)}, or bail out with $CHOG`,
+        onGo: () => setSheet('me'),
       });
     const hit = chog.hitToday;
     const next = board?.board.find((v) => v.gang !== gang && !hit.includes(v.gang));
@@ -904,6 +913,7 @@ export function CityApp() {
         strollers={city?.strollers ?? []}
         jailed={city?.jailed ?? []}
         places={looks}
+        wanted={city?.burns.posters.map((p) => p.chog)}
         board={screen}
         paused={!!sheet || !!peek || mapOpen || (!!chog && !chog.gang)}
         onDoor={(p, asked) => {
@@ -1120,6 +1130,13 @@ export function CityApp() {
             onDefendRaid={(r) => void defend(r)}
             info={gangInfo && gangInfo.gang === door.gang ? gangInfo.data : undefined}
             robbing={door.gang ? alarms[door.gang] : undefined}
+            burns={city?.burns}
+            address={me?.address ?? null}
+            onBurned={burned}
+            onPoster={(who) => {
+              setDoorOpen(false);
+              setPeek(who);
+            }}
           />
         </Card>
       )}
@@ -1179,7 +1196,15 @@ export function CityApp() {
 
       {peek !== null && (
         <Card onClose={() => setPeek(null)}>
-          <Peek who={peek} jailed={city?.jailed ?? []} now={now} />
+          <Peek
+            who={peek}
+            jailed={city?.jailed ?? []}
+            now={now}
+            burns={city?.burns}
+            address={me?.address ?? null}
+            mine={!!me?.chogs.some((c) => c.id === peek.chog)}
+            onBurned={burned}
+          />
         </Card>
       )}
 
@@ -1230,7 +1255,15 @@ export function CityApp() {
               ))}
             </div>
           )}
-          {chog && <ChogCard chog={chog} now={now} />}
+          {chog && (
+            <ChogCard
+              chog={chog}
+              now={now}
+              address={me?.address ?? null}
+              burns={city?.burns}
+              onBurned={burned}
+            />
+          )}
           {me?.address && (
             <button
               className="mt-5 inline-flex items-center gap-1.5 text-[13px] text-white/60 hover:text-white"
@@ -1514,7 +1547,14 @@ function Sheet({
   );
 }
 
-function ChogCard({ chog, now }: { chog: MyChog; now: number }) {
+function ChogCard(props: {
+  chog: MyChog;
+  now: number;
+  address: string | null;
+  burns?: Burns;
+  onBurned: () => void;
+}) {
+  const { chog, now } = props;
   return (
     <div className="rounded-[14px] border-2 border-ink bg-[#1d1838] p-3 shadow-[3px_3px_0_0_#000]">
       <div className="flex items-center gap-3">
@@ -1562,6 +1602,17 @@ function ChogCard({ chog, now }: { chog: MyChog; now: number }) {
           <Lock size={14} weight="fill" /> In jail, out in {formatLeft(chog.jailedUntil - now)}
         </p>
       )}
+      {chog.jailedUntil && chog.jailedUntil > now && props.burns && (
+        <BurnButton
+          kind="bail"
+          chogId={chog.id}
+          address={props.address}
+          price={props.burns.prices.bail}
+          label="Bail out now"
+          className="mt-2"
+          onDone={props.onBurned}
+        />
+      )}
     </div>
   );
 }
@@ -1586,6 +1637,10 @@ function DoorCard(props: {
   onDefendRaid: (r: Robbing) => void;
   info?: GangInfo;
   robbing?: Robbing;
+  burns?: Burns;
+  address: string | null;
+  onBurned: () => void;
+  onPoster: (who: Tapped) => void;
 }) {
   const { place, row, chog } = props;
   if (place.kind === 'training')
@@ -1743,7 +1798,17 @@ function DoorCard(props: {
             now={props.now}
             onDefend={props.onDefend}
           />
-          <HomeInfo gang={gang} info={props.info} now={props.now} />
+          {chog && props.burns && (
+            <GangBanner
+              gang={gang}
+              chogId={chog.id}
+              burns={props.burns}
+              address={props.address}
+              now={props.now}
+              onDone={props.onBurned}
+            />
+          )}
+          <HomeInfo gang={gang} info={props.info} now={props.now} onPoster={props.onPoster} />
         </>
       ) : block === 'connect' ? (
         <button onClick={props.onConnect} className={cn(btn, 'mt-4 w-full bg-[#ffd666] text-ink')}>
@@ -1822,7 +1887,49 @@ function Defend(props: {
   );
 }
 
-function HomeInfo({ gang, info, now }: { gang: GangId; info?: GangInfo; now: number }) {
+/** Fly your gang's banner over its building for a day ($CHOG). */
+function GangBanner(props: {
+  gang: GangId;
+  chogId: number;
+  burns: Burns;
+  address: string | null;
+  now: number;
+  onDone: () => void;
+}) {
+  const up = props.burns.banners.find((b) => b.gang === props.gang && b.until > props.now);
+  return (
+    <div className="mt-3 rounded-[10px] border-2 border-white/10 p-2.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-[12px] uppercase tracking-wide text-white/50">Gang banner for 24 hours</div>
+        {up && <div className="text-[12px] text-white/60">{formatLeft(up.until - props.now)} left</div>}
+      </div>
+      <p className="mt-1 text-[12px] leading-snug text-white/55">
+        A big flag over {GANGS[props.gang].name}’s building that the whole city sees.
+      </p>
+      <BurnButton
+        kind="banner"
+        chogId={props.chogId}
+        address={props.address}
+        price={props.burns.prices.banner}
+        label={up ? 'Another day' : 'Fly the banner'}
+        className="mt-2"
+        onDone={props.onDone}
+      />
+    </div>
+  );
+}
+
+function HomeInfo({
+  gang,
+  info,
+  now,
+  onPoster,
+}: {
+  gang: GangId;
+  info?: GangInfo;
+  now: number;
+  onPoster: (who: Tapped) => void;
+}) {
   if (!info) return <div className="mt-3 h-24 animate-pulse rounded-[8px] bg-white/5" />;
   const robbed = info.hits.filter((h) => h.target === gang && h.result === 'escaped').slice(0, 3);
   return (
@@ -1863,6 +1970,19 @@ function HomeInfo({ gang, info, now }: { gang: GangId; info?: GangInfo; now: num
                   <Play size={11} weight="fill" className="text-white/70" />
                   <span className="text-white/50">{ago(h.at, now)}</span>
                 </Link>
+                <button
+                  onClick={() =>
+                    onPoster({
+                      chog: h.chogId,
+                      name: `Chog #${metadataIdFor(h.chogId)}`,
+                      gang: h.gang,
+                      player: false,
+                    })
+                  }
+                  className="mt-0.5 rounded-[5px] bg-[#f3e3b5] px-1.5 pt-0.5 font-display text-[12px] uppercase leading-tight text-[#c1121f]"
+                >
+                  Wanted poster
+                </button>
               </li>
             ))}
           </ul>
@@ -1872,41 +1992,57 @@ function HomeInfo({ gang, info, now }: { gang: GangId; info?: GangInfo; now: num
   );
 }
 
-function Peek({ who, jailed, now }: { who: Tapped; jailed: Jailed[]; now: number }) {
+function Peek(props: {
+  who: Tapped;
+  jailed: Jailed[];
+  now: number;
+  burns?: Burns;
+  address: string | null;
+  mine: boolean;
+  onBurned: () => void;
+}) {
+  const { who, jailed, now } = props;
   const j = jailed.find((x) => x.id === who.chog && x.until > now);
   return (
-    <div className="flex items-center gap-3 pr-8">
-      <img
-        src={chogImage(who.chog, 256)}
-        alt=""
-        className="h-20 w-20 shrink-0 rounded-[10px] border-2 border-ink"
-      />
-      <div className="min-w-0">
-        <div className="truncate font-display text-[24px] uppercase leading-none">{who.name}</div>
-        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-          {who.gang && (
-            <span
-              className="rounded-[5px] border-2 border-ink px-1.5 pt-1 font-display text-[13px] uppercase leading-none"
-              style={{ background: GANG_COLOR[who.gang].bg, color: GANG_COLOR[who.gang].fg }}
-            >
-              {GANGS[who.gang].name}
-            </span>
+    <>
+      <div className="flex items-center gap-3 pr-8">
+        <img
+          src={chogImage(who.chog, 256)}
+          alt=""
+          className="h-20 w-20 shrink-0 rounded-[10px] border-2 border-ink"
+        />
+        <div className="min-w-0">
+          <div className="truncate font-display text-[24px] uppercase leading-none">{who.name}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {who.gang && (
+              <span
+                className="rounded-[5px] border-2 border-ink px-1.5 pt-1 font-display text-[13px] uppercase leading-none"
+                style={{ background: GANG_COLOR[who.gang].bg, color: GANG_COLOR[who.gang].fg }}
+              >
+                {GANGS[who.gang].name}
+              </span>
+            )}
+            {who.player && (
+              <span className="rounded-full bg-[#3ddc84] px-1.5 py-0.5 text-[11px] font-bold uppercase text-ink">
+                Playing now
+              </span>
+            )}
+          </div>
+          {j && (
+            <p className="mt-1 text-[13px] text-[#ff8a80]">In jail, out in {formatLeft(j.until - now)}</p>
           )}
-          {who.player && (
-            <span className="rounded-full bg-[#3ddc84] px-1.5 py-0.5 text-[11px] font-bold uppercase text-ink">
-              Playing now
-            </span>
-          )}
+          <Link
+            href={`/chog/${who.chog}`}
+            className="mt-2 flex items-center gap-1 text-[14px] font-semibold underline"
+          >
+            See its record <ArrowSquareOut size={14} />
+          </Link>
         </div>
-        {j && <p className="mt-1 text-[13px] text-[#ff8a80]">In jail, out in {formatLeft(j.until - now)}</p>}
-        <Link
-          href={`/chog/${who.chog}`}
-          className="mt-2 flex items-center gap-1 text-[14px] font-semibold underline"
-        >
-          See its record <ArrowSquareOut size={14} />
-        </Link>
       </div>
-    </div>
+      {who.gang && !props.mine && props.burns && props.address && (
+        <PosterPicker chogId={who.chog} burns={props.burns} address={props.address} onDone={props.onBurned} />
+      )}
+    </>
   );
 }
 

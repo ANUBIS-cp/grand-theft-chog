@@ -69,15 +69,23 @@ export function spawnCops(
   tier: number,
   rand: () => number,
   firstId: number,
+  /** A Wanted poster is up on you: one more cop on the chase. */
+  wanted = false,
 ): Cop[] {
-  const jobs: Cop['job'][] = ['chase', 'chase', 'cut', ...(tier >= 2 ? (['door'] as const) : [])];
+  const jobs: Cop['job'][] = [
+    'chase',
+    'chase',
+    'cut',
+    ...(tier >= 2 ? (['door'] as const) : []),
+    ...(wanted ? (['chase'] as const) : []),
+  ];
   const far = roadSpots(from.door.x, from.door.y, 14, 26);
   return jobs.map((job, i) => {
     // Chasers come out of the robbed building's door; the cut-off cop starts out in the streets; the door
     // guard starts at your door.
     const at =
       job === 'chase'
-        ? { x: from.door.x + (i ? 0.5 : -0.5), y: from.door.y }
+        ? { x: from.door.x + (i % 2 ? 0.5 : -0.5), y: from.door.y + (i > 1 ? 0.4 : 0) }
         : job === 'door'
           ? { x: home.x, y: home.y + 1 }
           : (far[Math.floor(rand() * far.length)] ?? { ...CITY.spawn });

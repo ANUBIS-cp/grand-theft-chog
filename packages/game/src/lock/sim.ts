@@ -6,8 +6,8 @@ import { GANG_IDS, type GangId } from '@chog-city/data';
 // Integer maths only and one input per step, so the server replays the taps and gets the same result.
 
 export const LOCK_TPS = 30;
-/** Steps before you force the door (12 s). */
-export const LOCK_LIMIT = 12 * LOCK_TPS;
+/** Steps before you force the door (15 s; the wires' order being shown doesn't count). */
+export const LOCK_LIMIT = 15 * LOCK_TPS;
 /** More mistakes than this and the break-in is loud. */
 export const LOCK_SLIPS = 1;
 
@@ -45,7 +45,7 @@ export const RIGHT = 8;
 
 /** Pins and reels move along 0..SPAN; the gold band (tumbler) or window (reels) is in the middle. */
 export const SPAN = 1000;
-export const BAND = 180;
+export const BAND = 200;
 export const PINS = 4;
 export const WIRES = 5;
 export const ORDER = 4;
@@ -56,13 +56,15 @@ export const COMBO = 3;
 /** Steps the dial has to rest on the right number to click. */
 export const DIAL_REST = 9;
 /** How long each wire flashes, and the gap after, when the order is shown. */
-export const FLASH = 16;
-export const FLASH_GAP = 6;
+export const FLASH = 24;
+export const FLASH_GAP = 9;
 
 export interface LockState {
   kind: LockKind;
   gang: GangId;
   tick: number;
+  /** Steps spent watching the wires' order (the clock stops for them). */
+  watched: number;
   phase: 'play' | 'open' | 'forced';
   slips: number;
   /** Pins set, wires cut right, reels stopped right or numbers clicked. */
@@ -100,12 +102,14 @@ export function startLock(gang: GangId, seed: number): LockState {
     kind: lockFor(gang),
     gang,
     tick: 0,
+    watched: 0,
     phase: 'play',
     slips: 0,
     done: 0,
     pins: [],
     order: [],
-    showFrom: 0,
+    // A beat before the wires' order starts flashing.
+    showFrom: 15,
     reels: [],
     target: 0,
     dial: 0,
@@ -117,12 +121,12 @@ export function startLock(gang: GangId, seed: number): LockState {
   };
   // Each pin is a little faster than the one before.
   for (let i = 0; i < PINS; i++)
-    s.pins.push({ y: int(s, SPAN), v: (16 + i * 5 + int(s, 4)) * (int(s, 2) ? 1 : -1) });
+    s.pins.push({ y: int(s, SPAN), v: (9 + i * 3 + int(s, 3)) * (int(s, 2) ? 1 : -1) });
   const wires = [0, 1, 2, 3, 4];
   for (let i = 0; i < ORDER; i++) s.order.push(wires.splice(int(s, wires.length), 1)[0]!);
   s.target = GANG_IDS.indexOf(gang) % FACES;
   for (let i = 0; i < REELS; i++)
-    s.reels.push({ at: int(s, FACES * SPAN), v: 70 + i * 22 + int(s, 12), stopped: false });
+    s.reels.push({ at: int(s, FACES * SPAN), v: 38 + i * 10 + int(s, 8), stopped: false });
   // Three numbers, each far enough from the one before that you have to turn for it.
   let n = 0;
   for (let i = 0; i < COMBO; i++) {
@@ -144,6 +148,8 @@ const bounce = (p: { y: number; v: number }) => {
   }
 };
 const inBand = (y: number) => Math.abs(y - SPAN / 2) <= BAND / 2;
+/** Each reel carries the gang's building twice, on opposite sides. */
+export const isTargetFace = (s: LockState, f: number) => f % (FACES / 2) === s.target % (FACES / 2);
 /** The face showing in a reel's window. */
 export const faceOf = (at: number) => Math.floor((at + SPAN / 2) / SPAN) % FACES;
 /** The number under the dial's pointer (the dial moves in quarter-numbers). */
@@ -185,6 +191,7 @@ export function stepLock(s: LockState, input: LockInput) {
       break;
     }
     case 'wires': {
+      if (showing(s) !== null) s.watched++;
       // Taps while the order is still being shown don't count.
       if (input >= WIRE(0) && input <= WIRE(WIRES - 1) && showing(s) === null) {
         if (input - 2 === s.order[s.done]) hit();
@@ -201,9 +208,10 @@ export function stepLock(s: LockState, input: LockInput) {
       for (const r of s.reels) if (!r.stopped) r.at = (r.at + r.v) % (FACES * SPAN);
       if (input === TAP) {
         const r = s.reels[s.done]!;
-        if (faceOf(r.at) === s.target) {
+        const f = faceOf(r.at);
+        if (isTargetFace(s, f)) {
           r.stopped = true;
-          r.at = s.target * SPAN;
+          r.at = f * SPAN;
           hit();
         } else slip();
       }
@@ -228,8 +236,11 @@ export function stepLock(s: LockState, input: LockInput) {
       break;
     }
   }
-  if (s.phase === 'play' && s.tick >= LOCK_LIMIT) s.phase = 'forced';
+  if (s.phase === 'play' && lockClock(s) >= LOCK_LIMIT) s.phase = 'forced';
 }
+
+/** Steps on the clock so far. */
+export const lockClock = (s: LockState) => s.tick - s.watched;
 
 /** How the break-in went: quiet only when the door opened in time with at most LOCK_SLIPS slips. */
 export const lockQuiet = (s: LockState) => s.phase === 'open' && s.slips <= LOCK_SLIPS;
@@ -237,7 +248,7 @@ export const lockQuiet = (s: LockState) => s.phase === 'open' && s.slips <= LOCK
 const ABC = 'ABCDEFGHIJ';
 export const encodeLock = (inputs: readonly LockInput[]) => inputs.map((i) => ABC[i] ?? 'A').join('');
 export function decodeLock(text: string): LockInput[] | null {
-  if (text.length > LOCK_LIMIT + 5) return null;
+  if (text.length > LOCK_LIMIT * 4 + 5) return null;
   const out: LockInput[] = [];
   for (const ch of text) {
     const v = ABC.indexOf(ch);
@@ -250,7 +261,7 @@ export function decodeLock(text: string): LockInput[] | null {
 /** Replays a break-in from its inputs: quiet or loud. Inputs that run out count as standing still. */
 export function replayLock(gang: GangId, seed: number, inputs: readonly LockInput[]) {
   const s = startLock(gang, seed);
-  for (let k = 0; s.phase === 'play' && k <= LOCK_LIMIT; k++) stepLock(s, inputs[k] ?? 0);
+  for (let k = 0; s.phase === 'play' && k <= LOCK_LIMIT * 4; k++) stepLock(s, inputs[k] ?? 0);
   return { state: s, quiet: lockQuiet(s) };
 }
 
@@ -268,7 +279,7 @@ export function perfectLock(gang: GangId, seed: number): LockInput[] {
       if (showing(s) === null && s.tick % 6 === 0) i = WIRE(s.order[s.done]!);
     } else if (s.kind === 'reels') {
       const r = next.reels[s.done]!;
-      if (faceOf(r.at) === s.target && r.at % SPAN < 400) i = TAP;
+      if (isTargetFace(s, faceOf(r.at)) && r.at % SPAN < 400) i = TAP;
     } else {
       const d = (s.combo[s.done]! - dialNumber(s.dial) + DIAL) % DIAL;
       if (d) i = d <= DIAL / 2 ? RIGHT : LEFT;

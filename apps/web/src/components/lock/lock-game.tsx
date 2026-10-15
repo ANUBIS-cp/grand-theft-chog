@@ -8,6 +8,8 @@ import {
   FACES,
   LEFT,
   LOCK_LIMIT,
+  isTargetFace,
+  lockClock,
   LOCK_SLIPS,
   LOCK_TPS,
   RIGHT,
@@ -84,6 +86,8 @@ export function LockGame(props: {
 
   useEffect(() => {
     const s = st.current;
+    // The wires show their order straight away; the clock stops while they do.
+    if (s.s.kind === 'wires') s.started = true;
     let raf = 0;
     let lastClick = -1;
     const loop = (now: number) => {
@@ -165,7 +169,7 @@ export function LockGame(props: {
 
   const s = st.current.s;
   const now = typeof performance !== 'undefined' ? performance.now() : 0;
-  const left = Math.max(0, LOCK_LIMIT - s.tick) / LOCK_TPS;
+  const left = Math.max(0, LOCK_LIMIT - lockClock(s)) / LOCK_TPS;
   // Loud once you've slipped too often, or when the clock ran out and you forced the door.
   const loud = s.slips > LOCK_SLIPS || s.phase === 'forced';
   const shaking = now - st.current.shake < 260;
@@ -404,7 +408,7 @@ function Wires({ s, onCut }: { s: LockState; onCut: (i: number) => void }) {
 /** Three reels of gang buildings: stop each on the robbed gang's. */
 function Reels({ s, gang }: { s: LockState; gang: GangId }) {
   const others = GANG_IDS.filter((g) => g !== gang);
-  const faceGang = (f: number) => (f === s.target ? gang : others[f]!);
+  const faceGang = (f: number) => (isTargetFace(s, f) ? gang : others[f]!);
   const H = 76;
   return (
     <div>

@@ -77,6 +77,8 @@ interface Props {
   strollers: Stroller[];
   jailed: Jailed[];
   places: Record<string, PlaceLook>;
+  /** Chogs with a Wanted poster on them ($CHOG). */
+  wanted?: number[];
   board: Board;
   /** Keys and taps do nothing while a card or the heist is open over the city. */
   paused: boolean;
@@ -449,6 +451,10 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         bag: mine?.bag,
         emote: s.emote ?? undefined,
       });
+      if (p.wanted?.length) {
+        const wanted = new Set(p.wanted);
+        for (const x of people) if (x.chog !== null && !x.cop && wanted.has(x.chog)) x.wanted = true;
+      }
       // The practice getaway: step its police, and end it at the goal, on a catch or when time's up.
       const pr = s.practice;
       if (pr) {

@@ -21,7 +21,10 @@ export async function POST(req: Request) {
   try {
     const { run } = await joinRaid(await db(), { address, ...body.data, now: Date.now() });
     const chog = getChog(body.data.chogId)!;
-    return json({ ok: true, pass: makeRaidPass({ role: 'defend', run, chog: chog.id, name: displayName(chog) }) });
+    return json({
+      ok: true,
+      pass: makeRaidPass({ role: 'defend', run, chog: chog.id, name: displayName(chog) }),
+    });
   } catch (e) {
     if (e instanceof HeistRefused) return error(e.code, 409);
     throw e;

@@ -70,7 +70,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   suits: {
     id: 'suits',
-    name: 'Suits',
+    name: 'Whales',
     from: [
       ['Body', 'Tuxedo'],
       ['Body', 'Red Tuxedo'],
@@ -85,7 +85,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   royals: {
     id: 'royals',
-    name: 'Royals',
+    name: 'Kings',
     from: [
       ['Head', 'Crown'],
       ['Head', 'Silver wreath'],
@@ -97,7 +97,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   wizards: {
     id: 'wizards',
-    name: 'Wizards',
+    name: 'Chart Wizards',
     from: [
       ['Head', 'Wizard Hat'],
       ['Head', 'Wizard Beanie'],
@@ -107,7 +107,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   'squid-game': {
     id: 'squid-game',
-    name: 'Squid Game',
+    name: 'Red Light',
     from: [
       ['Body', 'Squid Game Guard'],
       ['Body', 'Squid Game'],
@@ -115,7 +115,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   jailbirds: {
     id: 'jailbirds',
-    name: 'Jailbirds',
+    name: 'Lifers',
     from: [
       ['Body', 'Inmate'],
       ['Body', 'Prisoner'],
@@ -124,7 +124,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   clowns: {
     id: 'clowns',
-    name: 'Clowns',
+    name: 'Clown World',
     from: [
       ['Head', 'Clown Nose'],
       ['Head', 'Rainbow Wig'],
@@ -135,7 +135,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   'btc-maxis': {
     id: 'btc-maxis',
-    name: 'BTC Maxis',
+    name: 'Sat Stackers',
     from: [
       ['Head', 'BTC Cap'],
       ['Head', 'BTC Beanie'],
@@ -146,7 +146,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   'mon-maxis': {
     id: 'mon-maxis',
-    name: 'Mon Maxis',
+    name: 'Nads',
     from: [
       ['Head', 'Mon Cap'],
       ['Head', 'Mon Beanie'],
@@ -160,7 +160,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   crybabies: {
     id: 'crybabies',
-    name: 'Crybabies',
+    name: 'Paper Hands',
     from: [
       ['Eyes', 'Round Crying'],
       ['Eyes', 'Closed Eye Crying'],
@@ -170,7 +170,7 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   'visor-gang': {
     id: 'visor-gang',
-    name: 'Visor Gang',
+    name: 'MEV Bots',
     from: [
       ['Eyes', 'Gradient visor'],
       ['Eyes', 'Sunset visor'],
@@ -183,12 +183,12 @@ export const GANGS: Record<GangId, GangDef> = {
   },
   skulls: {
     id: 'skulls',
-    name: 'Skulls',
+    name: 'Rugged',
     from: [['Form', 'Skull']],
   },
   radioactive: {
     id: 'radioactive',
-    name: 'Radioactive',
+    name: 'Meltdown',
     from: [['Base', 'Radioactive']],
   },
 };

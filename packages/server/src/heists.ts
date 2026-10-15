@@ -33,7 +33,7 @@ import {
 } from '@chog-city/game/rush';
 import { and, desc, eq, gt, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
-import { gangVaults, heistChogs, heistRuns, type Db } from './db/index.ts';
+import { chogBurns, gangVaults, heistChogs, heistRuns, type Db } from './db/index.ts';
 import { canControl } from './ownership.ts';
 
 // The gang war on the server: vault balances, who may start a heist, and settling a finished one by
@@ -57,7 +57,16 @@ export type HeistError =
   | 'not-your-gang'
   | 'live'
   | 'locked'
-  | 'no-lock';
+  | 'no-lock'
+  // $CHOG burns
+  | 'no-chog'
+  | 'bad-line'
+  | 'own-chog'
+  | 'burn-not-found'
+  | 'burn-failed'
+  | 'burn-too-small'
+  | 'burn-too-old'
+  | 'burn-used';
 
 /** Marks a run that defenders joined: only the live server can finish it. */
 const LIVE = 'live';
@@ -66,6 +75,8 @@ const LIVE = 'live';
 const ALARM_MS = 3 * 60_000;
 
 /** A getaway nobody reported on is banked after this long (a live server failure shouldn't cost you). */
+/** Extra cash for the gang that catches a Chog with a Wanted poster on it. */
+export const POSTER_BOUNTY = 100;
 export const GETAWAY_MS = 5 * 60_000;
 /** Getting caught on the way home costs the same fine as getting caught inside. */
 const GETAWAY_FINE = BUST_FINE;
@@ -304,7 +315,7 @@ export interface FinishedRun {
   revenge: boolean;
   target: GangId;
   /** Out of the vault with a bag: it's only yours once you carry it home through the city (stage 3). */
-  getaway?: { bag: number; from: GangId; home: GangId; chog: number; tier: number };
+  getaway?: { bag: number; from: GangId; home: GangId; chog: number; tier: number; wanted: boolean };
 }
 
 /**
@@ -481,6 +492,7 @@ export async function finishRun(
               home: run.gang as GangId,
               chog: run.chogId,
               tier: run.tier,
+              wanted: await wantedNow(tx as unknown as Db, run.chogId, now),
             },
           }
         : {}),
@@ -527,6 +539,13 @@ export async function finishGetaway(
         .update(gangVaults)
         .set({ cash: sql`${gangVaults.cash} - ${fine}`, updatedAt: new Date(now) })
         .where(eq(gangVaults.gang, run.gang));
+    // Caught with a Wanted poster on it: the robbed gang collects the poster's bounty too.
+    const bounty = !home && (await wantedNow(tx as unknown as Db, run.chogId, now)) ? POSTER_BOUNTY : 0;
+    if (bounty)
+      await tx
+        .update(gangVaults)
+        .set({ cash: sql`${gangVaults.cash} + ${bounty}` })
+        .where(eq(gangVaults.gang, run.target));
     const jailedUntil = home ? null : now + JAIL_MS;
     await tx
       .update(heistChogs)
@@ -563,6 +582,18 @@ export async function finishGetaway(
       .catch(() => undefined);
     return { outcome, bag, caughtBy: catcher, jailedUntil };
   });
+}
+
+/** A Wanted poster ($CHOG) is up on this Chog: more police on its getaways, and a bounty on it. */
+async function wantedNow(db: Db, chogId: number, now: number): Promise<boolean> {
+  const [r] = await db
+    .select({ tx: chogBurns.tx })
+    .from(chogBurns)
+    .where(
+      and(eq(chogBurns.kind, 'poster'), eq(chogBurns.chogId, chogId), gt(chogBurns.until, new Date(now))),
+    )
+    .limit(1);
+  return !!r;
 }
 
 /** Banks every getaway whose time ran out without a word from the live server. */

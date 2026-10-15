@@ -106,6 +106,8 @@ export interface GetawayPass {
   home: string;
   bag: number;
   tier: number;
+  /** A Wanted poster is up on this Chog: one more cop on the chase. */
+  wanted?: boolean;
   exp: number;
 }
 

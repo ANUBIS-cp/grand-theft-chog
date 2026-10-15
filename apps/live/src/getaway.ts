@@ -89,7 +89,14 @@ export function startChase(
   const from = placeOf(pass.from);
   const home = placeOf(pass.home);
   if (!from || !home) return null;
-  const cops = spawnCops(from, home.door, pass.tier, seeded(pass.run.length * 7919 + pass.bag), nextCop);
+  const cops = spawnCops(
+    from,
+    home.door,
+    pass.tier,
+    seeded(pass.run.length * 7919 + pass.bag),
+    nextCop,
+    pass.wanted === true,
+  );
   nextCop -= cops.length;
   const c: Chase = {
     pass,

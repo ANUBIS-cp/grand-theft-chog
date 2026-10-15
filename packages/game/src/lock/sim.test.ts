@@ -102,6 +102,6 @@ describe('break-in locks', () => {
 
   it('rejects junk input text', () => {
     expect(decodeLock('AAZ')).toBeNull();
-    expect(decodeLock('A'.repeat(LOCK_LIMIT + 10))).toBeNull();
+    expect(decodeLock('A'.repeat(LOCK_LIMIT * 4 + 10))).toBeNull();
   });
 });

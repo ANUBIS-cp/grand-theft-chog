@@ -8,6 +8,7 @@ import {
   newWalker,
   placeOf,
   rng,
+  slide,
   standable,
   stepWalker,
   strollers,
@@ -212,9 +213,12 @@ wss.on('connection', (ws, req) => {
     }
     if (++me.burst > 40) return;
     if (msg.t === 'mv') {
-      const { x, y } = msg;
-      if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y))
-        return;
+      if (typeof msg.x !== 'number' || typeof msg.y !== 'number') return;
+      let { x, y } = msg as { x: number; y: number };
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      // Positions come rounded to 0.01, which can put you a hair inside a tree or wall you're pressed
+      // against: push it back out instead of refusing the move (refusing yanked you back, so you stuck).
+      if (!jailed(me, now) && !standable(x, y)) ({ x, y } = slide(x, y, 0, 0));
       const dt = Math.max(60, Math.min(1000, now - me.lastMove));
       const reach = (WALK_SPEED * dt * 1.5) / 1000 + 0.3;
       if (Math.hypot(x - me.x, y - me.y) > reach || !allowed(me, x, y, now)) {

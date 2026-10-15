@@ -205,3 +205,27 @@ export const heistRuns = pgTable(
     index('heist_runs_target').on(t.target, t.finishedAt),
   ],
 );
+
+// ---------- $CHOG ----------
+
+/**
+ * $CHOG a player burned from their own wallet, one row per burn transaction, so a burn counts once. Bail frees
+ * `chogId`; a Wanted poster goes on `chogId` (with one of the ready-made lines); a banner flies for `gang`.
+ */
+export const chogBurns = pgTable(
+  'chog_burns',
+  {
+    tx: text('tx').primaryKey(),
+    address: text('address').notNull(),
+    kind: text('kind').$type<'bail' | 'poster' | 'banner'>().notNull(),
+    chogId: integer('chog_id'),
+    gang: text('gang').$type<GangId>(),
+    line: integer('line'),
+    /** Whole $CHOG burned. */
+    amount: integer('amount').notNull(),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+    /** Posters and banners: when they come down. */
+    until: timestamp('until', { withTimezone: true }),
+  },
+  (t) => [index('chog_burns_kind_until').on(t.kind, t.until)],
+);

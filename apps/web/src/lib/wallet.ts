@@ -92,3 +92,62 @@ export async function logIn(wallet: WalletOption): Promise<string> {
 export async function logOut(): Promise<void> {
   await fetch('/api/auth/logout', { method: 'POST' });
 }
+
+// ---------- $CHOG burns ----------
+
+const CHOG_TOKEN = '0x350035555E10d9AfAF1566AaebfCeD5BA6C27777';
+const MONAD = {
+  chainId: '0x8f',
+  chainName: 'Monad',
+  nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
+  rpcUrls: ['https://rpc.monad.xyz'],
+  blockExplorerUrls: ['https://monadscan.com'],
+};
+
+/** The wallet that holds `address` (the one you logged in with), found again after a page load. */
+async function walletFor(address: string): Promise<Eip1193> {
+  const list = await new Promise<WalletOption[]>((ok) => {
+    let last: WalletOption[] = [];
+    const stop = discoverWallets((l) => (last = l));
+    setTimeout(() => {
+      stop();
+      ok(last);
+    }, 500);
+  });
+  for (const w of list) {
+    const acc = (await w.provider.request({ method: 'eth_accounts' }).catch(() => [])) as string[];
+    if (acc.some((a) => a.toLowerCase() === address.toLowerCase())) return w.provider;
+  }
+  const first = list[0]?.provider;
+  if (!first) throw new LoginError('No wallet found in this browser.');
+  return first;
+}
+
+/**
+ * Burns `amount` $CHOG from your own wallet with $CHOG's own burn() (no approval, nothing else can be taken)
+ * and returns the transaction hash for the server to check.
+ */
+export async function burnChog(address: string, amount: number): Promise<`0x${string}`> {
+  const w = await walletFor(address);
+  const accounts = (await w.request({ method: 'eth_requestAccounts' }).catch(() => [])) as string[];
+  const from = accounts.find((a) => a.toLowerCase() === address.toLowerCase());
+  if (!from) throw new LoginError('Switch your wallet to the account you logged in with.');
+  try {
+    await w.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: MONAD.chainId }] });
+  } catch (e) {
+    if ((e as { code?: number }).code !== 4902)
+      throw new LoginError('Switch your wallet to Monad and try again.');
+    await w.request({ method: 'wallet_addEthereumChain', params: [MONAD] });
+  }
+  // burn(uint256): selector 0x42966c68, then the amount in wei.
+  const wei = BigInt(amount) * 10n ** 18n;
+  const data = `0x42966c68${wei.toString(16).padStart(64, '0')}`;
+  try {
+    return (await w.request({
+      method: 'eth_sendTransaction',
+      params: [{ from, to: CHOG_TOKEN, data }],
+    })) as `0x${string}`;
+  } catch {
+    throw new LoginError('The burn was not sent. Nothing was spent.');
+  }
+}

@@ -35,6 +35,7 @@ export function withGetaway<T extends FinishedRun>(runId: string, r: T): T & { g
       home: g.home,
       bag: g.bag,
       tier: g.tier,
+      wanted: g.wanted,
     }),
   };
 }

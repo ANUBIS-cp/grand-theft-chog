@@ -11,6 +11,7 @@ import {
   WIRE,
   dialNumber,
   faceOf,
+  isTargetFace,
   lockFor,
   showing,
   startLock,
@@ -32,7 +33,7 @@ for (const gang of GANG_IDS)
       } else if (s.kind === 'reels') {
         const t = structuredClone(s);
         stepLock(t, 0);
-        if (faceOf(t.reels[s.done]!.at) === s.target && t.reels[s.done]!.at % SPAN < 400) i = TAP;
+        if (isTargetFace(s, faceOf(t.reels[s.done]!.at)) && t.reels[s.done]!.at % SPAN < 400) i = TAP;
       } else {
         const d = (s.combo[s.done]! - dialNumber(s.dial) + DIAL) % DIAL;
         if (d) i = d <= DIAL / 2 ? RIGHT : LEFT;

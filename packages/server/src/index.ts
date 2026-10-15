@@ -7,3 +7,4 @@ export * from './moves.ts';
 export * from './transfers.ts';
 export * from './queries.ts';
 export * from './heists.ts';
+export * from './burns.ts';
