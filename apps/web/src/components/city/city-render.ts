@@ -1,6 +1,8 @@
+import type { GangId } from '@chog-city/data';
 import { BH, BW, CITY, Ground, ROAD, groundAt, type Place, type Prop } from '@chog-city/game/city';
 import { chogImage } from '@/lib/images';
-import { drawPiece, hopHeight, makePiece, type Piece } from '../chog/piece';
+import { makePiece, type Piece } from '../chog/piece';
+import { TRAIL_OF, WALK_OF, drawWalker, newWalk, stepWalk, type Dust, type WalkState } from '../chog/walk';
 import { CityArt } from './art';
 import { FACADE, LANDMARK_RISE, paintLandmark, paintWall, paintYard, treeOf } from './landmarks';
 
@@ -32,6 +34,10 @@ export interface Person {
   bag?: number;
   /** A Wanted poster ($CHOG) is up on this Chog: a poster tag next to its name. */
   wanted?: boolean;
+  /** Their gang, for how they walk. */
+  gang?: GangId | null;
+  /** What they just said in the city chat: a speech bubble over them for a few seconds. */
+  said?: { text: string; at: number };
 }
 
 export type { Emote } from '@chog-city/game/city';
@@ -477,18 +483,30 @@ export class CityRenderer {
 
   private paintRibbon(g: CanvasRenderingContext2D, W: number, ry: number, look: PlaceLook) {
     const { t } = this;
-    const size = Math.round(t * 0.46);
-    g.font = `${size}px ${this.font}`;
+    const size = Math.round(t * 0.4);
+    g.font = `800 ${size}px ${this.font}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    const name = look.name.toUpperCase();
-    const rw = Math.min(W * 0.9, g.measureText(name).width + size * 1.6);
-    g.fillStyle = look.color;
-    g.strokeStyle = INK;
-    g.lineWidth = 2.5;
+    const name = look.name;
+    const rw = Math.min(W * 0.9, g.measureText(name).width + size * 1.9);
+    const rh = size * 1.75;
+    // A glossy capsule in the gang's colour with a soft shadow: no comic outline.
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,0.5)';
+    g.shadowBlur = 14;
+    g.shadowOffsetY = 4;
+    const gr = g.createLinearGradient(0, ry - rh / 2, 0, ry + rh / 2);
+    gr.addColorStop(0, shade(look.color, 0.18));
+    gr.addColorStop(1, look.color);
+    g.fillStyle = gr;
     g.beginPath();
-    g.roundRect(W / 2 - rw / 2, ry - size * 0.75, rw, size * 1.5, size * 0.4);
+    g.roundRect(W / 2 - rw / 2, ry - rh / 2, rw, rh, rh / 2);
     g.fill();
+    g.restore();
+    g.strokeStyle = 'rgba(255,255,255,0.35)';
+    g.lineWidth = 1;
+    g.beginPath();
+    g.roundRect(W / 2 - rw / 2 + 0.5, ry - rh / 2 + 0.5, rw - 1, rh - 1, rh / 2);
     g.stroke();
     if (look.banner) {
       // A banner bought with $CHOG: a big waving flag in the gang's colour on a pole above the sign.
@@ -512,7 +530,8 @@ export class CityRenderer {
       g.lineWidth = 2.5;
       g.beginPath();
       g.moveTo(px, top + size * 0.2);
-      for (let i = 1; i <= 8; i++) g.lineTo(px + (fw * i) / 8, top + size * 0.2 + Math.sin(wave + i * 0.7) * size * 0.18);
+      for (let i = 1; i <= 8; i++)
+        g.lineTo(px + (fw * i) / 8, top + size * 0.2 + Math.sin(wave + i * 0.7) * size * 0.18);
       g.lineTo(px + fw - size * 0.6, top + size * 0.2 + fh / 2);
       for (let i = 8; i >= 0; i--)
         g.lineTo(px + (fw * i) / 8, top + size * 0.2 + fh + Math.sin(wave + i * 0.7) * size * 0.18);
@@ -520,22 +539,26 @@ export class CityRenderer {
       g.fill();
       g.stroke();
       g.fillStyle = look.ink;
-      g.font = `${Math.round(size * 1.1)}px ${this.font}`;
+      g.font = `800 ${Math.round(size * 1.1)}px ${this.font}`;
       g.fillText('★', px + fw * 0.42, top + size * 0.2 + fh / 2 + Math.sin(wave + 3) * size * 0.18);
-      g.font = `${size}px ${this.font}`;
+      g.font = `800 ${size}px ${this.font}`;
     }
     g.fillStyle = look.ink;
     g.fillText(name, W / 2, ry + 1, rw - size);
-    // Rank badge, gold for the richest.
-    const bx = W / 2 + rw / 2;
-    g.fillStyle = look.rank === 1 ? '#ffd23f' : '#ffffff';
+    // Rank: a small white badge on the corner, gold for the richest.
+    const bx = W / 2 + rw / 2 - size * 0.2;
+    const br = size * 0.62;
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,0.45)';
+    g.shadowBlur = 8;
+    g.fillStyle = look.rank === 1 ? '#ffd60a' : '#ffffff';
     g.beginPath();
-    g.arc(bx, ry - size * 0.6, size * 0.62, 0, Math.PI * 2);
+    g.arc(bx, ry - rh / 2, br, 0, Math.PI * 2);
     g.fill();
-    g.stroke();
-    g.fillStyle = INK;
-    g.font = `${Math.round(size * 0.75)}px ${this.font}`;
-    g.fillText(`#${look.rank}`, bx, ry - size * 0.56);
+    g.restore();
+    g.fillStyle = '#15131f';
+    g.font = `800 ${Math.round(size * 0.66)}px ${this.font}`;
+    g.fillText(`${look.rank}`, bx, ry - rh / 2 + 1);
     // Defence: one shield pip per level.
     for (let i = 0; i < look.tier; i++) {
       const sx = W / 2 - rw / 2 + size * 0.5 + i * size * 0.7;
@@ -652,7 +675,7 @@ export class CityRenderer {
     g.strokeStyle = color;
     g.lineWidth = Math.max(2, t * 0.06);
     g.strokeRect(t * 0.6, R + t * 0.12, W - t * 1.2, signH);
-    g.font = `${Math.round(signH * 0.72)}px ${this.font}`;
+    g.font = `800 ${Math.round(signH * 0.72)}px ${this.font}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillStyle = color === '#141414' ? '#e8b931' : color;
@@ -775,7 +798,7 @@ export class CityRenderer {
     }
     g.fillStyle = '#16121f';
     g.fillRect(W / 2 - t * 1.6, R + t * 0.12, t * 3.2, t * 0.62);
-    g.font = `${Math.round(t * 0.46)}px ${this.font}`;
+    g.font = `800 ${Math.round(t * 0.46)}px ${this.font}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillStyle = '#ff5a4f';
@@ -840,7 +863,7 @@ export class CityRenderer {
     }
     g.fillStyle = '#16121f';
     g.fillRect(W / 2 - t * 2, R + t * 0.12, t * 4, t * 0.6);
-    g.font = `${Math.round(t * 0.44)}px ${this.font}`;
+    g.font = `800 ${Math.round(t * 0.44)}px ${this.font}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillStyle = '#7cf0c4';
@@ -1209,14 +1232,14 @@ export class CityRenderer {
     g.fillStyle = '#151229';
     g.fillRect(x + t * 0.15, y + t * 0.15, w - t * 0.3, h - t * 0.3);
     g.textBaseline = 'middle';
-    g.font = `${Math.round(t * 0.34)}px ${this.font}`;
+    g.font = `800 ${Math.round(t * 0.34)}px ${this.font}`;
     g.textAlign = 'center';
     g.fillStyle = '#ffd23f';
     g.fillText('RICHEST GANGS', x + w / 2, y + t * 0.48);
     const lines = this.board.lines.slice(0, 3);
     lines.forEach((l, i) => {
       const ly = y + t * (1.0 + i * 0.52);
-      g.font = `${Math.round(t * 0.3)}px ${this.font}`;
+      g.font = `800 ${Math.round(t * 0.3)}px ${this.font}`;
       g.textAlign = 'left';
       g.fillStyle = '#ffffff';
       g.fillText(`${i + 1}`, x + t * 0.4, ly);
@@ -1230,7 +1253,7 @@ export class CityRenderer {
     const by = y + h - t * 0.62;
     g.fillStyle = '#2a1206';
     g.fillRect(x + t * 0.15, by - t * 0.24, w - t * 0.3, t * 0.48);
-    g.font = `${Math.round(t * 0.3)}px ${this.font}`;
+    g.font = `800 ${Math.round(t * 0.3)}px ${this.font}`;
     g.textAlign = 'center';
     const flicker = 0.85 + 0.15 * Math.sin(now / 90) * Math.sin(now / 37);
     g.fillStyle = `rgba(255,122,26,${flicker})`;
@@ -1261,17 +1284,42 @@ export class CityRenderer {
     return piece;
   }
 
-  /** Remembers when each person last turned round or did an emote, to spin or wiggle their piece. */
-  private motion = new Map<string, { face: -1 | 1; turnedAt: number; emoteAt: number }>();
+  /** Each person's walk: steps, lean, crouch and settle (chog/walk.ts). */
+  private walks = new Map<string, WalkState & { at: number }>();
+  /** Dust and sparkles from walking, in tiles. */
+  private dust: Dust[] = [];
+
+  private walkOf(p: Person, now: number) {
+    let w = this.walks.get(p.key);
+    if (!w) this.walks.set(p.key, (w = { ...newWalk(p.x, p.y, p.face), at: now }));
+    const dt = Math.min(0.1, (now - w.at) / 1000);
+    if (dt > 0) {
+      w.at = now;
+      const style = p.cop ? 'zip' : p.gang ? WALK_OF[p.gang] : 'swagger';
+      const trail = p.gang && !p.cop ? TRAIL_OF[p.gang] : undefined;
+      const out = stepWalk(w, p.x, p.y, p.moving, p.face, style, trail, now, dt);
+      if (out.length && this.dust.length < 400) this.dust.push(...out);
+    }
+    return w;
+  }
+
+  private drawDust(now: number) {
+    const { g, t } = this;
+    this.dust = this.dust.filter((d) => now - d.at < d.life);
+    for (const d of this.dust) {
+      const k = (now - d.at) / d.life;
+      g.globalAlpha = 1 - k;
+      g.fillStyle = d.color;
+      g.beginPath();
+      g.arc(this.sx(d.x + d.vx * k), this.sy(d.y) - k * t * 0.25, t * d.r * (1 + k), 0, Math.PI * 2);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+  }
 
   private drawPerson(p: Person, now: number) {
     const { g } = this;
-    let m = this.motion.get(p.key);
-    if (!m) this.motion.set(p.key, (m = { face: p.face, turnedAt: -1e9, emoteAt: -1e9 }));
-    if (m.face !== p.face) {
-      m.face = p.face;
-      m.turnedAt = now;
-    }
+    const w = this.walkOf(p, now);
     const piece = this.piece(p);
     const x = this.sx(p.x);
     const y = this.sy(p.y) + this.t * 0.12;
@@ -1293,32 +1341,32 @@ export class CityRenderer {
       g.stroke();
     }
     if (p.me) {
-      // A ring at your feet so you can find yourself in a crowd.
-      g.strokeStyle = '#ffd23f';
-      g.lineWidth = 3;
+      // A soft glow and a thin ring at your feet, breathing, so you can find yourself in a crowd.
+      const fy = y + piece.h - piece.fy - 4;
+      const k = 0.5 + 0.5 * Math.sin(now / 520);
+      g.save();
+      g.globalAlpha = 0.28 + k * 0.12;
+      g.fillStyle = '#ff2d6a';
       g.beginPath();
-      g.ellipse(x, y + piece.h - piece.fy - 4, piece.w * 0.52, piece.w * 0.17, 0, 0, Math.PI * 2);
+      g.ellipse(x, fy, piece.w * 0.62, piece.w * 0.2, 0, 0, Math.PI * 2);
+      g.fill();
+      g.globalAlpha = 0.9;
+      g.strokeStyle = '#ffffff';
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.ellipse(x, fy, piece.w * (0.5 + k * 0.04), piece.w * (0.16 + k * 0.013), 0, 0, Math.PI * 2);
       g.stroke();
+      g.restore();
     }
-    drawPiece(
-      g,
-      piece,
-      x,
-      y,
-      {
-        moving: p.moving,
-        seed: keySeed(p.key),
-        face: p.face,
-        turned: now - m.turnedAt,
-        emoted: p.emote ? now - p.emote.at : undefined,
-        alpha: p.npc && !p.cop ? 0.92 : 1,
-      },
-      now,
-    );
+    const style = p.cop ? 'zip' : p.gang ? WALK_OF[p.gang] : 'swagger';
+    drawWalker(g, piece, x, y, w, style, now, {
+      seed: keySeed(p.key),
+      emoted: p.emote ? now - p.emote.at : undefined,
+      alpha: p.npc && !p.cop ? 0.92 : 1,
+    });
     if (p.cop) {
       // The light on the cap: red and blue, flashing.
-      const top =
-        y - piece.top - hopHeight(piece, { moving: p.moving, seed: keySeed(p.key), face: p.face }, now);
+      const top = y - piece.top - w.lift;
       const red = Math.floor(now / 160) % 2 === 0;
       const glow = g.createRadialGradient(x, top, 0, x, top, this.t * 0.9);
       glow.addColorStop(0, red ? 'rgba(255,45,85,0.75)' : 'rgba(60,130,255,0.75)');
@@ -1341,38 +1389,43 @@ export class CityRenderer {
   private drawTag(p: Person, now: number) {
     const { g, t } = this;
     const piece = this.piece(p);
-    const seed = keySeed(p.key);
     const x = this.sx(p.x);
-    const top =
-      this.sy(p.y) + t * 0.12 - piece.top - hopHeight(piece, { moving: p.moving, seed, face: p.face }, now);
+    const top = this.sy(p.y) + t * 0.12 - piece.top - (this.walks.get(p.key)?.lift ?? 0);
     const size = Math.max(11, Math.round(t * (p.me ? 0.25 : 0.22)));
-    g.font = `700 ${size}px ${this.bodyFont}`;
+    g.font = `600 ${size}px ${this.bodyFont}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    const w = g.measureText(p.name).width + size * 1.6;
-    const h = size * 1.55;
-    const ty = top - h * 0.75;
-    g.globalAlpha = p.npc ? 0.8 : 1;
-    // A dark plate with a stripe of the gang's colour, gold for you.
-    g.fillStyle = 'rgba(13,11,26,0.88)';
+    const w = g.measureText(p.name).width + size * 1.9;
+    const h = size * 1.7;
+    const ty = top - h * 0.8;
+    g.globalAlpha = p.npc ? 0.78 : 1;
+    // A frosted capsule with a dot of the gang's colour; yours is white with dark text.
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,0.45)';
+    g.shadowBlur = 10;
+    g.shadowOffsetY = 3;
+    g.fillStyle = p.me ? 'rgba(255,255,255,0.94)' : 'rgba(24,22,36,0.78)';
     g.beginPath();
     g.roundRect(x - w / 2, ty - h / 2, w, h, h / 2);
     g.fill();
-    g.strokeStyle = p.me ? '#ffd23f' : p.color;
-    g.lineWidth = p.me ? 2.5 : 2;
-    g.stroke();
-    g.fillStyle = p.me ? '#ffd23f' : p.color;
+    g.restore();
+    if (!p.me) {
+      g.strokeStyle = 'rgba(255,255,255,0.14)';
+      g.lineWidth = 1;
+      g.stroke();
+    }
+    g.fillStyle = p.me ? '#ff2d6a' : p.color;
     g.beginPath();
-    g.arc(x - w / 2 + h * 0.5, ty, h * 0.17, 0, Math.PI * 2);
+    g.arc(x - w / 2 + h * 0.52, ty, h * 0.16, 0, Math.PI * 2);
     g.fill();
-    g.fillStyle = '#ffffff';
-    g.fillText(p.name, x + h * 0.18, ty + 0.5);
+    g.fillStyle = p.me ? '#15131f' : '#ffffff';
+    g.fillText(p.name, x + h * 0.2, ty + 0.5);
     g.globalAlpha = 1;
     if (p.bag) {
       // The bag's value, over their head, gold.
       const label = `$${p.bag.toLocaleString('en-US')}`;
       const bs = Math.round(size * 1.15);
-      g.font = `${bs}px ${this.font}`;
+      g.font = `800 ${bs}px ${this.font}`;
       const bw = g.measureText(label).width + bs * 1.3;
       const bh = bs * 1.45;
       const by = ty - h / 2 - bh / 2 - 4 + Math.sin(now / 160) * 2;
@@ -1389,7 +1442,7 @@ export class CityRenderer {
     if (p.wanted) {
       // A little torn poster pinned beside the name: WANTED in red.
       const ps = Math.round(size * 0.95);
-      g.font = `${ps}px ${this.font}`;
+      g.font = `800 ${ps}px ${this.font}`;
       const pw = g.measureText('WANTED').width + ps * 0.9;
       const ph = ps * 1.5;
       g.save();
@@ -1412,6 +1465,58 @@ export class CityRenderer {
     }
     if (p.emote && now - p.emote.at < 3500)
       this.drawEmote(p.emote.kind, x, ty - h / 2 - t * 0.5, now - p.emote.at);
+    else if (p.said && now - p.said.at < 6000)
+      this.drawSaid(p.said.text, x, ty - h / 2 - 6, now - p.said.at, p.me);
+  }
+
+  /** A chat message as a speech bubble over the Chog, iMessage-style: up to three lines, then it fades. */
+  private drawSaid(text: string, x: number, bottom: number, age: number, mine?: boolean) {
+    const { g, t } = this;
+    const size = Math.max(12, Math.round(t * 0.24));
+    g.font = `500 ${size}px ${this.bodyFont}`;
+    const maxW = t * 4.2;
+    // Wrap into lines.
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let line = '';
+    for (const w of words) {
+      const next = line ? `${line} ${w}` : w;
+      if (g.measureText(next).width > maxW && line) {
+        lines.push(line);
+        line = w;
+      } else line = next;
+      if (lines.length === 3) break;
+    }
+    if (lines.length < 3 && line) lines.push(line);
+    if (lines.length === 3 && words.join(' ').length > lines.join(' ').length) lines[2] = `${lines[2]}…`;
+    const lh = size * 1.3;
+    const w = Math.min(maxW, Math.max(...lines.map((l) => g.measureText(l).width))) + size * 1.4;
+    const h = lines.length * lh + size * 0.9;
+    const k = Math.min(1, age / 260);
+    const pop = 1 - Math.exp(-8 * k) * Math.cos(k * 12);
+    const fade = age > 5300 ? Math.max(0, 1 - (age - 5300) / 700) : 1;
+    const by = bottom - h - size * 0.5;
+    g.save();
+    g.globalAlpha = fade;
+    g.translate(x, bottom);
+    g.scale(pop, pop);
+    g.translate(-x, -bottom);
+    g.shadowColor = 'rgba(0,0,0,0.45)';
+    g.shadowBlur = 14;
+    g.shadowOffsetY = 4;
+    g.fillStyle = mine ? '#ff2d6a' : 'rgba(255,255,255,0.96)';
+    g.beginPath();
+    g.roundRect(x - w / 2, by, w, h, Math.min(h / 2, size * 1.1));
+    g.moveTo(x - size * 0.4, by + h - 1);
+    g.lineTo(x, by + h + size * 0.5);
+    g.lineTo(x + size * 0.4, by + h - 1);
+    g.fill();
+    g.shadowColor = 'transparent';
+    g.fillStyle = mine ? '#ffffff' : '#15131f';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    lines.forEach((l, i) => g.fillText(l, x, by + size * 0.45 + lh * (i + 0.5), maxW));
+    g.restore();
   }
 
   private emoteImages = new Map<Emote, Img>();
@@ -1430,30 +1535,53 @@ export class CityRenderer {
   /** An emote: the emoji pops up in a bubble over the Chog's head, bounces, then fades. */
   private drawEmote(kind: Emote, x: number, y: number, age: number) {
     const { g, t } = this;
-    const pop = age < 160 ? age / 160 : age < 260 ? 1 + 0.15 * Math.sin(((age - 160) / 100) * Math.PI) : 1;
-    const fade = age > 3000 ? 1 - (age - 3000) / 500 : 1;
-    const bob = Math.sin(age / 180) * t * 0.04;
-    const s = t * 0.5 * pop;
+    // A springy pop (overshoots, settles), a gentle float upward, then a fade.
+    const k = Math.min(1, age / 420);
+    const spring = 1 - Math.exp(-7 * k) * Math.cos(k * 13);
+    const fade = age > 2900 ? Math.max(0, 1 - (age - 2900) / 600) : 1;
+    const rise = Math.min(1, age / 3500) * t * 0.35;
+    const bob = Math.sin(age / 220) * t * 0.035;
+    const s = t * 0.52 * spring;
+    const cy = y - rise + bob;
     g.save();
-    g.globalAlpha = Math.max(0, fade);
-    g.fillStyle = '#ffffff';
-    g.strokeStyle = INK;
-    g.lineWidth = 2.5;
+    g.globalAlpha = fade;
+    // Frosted bubble with a soft shadow and a little tail.
+    g.shadowColor = 'rgba(0,0,0,0.45)';
+    g.shadowBlur = 14;
+    g.shadowOffsetY = 5;
+    g.fillStyle = 'rgba(255,255,255,0.95)';
     g.beginPath();
-    g.arc(x, y + bob, s, 0, Math.PI * 2);
+    g.arc(x, cy, s, 0, Math.PI * 2);
+    g.moveTo(x - s * 0.24, cy + s * 0.88);
+    g.quadraticCurveTo(x - s * 0.05, cy + s * 1.3, x - s * 0.02, cy + s * 1.38);
+    g.quadraticCurveTo(x + s * 0.12, cy + s * 1.1, x + s * 0.3, cy + s * 0.86);
     g.fill();
-    g.stroke();
-    g.beginPath();
-    g.moveTo(x - s * 0.22, y + bob + s * 0.9);
-    g.lineTo(x, y + bob + s * 1.3);
-    g.lineTo(x + s * 0.22, y + bob + s * 0.9);
-    g.fill();
-    g.stroke();
-    g.fillStyle = '#ffffff';
-    g.fillRect(x - s * 0.2, y + bob + s * 0.78, s * 0.4, s * 0.2);
+    g.shadowColor = 'transparent';
     const img = this.emoteImage(kind);
-    if (img) g.drawImage(img, x - s * 0.82, y + bob - s * 0.82, s * 1.64, s * 1.64);
+    // The emoji pops a beat after the bubble, with a little tilt.
+    const ik = Math.min(1, Math.max(0, (age - 60) / 380));
+    const is = 1 - Math.exp(-7 * ik) * Math.cos(ik * 14);
+    if (img) {
+      g.translate(x, cy);
+      g.rotate(Math.sin(age / 260) * 0.08);
+      g.drawImage(img, -s * 0.8 * is, -s * 0.8 * is, s * 1.6 * is, s * 1.6 * is);
+    }
     g.restore();
+    // A burst of tiny sparks when it first appears.
+    if (age < 500) {
+      const q = age / 500;
+      g.save();
+      g.globalAlpha = 1 - q;
+      g.fillStyle = '#ffd60a';
+      for (let i = 0; i < 6; i++) {
+        const a2 = (i / 6) * Math.PI * 2;
+        const r = t * (0.55 + q * 0.5);
+        g.beginPath();
+        g.arc(x + Math.cos(a2) * r, cy + Math.sin(a2) * r, t * 0.05 * (1 - q), 0, Math.PI * 2);
+        g.fill();
+      }
+      g.restore();
+    }
   }
 
   // ---------- frame ----------
@@ -1529,6 +1657,7 @@ export class CityRenderer {
     things.push({ y: jail.y + jail.h + 3, draw: () => this.drawFence(jail) });
     things.sort((a, b) => a.y - b.y);
     for (const th of things) th.draw();
+    this.drawDust(now);
 
     // Every Chog stays lit so its picture reads at night.
     const lit: { x: number; y: number; r: number }[] = [];

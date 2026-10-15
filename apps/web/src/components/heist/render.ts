@@ -509,7 +509,7 @@ export class VaultRenderer {
     g.lineWidth = 2;
     g.stroke();
     g.fillStyle = '#eafff2';
-    g.font = `${Math.round(sh * 0.72)}px ${this.font}`;
+    g.font = `800 ${Math.round(sh * 0.72)}px ${this.font}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText('EXIT', px + t / 2, sy + sh / 2 + 1);
@@ -603,7 +603,7 @@ export class VaultRenderer {
       g.lineWidth = 1;
       g.strokeRect(x + 3, y + 3, w - 6, h - 6);
       g.fillStyle = '#1f6b37';
-      g.font = `${Math.round(h * 0.8)}px ${this.font}`;
+      g.font = `800 ${Math.round(h * 0.8)}px ${this.font}`;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
       g.fillText('$', s / 2, s / 2 + 1);
@@ -633,7 +633,7 @@ export class VaultRenderer {
       g.fill();
       g.stroke();
       g.fillStyle = '#5a3d17';
-      g.font = `${Math.round(r * 1.1)}px ${this.font}`;
+      g.font = `800 ${Math.round(r * 1.1)}px ${this.font}`;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
       g.fillText('$', cx, cy + r * 0.12);
@@ -977,7 +977,7 @@ export class VaultRenderer {
         g.stroke();
         g.restore();
         g.save();
-        g.font = `${14}px ${this.font}`;
+        g.font = `800 ${14}px ${this.font}`;
         g.textAlign = 'center';
         g.textBaseline = 'middle';
         g.lineWidth = 3;
@@ -1197,7 +1197,7 @@ export class VaultRenderer {
     g.arc(0, 0, r, 0, Math.PI * 2);
     g.stroke();
     g.fillStyle = INK;
-    g.font = `${Math.round(r * 1.5)}px ${this.font}`;
+    g.font = `800 ${Math.round(r * 1.5)}px ${this.font}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(mark, 0, r * 0.08);

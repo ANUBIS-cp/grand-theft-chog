@@ -1,0 +1,268 @@
+import type { GangId } from '@chog-city/data';
+import type { Piece } from './piece';
+
+// How a Chog moves in the city. Every gang walks its own way (Royals glide, Clowns bounce, Wizards float,
+// Skulls stomp), and every walk has weight: steps keyed to the distance covered, a lean into the way you're
+// going that springs back when you stop, a little crouch before you set off and a squash when you land, and
+// puffs of dust. Looks only: where you are comes from the game, not from here.
+
+export type WalkStyle = 'swagger' | 'glide' | 'bounce' | 'float' | 'stomp' | 'zip' | 'mope';
+
+export const WALK_OF: Record<GangId, WalkStyle> = {
+  mcga: 'swagger',
+  lazoor: 'zip',
+  gangstas: 'swagger',
+  robbers: 'zip',
+  suits: 'glide',
+  royals: 'glide',
+  wizards: 'float',
+  'squid-game': 'stomp',
+  jailbirds: 'stomp',
+  clowns: 'bounce',
+  'btc-maxis': 'zip',
+  'mon-maxis': 'zip',
+  crybabies: 'mope',
+  'visor-gang': 'float',
+  skulls: 'stomp',
+  radioactive: 'float',
+  caps: 'bounce',
+  durags: 'swagger',
+  naked: 'bounce',
+  legends: 'glide',
+};
+
+/** A sparkle or glint left behind as they move. */
+export const TRAIL_OF: Partial<Record<GangId, string>> = {
+  wizards: '#c9a7ff',
+  'visor-gang': '#5ce1e6',
+  radioactive: '#9be33b',
+  royals: '#ffd23f',
+  legends: '#ffd23f',
+};
+
+interface Feel {
+  /** Steps per tile walked. */
+  steps: number;
+  /** Hop height, as a share of the card's height. */
+  hop: number;
+  /** Squash on each landing. */
+  squash: number;
+  /** Side-to-side rock, alternating each step (radians). */
+  sway: number;
+  /** Lean into the way you're going at full speed (radians). */
+  lean: number;
+  /** Hovering off the ground all the time (share of card height). */
+  hover: number;
+  /** Dust on every step. */
+  dusty: boolean;
+}
+
+const FEEL: Record<WalkStyle, Feel> = {
+  swagger: { steps: 1.5, hop: 0.05, squash: 0.04, sway: 0.11, lean: 0.04, hover: 0, dusty: false },
+  glide: { steps: 1.1, hop: 0.015, squash: 0.01, sway: 0.015, lean: 0.12, hover: 0, dusty: false },
+  bounce: { steps: 1.15, hop: 0.3, squash: 0.17, sway: 0.03, lean: 0.05, hover: 0, dusty: false },
+  float: { steps: 0.8, hop: 0.03, squash: 0, sway: 0.03, lean: 0.1, hover: 0.16, dusty: false },
+  stomp: { steps: 2.1, hop: 0.07, squash: 0.13, sway: 0.05, lean: 0.03, hover: 0, dusty: true },
+  zip: { steps: 2.5, hop: 0.11, squash: 0.06, sway: 0.03, lean: 0.11, hover: 0, dusty: false },
+  mope: { steps: 1.3, hop: 0.04, squash: 0.05, sway: 0.06, lean: -0.05, hover: 0, dusty: false },
+};
+
+export interface WalkState {
+  x: number;
+  y: number;
+  /** Tiles walked so far: the steps are keyed to this, so feet match the ground. */
+  dist: number;
+  /** Smoothed speed (tiles a second) and sideways velocity. */
+  speed: number;
+  vx: number;
+  lean: number;
+  leanV: number;
+  moving: boolean;
+  /** When they last set off and stopped (ms). */
+  startAt: number;
+  stopAt: number;
+  face: -1 | 1;
+  turnedAt: number;
+  lastStep: number;
+  lastTrail: number;
+  /** How high off the ground they're drawn right now (CSS px), for the name tag above. */
+  lift: number;
+}
+
+export function newWalk(x: number, y: number, face: -1 | 1): WalkState {
+  return {
+    x,
+    y,
+    dist: 0,
+    speed: 0,
+    vx: 0,
+    lean: 0,
+    leanV: 0,
+    moving: false,
+    startAt: -1e9,
+    stopAt: -1e9,
+    face,
+    turnedAt: -1e9,
+    lastStep: 0,
+    lastTrail: 0,
+    lift: 0,
+  };
+}
+
+export interface Dust {
+  x: number;
+  y: number;
+  vx: number;
+  at: number;
+  r: number;
+  color: string;
+  life: number;
+}
+
+/**
+ * Moves the walk on to where they are now. Returns any dust or sparkles to draw (positions in tiles).
+ * `moving` is what the game says; the walk also notices movement from the position changing.
+ */
+export function stepWalk(
+  w: WalkState,
+  x: number,
+  y: number,
+  moving: boolean,
+  face: -1 | 1,
+  style: WalkStyle,
+  trail: string | undefined,
+  now: number,
+  dt: number,
+): Dust[] {
+  const out: Dust[] = [];
+  const dx = x - w.x;
+  const dy = y - w.y;
+  const d = Math.hypot(dx, dy);
+  // A jump (a teleport, a fix from the server) isn't a walk.
+  const moved = d < 1.5 ? d : 0;
+  w.x = x;
+  w.y = y;
+  w.dist += moved;
+  const sp = dt > 0 ? moved / dt : 0;
+  w.speed += (sp - w.speed) * Math.min(1, dt * 10);
+  w.vx += ((dt > 0 && d < 1.5 ? dx / dt : 0) - w.vx) * Math.min(1, dt * 10);
+  const nowMoving = moving && w.speed > 0.25;
+  if (nowMoving !== w.moving) {
+    w.moving = nowMoving;
+    if (nowMoving) w.startAt = now;
+    else w.stopAt = now;
+    // A puff as they set off or plant their feet.
+    for (let i = 0; i < 4; i++)
+      out.push({
+        x: x + (Math.random() - 0.5) * 0.3,
+        y: y + 0.32,
+        vx: (Math.random() - 0.5) * 0.6 - Math.sign(w.vx) * 0.3,
+        at: now,
+        r: 0.1 + Math.random() * 0.06,
+        color: 'rgba(200,190,220,0.55)',
+        life: 420,
+      });
+  }
+  if (face !== w.face) {
+    w.face = face;
+    w.turnedAt = now;
+  }
+  // Lean: a spring towards how fast you're going sideways, so a stop rocks back and settles.
+  const f = FEEL[style];
+  const target = Math.max(-1, Math.min(1, w.vx / 4.4)) * f.lean;
+  const k = 120;
+  const damp = 11;
+  w.leanV += ((target - w.lean) * k - w.leanV * damp) * dt;
+  w.lean += w.leanV * dt;
+  // Dust on each heavy step; sparkles behind the magic ones.
+  const step = Math.floor(w.dist * f.steps);
+  if (step !== w.lastStep) {
+    w.lastStep = step;
+    if (f.dusty && w.moving)
+      out.push({ x, y: y + 0.32, vx: (Math.random() - 0.5) * 0.4, at: now, r: 0.09, color: 'rgba(200,190,220,0.5)', life: 360 });
+  }
+  if (trail && w.moving && now - w.lastTrail > 70) {
+    w.lastTrail = now;
+    out.push({
+      x: x + (Math.random() - 0.5) * 0.5,
+      y: y - 0.2 - Math.random() * 0.6,
+      vx: (Math.random() - 0.5) * 0.2,
+      at: now,
+      r: 0.05 + Math.random() * 0.04,
+      color: trail,
+      life: 700,
+    });
+  }
+  return out;
+}
+
+/** Draws the piece with its feet at (x, y) the way this gang walks. */
+export function drawWalker(
+  g: CanvasRenderingContext2D,
+  p: Piece,
+  x: number,
+  y: number,
+  w: WalkState,
+  style: WalkStyle,
+  now: number,
+  opts: { seed: number; emoted?: number; alpha?: number } = { seed: 0 },
+) {
+  const f = FEEL[style];
+  const H = p.top;
+  // Where in the step they are: 0..1, keyed to distance so feet and ground agree.
+  const ph = (w.dist * f.steps) % 1;
+  const stepN = Math.floor(w.dist * f.steps);
+  const moveK = Math.min(1, w.speed / 3);
+  let lift = 0;
+  let sy = 1;
+  let rot = w.lean;
+  if (w.moving) {
+    lift = Math.sin(ph * Math.PI) * H * f.hop * moveK;
+    sy = ph < 0.12 || ph > 0.9 ? 1 - f.squash * moveK : 1 + Math.sin(ph * Math.PI) * f.squash * 0.4;
+    rot += (stepN % 2 ? 1 : -1) * Math.sin(ph * Math.PI) * f.sway * moveK;
+  } else {
+    // Standing: a slow breath.
+    sy = 1 + Math.sin(now / 700 + opts.seed * 6) * 0.014;
+  }
+  // A crouch before setting off, a squash on stopping.
+  const since = now - w.startAt;
+  if (since < 110) sy *= 1 - 0.1 * Math.sin((since / 110) * Math.PI);
+  const stopped = now - w.stopAt;
+  if (!w.moving && stopped < 260) sy *= 1 - 0.08 * Math.sin((stopped / 260) * Math.PI) * (1 - stopped / 260);
+  // Floaters hover and bob, even standing still.
+  const hover = f.hover ? H * f.hover + Math.sin(now / 420 + opts.seed * 5) * H * 0.04 : 0;
+  lift += hover;
+  let sx = 1 / sy;
+  const turned = now - w.turnedAt;
+  if (turned < 220) sx *= Math.abs(Math.cos((turned / 220) * Math.PI));
+  if (opts.emoted !== undefined && opts.emoted < 700) rot += Math.sin(opts.emoted / 45) * 0.12 * (1 - opts.emoted / 700);
+  w.lift = lift;
+
+  // Shadow: stays on the ground, smaller the higher they are.
+  const air = Math.min(1, lift / (H * 0.45));
+  const sw = p.w * 0.42 * (1 - air * 0.45);
+  g.fillStyle = `rgba(0,0,0,${0.42 - air * 0.22})`;
+  g.beginPath();
+  g.ellipse(x, y + p.h - p.fy - 4, sw, sw * 0.3, 0, 0, Math.PI * 2);
+  g.fill();
+  if (f.hover) {
+    // A soft glow under a floater.
+    g.save();
+    g.globalAlpha = 0.25 + 0.1 * Math.sin(now / 300);
+    g.fillStyle = '#b48cff';
+    g.beginPath();
+    g.ellipse(x, y + p.h - p.fy - 4, sw * 0.8, sw * 0.24, 0, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+  }
+
+  g.save();
+  if (opts.alpha !== undefined) g.globalAlpha = opts.alpha;
+  // Rotate about the feet, so a lean tips the whole piece like a real standee.
+  g.translate(x, y - lift);
+  g.rotate(rot);
+  g.scale(Math.max(0.04, sx), sy);
+  g.drawImage(p.c, -p.fx, -p.fy, p.w, p.h);
+  g.restore();
+  return lift;
+}

@@ -148,7 +148,7 @@ export class Fx {
       g.globalAlpha = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
       g.translate(f.x, f.y - rise);
       g.scale(pop, pop);
-      g.font = `${Math.round(t * (f.big ? 0.8 : 0.48))}px ${font}`;
+      g.font = `800 ${Math.round(t * (f.big ? 0.8 : 0.48))}px ${font}`;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
       g.lineJoin = 'round';

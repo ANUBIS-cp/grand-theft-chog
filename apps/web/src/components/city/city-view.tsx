@@ -25,10 +25,12 @@ import {
   type Place,
   type Walker,
 } from '@chog-city/game/city';
+import { X } from '@phosphor-icons/react';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { GANG_COLOR } from '@/lib/theme';
+import { CityArt } from './art';
 import { CityRenderer, type Board, type Emote, type Person, type PlaceLook } from './city-render';
-import { LiveCity, type Chase, type ChaseEnd, type LiveStatus } from './live-city';
+import { LiveCity, type Chase, type ChaseEnd, type ChatMsg, type LiveStatus } from './live-city';
 
 export interface Me {
   chog: number | null;
@@ -37,6 +39,7 @@ export interface Me {
   ink: string;
   /** In jail until (ms): you walk round the jail yard until then. */
   jail: number | null;
+  gang?: GangId | null;
 }
 
 export interface Stroller {
@@ -61,6 +64,8 @@ export interface CityHandle {
   /** Walk to a place's door. */
   walkTo(placeId: string): void;
   emote(kind: Emote): void;
+  /** Say something in the city room or your gang's. */
+  say(room: 'city' | 'gang', text: string): void;
   /** Put your Chog at a place's door (coming back from a heist). */
   appearAt(placeId: string): void;
   /** Out of a vault with a bag: start the getaway home. */
@@ -94,6 +99,8 @@ interface Props {
   /** The getaways running in the city changed. */
   onChase?: (chases: Chase[]) => void;
   onChaseEnd?: (e: ChaseEnd) => void;
+  /** The chat: every message so far, the new one (if any) and why yours was refused (if it was). */
+  onChat?: (all: ChatMsg[], fresh: ChatMsg | null, refused?: string) => void;
   /** The practice getaway ended (nothing real moves). */
   onPracticeEnd?: (outcome: 'home' | 'caught' | 'time') => void;
 }
@@ -127,7 +134,14 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     target: null as { x: number; y: number } | null,
     keys: new Set<string>(),
     stick: null as { x: number; y: number } | null,
+    /** Getting up to speed (0..1) and the way you were last going, so starts and stops have weight. */
+    ramp: 0,
+    dir: { x: 0, y: 0 },
+    /** Where the camera looks ahead of you, in tiles. */
+    look: { x: 0, y: 0 },
     emote: null as { kind: Emote; at: number } | null,
+    /** What you last said in the city room, for the bubble over your head. */
+    said: null as { text: string; at: number } | null,
     door: null as Place | null,
     /** The place you asked to walk to; its card opens when you get there. */
     intent: null as string | null,
@@ -158,6 +172,9 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     emote(kind) {
       state.current.emote = { kind, at: performance.now() };
       state.current.net?.emote(kind);
+    },
+    say(room, text) {
+      state.current.net?.say(room, text);
     },
     appearAt(id) {
       const p = placeOf(id);
@@ -244,6 +261,10 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         if (s.after === e.id) s.after = null;
         live.current.onChaseEnd?.(e);
       },
+      chat: (fresh, refused) => live.current.onChat?.(net.chat, fresh, refused),
+      said: (text) => {
+        s.said = { text, at: performance.now() };
+      },
     });
     s.net = net;
     const t = setInterval(() => live.current.onLive(net.status, net.online), 2000);
@@ -315,12 +336,23 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       }
       if (vx || vy) {
         const len = Math.hypot(vx, vy);
-        const sp = (WALK_SPEED * dt * Math.min(1, len)) / len;
+        // Up to full speed in about a tenth of a second: quick, but you feel the push.
+        s.ramp = Math.min(1, s.ramp + dt / 0.12);
+        s.dir = { x: vx / len, y: vy / len };
+        const sp = (WALK_SPEED * (0.5 + 0.5 * s.ramp) * dt * Math.min(1, len)) / len;
         const n = (jailed ? slideInPen : slide)(s.x, s.y, vx * sp, vy * sp);
         s.moving = n.x !== s.x || n.y !== s.y;
         s.x = n.x;
         s.y = n.y;
         if (Math.abs(vx) > 0.1) s.face = vx < 0 ? -1 : 1;
+      } else if (s.ramp > 0 && !s.path.length) {
+        // Let go: a short glide to a stop instead of freezing on the spot.
+        s.ramp = Math.max(0, s.ramp - dt / 0.09);
+        const sp = WALK_SPEED * 0.55 * s.ramp * dt;
+        const n = (jailed ? slideInPen : slide)(s.x, s.y, s.dir.x * sp, s.dir.y * sp);
+        s.moving = s.ramp > 0.3 && (n.x !== s.x || n.y !== s.y);
+        s.x = n.x;
+        s.y = n.y;
       } else if (s.path.length && !p.paused) {
         let left = WALK_SPEED * dt;
         while (left > 0 && s.path.length) {
@@ -387,8 +419,10 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
             moving: o.moving,
             npc: o.npc && !o.cop,
             cop: o.cop,
+            gang: o.gang,
             bag: bags.get(o.id),
             emote: o.emote,
+            said: o.said,
             tap:
               o.chog !== null && !o.cop
                 ? { chog: o.chog, name: o.name, gang: o.gang, player: !o.npc }
@@ -425,6 +459,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
             face: w.face,
             moving: w.moving,
             npc: true,
+            gang: c.gang,
             tap: { chog: c.id, name: c.name, gang: c.gang, player: false },
           });
         }
@@ -448,8 +483,10 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         face: s.face,
         moving: s.moving,
         me: true,
+        gang: p.me.gang,
         bag: mine?.bag,
         emote: s.emote ?? undefined,
+        said: s.said ?? undefined,
       });
       if (p.wanted?.length) {
         const wanted = new Set(p.wanted);
@@ -487,7 +524,14 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
 
       r.places = p.places;
       r.board = p.board;
-      r.follow(s.x, s.y);
+      // The camera leads you a little in the way you're going, so you see what's coming.
+      const lead = s.moving ? 1.6 : 0;
+      const ldx = s.path.length ? s.path[0]!.x - s.x : s.dir.x;
+      const ldy = s.path.length ? s.path[0]!.y - s.y : s.dir.y;
+      const ll = Math.hypot(ldx, ldy) || 1;
+      s.look.x += ((ldx / ll) * lead - s.look.x) * Math.min(1, dt * 2.5);
+      s.look.y += ((ldy / ll) * lead - s.look.y) * Math.min(1, dt * 2.5);
+      r.follow(s.x + s.look.x, s.y + s.look.y);
       r.draw(people, now, {
         jailed: [],
         target: s.target,
@@ -586,16 +630,47 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       />
       {props.mapOpen && (
         <div
-          className="absolute inset-0 z-30 grid place-items-center bg-black/60 p-4 backdrop-blur-[2px]"
+          className="absolute inset-0 z-30 grid animate-[fade-in_200ms] place-items-center bg-black/55 p-3 backdrop-blur-[6px] sm:p-6"
           onPointerDown={(e) => e.target === e.currentTarget && props.onCloseMap()}
         >
-          <canvas
-            ref={bigRef}
-            onPointerDown={onMap}
-            aria-label="Map of the city. Tap a spot to walk there."
-            className="max-h-full w-full max-w-[920px] cursor-pointer rounded-[22px] border-[3px] border-ink shadow-[0_6px_0_0_#000]"
-            style={{ aspectRatio: `${CITY.w} / ${CITY.h}` }}
-          />
+          <div className="glass-strong flex max-h-full w-full max-w-[860px] animate-[glass-in_380ms_cubic-bezier(.2,.9,.3,1)] flex-col overflow-hidden rounded-[28px] text-white">
+            <div className="flex items-center justify-between gap-3 px-5 pb-3 pt-4">
+              <div>
+                <h2 className="font-display text-[24px] leading-none">Chog City</h2>
+                <p className="mt-1 text-[13px] text-label-2">Tap anywhere to walk there.</p>
+              </div>
+              <div className="hidden items-center gap-3 text-[12px] font-medium text-label-2 sm:flex">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-sys-pink ring-2 ring-white" /> You
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-white/80 ring-2 ring-white" /> Players
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-sys-red" /> Getaway
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-sys-blue" /> Police
+                </span>
+              </div>
+              <button
+                onClick={props.onCloseMap}
+                aria-label="Close the map"
+                className="press grid h-8 w-8 shrink-0 place-items-center rounded-full bg-fill text-label-2 hover:text-white"
+              >
+                <X size={14} weight="bold" />
+              </button>
+            </div>
+            <div className="min-h-0 overflow-auto px-3 pb-3">
+              <canvas
+                ref={bigRef}
+                onPointerDown={onMap}
+                aria-label="Map of the city. Tap a spot to walk there."
+                className="w-full cursor-pointer rounded-[20px]"
+                style={{ aspectRatio: `${CITY.w} / ${CITY.h}` }}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -623,21 +698,29 @@ function jailedPeople(list: Jailed[], now: number): (Person & { tap?: Tapped })[
         face: (i % 2 ? -1 : 1) as -1 | 1,
         moving: false,
         npc: true,
+        gang: j.gang,
         tap: { chog: j.id, name: j.name, gang: j.gang, player: false },
       };
     });
 }
 
 const MAP_GROUND: Record<number, string> = {
-  [Ground.Road]: '#17142a',
-  [Ground.Cross]: '#17142a',
-  [Ground.Walk]: '#3a3456',
-  [Ground.Prop]: '#3a3456',
-  [Ground.Yard]: '#3d3358',
-  [Ground.Grass]: '#25573f',
-  [Ground.Plaza]: '#4a4170',
-  [Ground.Pen]: '#45455a',
-  [Ground.Block]: '#3a3456',
+  [Ground.Road]: '#16151f',
+  [Ground.Cross]: '#1d1c28',
+  [Ground.Walk]: '#2a2937',
+  [Ground.Prop]: '#2a2937',
+  [Ground.Yard]: '#2f2a3d',
+  [Ground.Grass]: '#1d3a2d',
+  [Ground.Plaza]: '#363149',
+  [Ground.Pen]: '#363645',
+  [Ground.Block]: '#2a2937',
+};
+
+/** The buildings' pictures, for the maps. */
+let mapArt: CityArt | null = null;
+const artFor = (p: Place) => {
+  mapArt ??= new CityArt(() => {});
+  return mapArt.get(p.kind === 'gang' ? `gang-${p.id}` : p.kind === 'jail' ? 'jail' : 'practice');
 };
 
 /** Which part of the city (x, y) is in: a place id when you're at or beside it, else 'plaza' or 'street'. */
@@ -679,69 +762,92 @@ function paintMap(
   goal?: { x: number; y: number },
 ) {
   g.drawImage(mapBase(k), 0, 0);
-  const lw = Math.max(1.5, k * 0.25);
+  const pulse = 0.5 + 0.5 * Math.sin(now / 300);
   for (const p of CITY.places) {
     const look = places[p.id];
-    const c = p.kind === 'jail' ? '#77778c' : p.kind === 'training' ? '#4fbf98' : (look?.color ?? '#555');
+    const c = p.kind === 'jail' ? '#6e6e86' : p.kind === 'training' ? '#34c79a' : (look?.color ?? '#555');
+    const bx = p.x * k;
+    const by = p.y * k;
+    const bw = p.w * k;
+    const bh = p.h * k;
+    // A soft tinted plot in the gang's colour, then the building's own picture on it.
+    g.save();
+    g.globalAlpha = 0.32;
     g.fillStyle = c;
-    g.strokeStyle = '#0d0b1a';
-    g.lineWidth = lw;
     g.beginPath();
-    g.roundRect(p.x * k, p.y * k, p.w * k, p.h * k, k * 0.8);
+    g.roundRect(bx - k * 0.3, by - k * 0.3, bw + k * 0.6, bh + k * 3.3, k * 1.1);
     g.fill();
-    g.stroke();
-    if (look?.mine) {
-      g.strokeStyle = '#ffd23f';
-      g.lineWidth = lw * 1.6;
+    g.restore();
+    const art = artFor(p);
+    if (art) {
+      const s = Math.min((bw + k * 0.4) / art.naturalWidth, (bh + k * 2.4) / art.naturalHeight);
+      const w = art.naturalWidth * s;
+      const h = art.naturalHeight * s;
+      g.drawImage(art, bx + (bw - w) / 2, by + bh + k * 0.6 - h, w, h);
+    } else {
+      g.fillStyle = c;
       g.beginPath();
-      g.roundRect(p.x * k + lw, p.y * k + lw, p.w * k - lw * 2, p.h * k - lw * 2, k * 0.6);
+      g.roundRect(bx, by, bw, bh, k * 0.8);
+      g.fill();
+    }
+    if (look?.mine) {
+      g.strokeStyle = '#ff2d6a';
+      g.lineWidth = Math.max(2, k * 0.35);
+      g.beginPath();
+      g.roundRect(bx - k * 0.3, by - k * 0.3, bw + k * 0.6, bh + k * 3.3, k * 1.1);
       g.stroke();
     }
-    if (look?.alarm && Math.floor(now / 300) % 2 === 0) {
-      g.strokeStyle = '#ff2d55';
-      g.lineWidth = lw * 2;
+    if (look?.alarm) {
+      g.strokeStyle = `rgba(255,69,58,${0.4 + pulse * 0.6})`;
+      g.lineWidth = Math.max(2, k * 0.5);
       g.beginPath();
-      g.roundRect(p.x * k - lw, p.y * k - lw, p.w * k + lw * 2, p.h * k + lw * 2, k);
+      g.roundRect(bx - k * 0.7, by - k * 0.7, bw + k * 1.4, bh + k * 4.1, k * 1.4);
       g.stroke();
     }
   }
   const flash = Math.floor(now / 250) % 2 === 0;
   for (const p of people) {
     if (p.me) continue;
-    // Police flash red and blue; anyone with a bag is a big red dot.
+    // Police flash red and blue; anyone with a bag is a big red dot; players have a white ring.
+    const r = Math.max(2, k * (p.cop ? 0.55 : p.bag ? 0.8 : p.npc ? 0.32 : 0.5));
     g.fillStyle = p.cop
       ? flash
-        ? '#ff2d55'
-        : '#3c82ff'
+        ? '#ff453a'
+        : '#0a84ff'
       : p.bag
-        ? '#ff2d55'
+        ? '#ff453a'
         : p.npc
-          ? 'rgba(255,255,255,0.55)'
-          : '#ffffff';
+          ? 'rgba(255,255,255,0.4)'
+          : p.color;
     g.beginPath();
-    g.arc(
-      p.x * k,
-      p.y * k,
-      Math.max(1.5, k * (p.cop ? 0.55 : p.bag ? 0.75 : p.npc ? 0.3 : 0.42)),
-      0,
-      Math.PI * 2,
-    );
+    g.arc(p.x * k, p.y * k, r, 0, Math.PI * 2);
     g.fill();
+    if (!p.npc && !p.cop) {
+      g.strokeStyle = '#ffffff';
+      g.lineWidth = Math.max(1, k * 0.15);
+      g.stroke();
+    }
   }
   if (goal) {
-    g.strokeStyle = '#ffd23f';
+    g.strokeStyle = '#ffd60a';
     g.lineWidth = Math.max(2, k * 0.35);
     g.beginPath();
-    g.arc(goal.x * k, goal.y * k, Math.max(5, k * (flash ? 1.6 : 1.2)), 0, Math.PI * 2);
+    g.arc(goal.x * k, goal.y * k, Math.max(5, k * (1.2 + pulse * 0.5)), 0, Math.PI * 2);
     g.stroke();
   }
-  g.fillStyle = '#ffd23f';
-  g.strokeStyle = '#0d0b1a';
-  g.lineWidth = Math.max(2, k * 0.3);
+  // You: a pink dot with a white ring and a halo breathing round it, like "you are here" on a map.
+  g.fillStyle = `rgba(255,45,106,${0.18 + pulse * 0.14})`;
   g.beginPath();
-  g.arc(x * k, y * k, Math.max(4, k * 0.9), 0, Math.PI * 2);
+  g.arc(x * k, y * k, Math.max(8, k * (1.6 + pulse * 0.5)), 0, Math.PI * 2);
   g.fill();
-  g.stroke();
+  g.fillStyle = '#ffffff';
+  g.beginPath();
+  g.arc(x * k, y * k, Math.max(5, k * 0.95), 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#ff2d6a';
+  g.beginPath();
+  g.arc(x * k, y * k, Math.max(3.5, k * 0.68), 0, Math.PI * 2);
+  g.fill();
 }
 
 const LOCAL_K = 8;
@@ -810,23 +916,24 @@ function drawBig(
   for (const p of CITY.places) {
     const look = places[p.id];
     const name = p.kind === 'jail' ? 'Jail' : p.kind === 'training' ? 'Practice vault' : (look?.name ?? '');
-    const size = Math.round(k * 1.5);
-    g.font = `${size}px ${font}`;
+    const size = Math.round(Math.max(10, k * 1.05));
+    g.font = `700 ${size}px ${font}`;
     const cx = (p.x + p.w / 2) * k;
-    const cy = (p.y + p.h / 2) * k;
-    const words = name.toUpperCase().split(' ');
-    const lines =
-      words.length > 1 && g.measureText(name.toUpperCase()).width > p.w * k * 0.9
-        ? words
-        : [name.toUpperCase()];
-    g.fillStyle = p.kind === 'gang' ? (look?.ink ?? '#fff') : '#0d0b1a';
-    lines.forEach((l, i) =>
-      g.fillText(l, cx, cy + (i - (lines.length - 1) / 2) * size * 1.05, p.w * k * 0.92),
-    );
-    if (look && p.kind === 'gang') {
-      g.font = `${Math.round(size * 0.8)}px ${font}`;
-      g.fillText(`#${look.rank}`, cx, (p.y + 1.2) * k);
-    }
+    const ly = (p.y + p.h + 2.2) * k;
+    const label = look && p.kind === 'gang' ? `${look.rank}  ${name}` : name;
+    const w = Math.min(p.w * k * 1.15, g.measureText(label).width + size * 1.4);
+    const h = size * 1.7;
+    // A frosted label under each building, with its rank.
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,0.5)';
+    g.shadowBlur = 8;
+    g.fillStyle = look?.mine ? 'rgba(255,45,106,0.92)' : 'rgba(22,20,34,0.82)';
+    g.beginPath();
+    g.roundRect(cx - w / 2, ly - h / 2, w, h, h / 2);
+    g.fill();
+    g.restore();
+    g.fillStyle = '#ffffff';
+    g.fillText(label, cx, ly + 0.5, w - size * 0.8);
   }
 }
 

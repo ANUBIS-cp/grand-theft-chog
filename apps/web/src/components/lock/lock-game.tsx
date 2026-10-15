@@ -184,14 +184,14 @@ export function LockGame(props: {
       <div className="relative w-full max-w-[440px]">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="font-display text-[15px] uppercase tracking-wide text-white/60">
+            <p className="font-display text-[12px] tracking-wide text-white/60">
               Break in · {GANGS[gang].name}
             </p>
-            <h1 className="font-display text-[40px] uppercase leading-none">{how.title}</h1>
+            <h1 className="font-display text-[30px] leading-none">{how.title}</h1>
           </div>
           <span
             className={cn(
-              'mb-1 inline-flex items-center gap-1.5 rounded-full border-[3px] border-ink px-3 pb-0.5 pt-1 font-display text-[18px] uppercase leading-none text-ink shadow-[0_3px_0_0_#000]',
+              'mb-1 inline-flex items-center gap-1.5 rounded-full px-3 pb-0.5 pt-1 font-display text-[13px] leading-none text-ink',
               loud ? 'bg-jail' : 'bg-[#7cf0c4]',
             )}
           >
@@ -200,7 +200,7 @@ export function LockGame(props: {
           </span>
         </div>
         {/* The clock: run it out and you force the door, loudly. */}
-        <div className="mt-3 h-3 overflow-hidden rounded-full border-2 border-ink bg-black/50">
+        <div className="mt-3 h-3 overflow-hidden rounded-full bg-black/50">
           <div
             className={cn('h-full rounded-full', left < 4 ? 'bg-jail' : 'bg-[#ffd666]')}
             style={{ width: `${(left / (LOCK_LIMIT / LOCK_TPS)) * 100}%` }}
@@ -209,7 +209,7 @@ export function LockGame(props: {
 
         <div
           className={cn(
-            'relative mt-4 select-none rounded-[20px] border-[3px] border-ink p-4 shadow-[0_6px_0_0_#000]',
+            'relative mt-4 select-none rounded-[20px] p-4',
             shaking && 'animate-[lock-shake_260ms_ease-in-out]',
           )}
           style={{ background: `linear-gradient(180deg, ${color.bg}, ${shade(color.bg)})` }}
@@ -228,7 +228,7 @@ export function LockGame(props: {
             <div className="absolute inset-0 grid place-items-center rounded-[17px] bg-[#0b0918]/75">
               <div
                 className={cn(
-                  'animate-[banner-in_380ms_ease-out_both] -rotate-3 rounded-[10px] border-[3px] px-5 pb-1 pt-2 text-center font-display uppercase leading-none',
+                  'animate-[banner-in_380ms_ease-out_both] -rotate-3 rounded-[10px] border-[3px] px-5 pb-1 pt-2 text-center font-display leading-none',
                   result === 'quiet' ? 'border-[#7cf0c4] text-[#7cf0c4]' : 'border-jail text-jail',
                 )}
               >
@@ -340,17 +340,14 @@ function Wires({ s, onCut }: { s: LockState; onCut: (i: number) => void }) {
   const cut = new Set(s.order.slice(0, s.done));
   const watching = lit !== null;
   return (
-    <div className="rounded-[14px] border-[3px] border-ink bg-[#14102a] p-3">
-      <div className="mb-2 flex items-center justify-between font-display text-[15px] uppercase leading-none">
+    <div className="rounded-[14px] bg-[#14102a] p-3">
+      <div className="mb-2 flex items-center justify-between font-display text-[12px] leading-none">
         <span className={watching ? 'text-[#ffd666]' : 'text-white/60'}>{watching ? 'Watch…' : 'Cut!'}</span>
         <span className="flex gap-1">
           {s.order.map((_, i) => (
             <span
               key={i}
-              className={cn(
-                'h-3 w-6 rounded-full border-2 border-ink',
-                i < s.done ? 'bg-[#7cf0c4]' : 'bg-white/15',
-              )}
+              className={cn('h-3 w-6 rounded-full', i < s.done ? 'bg-[#7cf0c4]' : 'bg-white/15')}
             />
           ))}
         </span>
@@ -369,7 +366,7 @@ function Wires({ s, onCut }: { s: LockState; onCut: (i: number) => void }) {
             }}
             className="relative flex h-[42px] w-full items-center gap-2"
           >
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[6px] border-2 border-ink bg-[#3a3556] font-mono text-[12px] text-white/70">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[6px] bg-[#3a3556] font-mono text-[12px] text-white/70">
               {i + 1}
             </span>
             <span className="relative h-full flex-1">
@@ -377,7 +374,7 @@ function Wires({ s, onCut }: { s: LockState; onCut: (i: number) => void }) {
               {[0, 1].map((half) => (
                 <span
                   key={half}
-                  className="absolute top-1/2 h-[10px] -translate-y-1/2 rounded-full border-2 border-ink transition-transform duration-150"
+                  className="absolute top-1/2 h-[10px] -translate-y-1/2 rounded-full transition-transform duration-150"
                   style={{
                     left: half ? '52%' : 0,
                     right: half ? 0 : '52%',
@@ -397,7 +394,7 @@ function Wires({ s, onCut }: { s: LockState; onCut: (i: number) => void }) {
                 />
               )}
             </span>
-            <span className="h-7 w-7 shrink-0 rounded-[6px] border-2 border-ink bg-[#3a3556]" />
+            <span className="h-7 w-7 shrink-0 rounded-[6px] bg-[#3a3556]" />
           </button>
         );
       })}
@@ -412,9 +409,9 @@ function Reels({ s, gang }: { s: LockState; gang: GangId }) {
   const H = 76;
   return (
     <div>
-      <div className="mb-3 flex items-center justify-center gap-2 font-display text-[16px] uppercase leading-none">
+      <div className="mb-3 flex items-center justify-center gap-2 font-display text-[12px] leading-none">
         <span className="pt-0.5">Stop on</span>
-        <span className="grid h-10 w-14 place-items-center rounded-[8px] border-2 border-ink bg-white">
+        <span className="grid h-10 w-14 place-items-center rounded-[8px] bg-white">
           <img src={`/art/city/gang-${gang}.webp`} alt="" className="max-h-8 max-w-12 object-contain" />
         </span>
       </div>
@@ -477,8 +474,7 @@ function Dial({
   const angle = -(s.dial / (DIAL * 4)) * 360;
   const want = s.combo[s.done];
   const on = want !== undefined && dialNumber(s.dial) === want;
-  const btn =
-    'grid h-14 w-16 place-items-center rounded-[12px] border-[3px] border-ink bg-white text-ink shadow-[0_4px_0_0_#000] active:translate-y-[2px]';
+  const btn = 'grid h-14 w-16 place-items-center rounded-[12px] bg-white text-ink';
   const holdProps = (i: LockInput) => ({
     onPointerDown: (e: React.PointerEvent) => {
       e.preventDefault();
@@ -490,12 +486,12 @@ function Dial({
   });
   return (
     <div className="flex flex-col items-center">
-      <div className="mb-2 flex items-center gap-2 font-display uppercase leading-none">
+      <div className="mb-2 flex items-center gap-2 font-display leading-none">
         {s.combo.map((n, i) => (
           <span
             key={i}
             className={cn(
-              'grid h-11 w-14 place-items-center rounded-[8px] border-[3px] border-ink pt-1 text-[26px] tabular-nums',
+              'grid h-11 w-14 place-items-center rounded-[8px] pt-1 text-[26px] tabular-nums',
               i < s.done
                 ? 'bg-[#7cf0c4] text-ink'
                 : i === s.done

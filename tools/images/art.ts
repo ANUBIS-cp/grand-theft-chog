@@ -9,7 +9,8 @@ import sharp from 'sharp';
 import { keyMagenta } from './key.ts';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
-const IN = join(ROOT, 'art-in');
+// An optional folder argument processes just those pictures (so straightened ones in art-in aren't redone).
+const IN = process.argv[2] ? join(process.cwd(), process.argv[2]) : join(ROOT, 'art-in');
 const OUT = join(ROOT, 'apps/web/public/art/city');
 
 const GANGS = [
@@ -29,6 +30,10 @@ const GANGS = [
   'visor-gang',
   'skulls',
   'radioactive',
+  'caps',
+  'durags',
+  'naked',
+  'legends',
 ];
 /** Longest side in px after preparing: buildings are drawn up to about 10 tiles wide. */
 const SIZE: Record<string, number> = {

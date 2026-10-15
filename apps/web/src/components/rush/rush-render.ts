@@ -542,7 +542,7 @@ export class RushRenderer {
     else if (scared) this.v.bubble(g, x, top, '!', 0, '#3a86ff', now);
     if (human) {
       g.save();
-      g.font = `${Math.round(t * 0.26)}px ${this.v.font}`;
+      g.font = `800 ${Math.round(t * 0.26)}px ${this.v.font}`;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
       g.lineWidth = 3;

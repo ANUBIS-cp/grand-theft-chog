@@ -35,7 +35,7 @@ export function ConnectPanel({ onLoggedIn }: { onLoggedIn: () => void }) {
   return (
     <Panel className="mx-auto max-w-[460px] p-5 sm:p-6">
       <Label>Step 1 of 3</Label>
-      <h1 className="mt-2 font-display text-[40px] uppercase leading-[0.9]">
+      <h1 className="mt-2 font-display text-[30px] leading-tight">
         Connect the wallet that holds your Chog
       </h1>
       <p className="mt-3 text-[15px] leading-snug text-ink-soft">

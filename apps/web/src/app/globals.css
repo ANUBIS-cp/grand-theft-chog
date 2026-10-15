@@ -28,8 +28,28 @@
   --color-white: #ffffff;
   --color-transparent: transparent;
 
-  --font-display: 'Display Digits', var(--font-koulen), 'Impact', sans-serif;
-  --font-sans: var(--font-archivo), 'Helvetica Neue', Arial, sans-serif;
+  /* Titles: SF Pro Rounded on Apple devices, Nunito elsewhere. Text: San Francisco, then Inter. */
+  --font-display: ui-rounded, 'SF Pro Rounded', var(--font-nunito), system-ui, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', var(--font-inter), system-ui, sans-serif;
+  --font-brand: 'Display Digits', var(--font-koulen), 'Impact', sans-serif;
+
+  /* The glass interface (dark, like iOS): materials, labels and system colours. */
+  --color-glass: rgb(26 24 40 / 0.6);
+  --color-glass-strong: rgb(20 18 32 / 0.84);
+  --color-label: #ffffff;
+  --color-label-2: rgb(235 235 245 / 0.62);
+  --color-label-3: rgb(235 235 245 / 0.32);
+  --color-fill: rgb(120 120 128 / 0.24);
+  --color-fill-2: rgb(120 120 128 / 0.16);
+  --color-sep: rgb(255 255 255 / 0.09);
+  --color-sys-pink: #ff375f;
+  --color-sys-gold: #ffd60a;
+  --color-sys-green: #30d158;
+  --color-sys-red: #ff453a;
+  --color-sys-blue: #0a84ff;
+  --color-sys-orange: #ff9f0a;
+  --color-sys-purple: #bf5af2;
+  --color-black: #000000;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
   --shadow-hard: 3px 3px 0 0 var(--color-ink);
@@ -48,19 +68,13 @@
     font-family: var(--font-sans);
     min-height: 100dvh;
   }
-  /* Paper grain, like the Chog art. */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 50;
-    opacity: 0.07;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  }
   :focus-visible {
-    outline: 2px solid var(--color-ink);
+    outline: 2px solid var(--color-sys-blue);
     outline-offset: 2px;
+  }
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -117,10 +131,14 @@
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 5px 0 0 #000, 0 0 0 0 rgba(255, 214, 102, 0.9);
+    box-shadow:
+      0 12px 30px rgba(0, 0, 0, 0.45),
+      0 0 0 0 rgba(255, 214, 10, 0.75);
   }
   100% {
-    box-shadow: 0 5px 0 0 #000, 0 0 0 16px rgba(255, 214, 102, 0);
+    box-shadow:
+      0 12px 30px rgba(0, 0, 0, 0.45),
+      0 0 0 18px rgba(255, 214, 10, 0);
   }
 }
 
@@ -161,5 +179,136 @@
   }
   75% {
     transform: translateX(7px) rotate(0.6deg);
+  }
+}
+
+/* ---------- The glass interface ---------- */
+@layer components {
+  /* Titles in SF Rounded are heavy, not shouty. */
+  .font-display {
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  /* A frosted panel floating over the city. */
+  .glass {
+    background: var(--color-glass);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    backdrop-filter: blur(28px) saturate(180%);
+    box-shadow:
+      inset 0 0.5px 0 rgb(255 255 255 / 0.22),
+      inset 0 0 0 0.5px rgb(255 255 255 / 0.1),
+      0 12px 40px rgb(0 0 0 / 0.42);
+  }
+  .glass-strong {
+    background: var(--color-glass-strong);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    backdrop-filter: blur(40px) saturate(180%);
+    box-shadow:
+      inset 0 0.5px 0 rgb(255 255 255 / 0.2),
+      inset 0 0 0 0.5px rgb(255 255 255 / 0.09),
+      0 24px 70px rgb(0 0 0 / 0.55);
+  }
+  /* Springy press, like a tap on iOS. */
+  .press {
+    transition:
+      transform 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.25),
+      background-color 0.2s,
+      opacity 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .press:active:not(:disabled) {
+    transform: scale(0.95);
+    transition-duration: 0.08s;
+  }
+  /* Buttons. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 50px;
+    padding: 0 1.25rem;
+    border-radius: 14px;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .btn:disabled {
+    opacity: 0.4;
+  }
+  .btn-primary {
+    background: linear-gradient(180deg, #ff5c86, #ff2d6a);
+    color: #fff;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.3),
+      0 8px 24px rgb(255 45 106 / 0.35);
+  }
+  .btn-gold {
+    background: linear-gradient(180deg, #ffe066, #ffc300);
+    color: #1c1500;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.5),
+      0 8px 24px rgb(255 195 0 / 0.3);
+  }
+  .btn-glass {
+    background: var(--color-fill);
+    color: #fff;
+  }
+  .btn-glass:hover:not(:disabled) {
+    background: rgb(120 120 128 / 0.32);
+  }
+  .btn-sm {
+    min-height: 36px;
+    padding: 0 0.85rem;
+    border-radius: 999px;
+    font-size: 15px;
+  }
+  /* A small caps label above a group. */
+  .section-label {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--color-label-2);
+    text-transform: uppercase;
+  }
+  /* A grouped list, like iOS settings. */
+  .group-list {
+    border-radius: 16px;
+    background: rgb(255 255 255 / 0.05);
+    overflow: hidden;
+  }
+  .group-list > * + * {
+    border-top: 0.5px solid var(--color-sep);
+  }
+}
+
+@keyframes glass-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes banner-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-28px) scale(0.92);
   }
 }

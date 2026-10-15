@@ -15,6 +15,7 @@ import {
   type Walker,
 } from '@chog-city/game/city';
 import { readTicket } from '@chog-city/server/ticket';
+import { chatHistory, say } from './chat.ts';
 import { chasesNow, copPositions, startChase, stepChases } from './getaway.ts';
 import { raidCount, raidHello, type RaidHandler } from './raids.ts';
 import { createServer } from 'node:http';
@@ -206,6 +207,7 @@ wss.on('connection', (ws, req) => {
       send(ws, { t: 'all', people: everyone() });
       // Getaways already running, so a newcomer sees the chase too.
       for (const c of chasesNow()) send(ws, { t: 'chase', ...c });
+      send(ws, { t: 'chat', msgs: chatHistory(p.gang) });
       if (p.chog !== null) broadcast({ t: 'join', p: info(p) }, p.id);
       // A stroller that is now being played leaves the street.
       if (p.chog !== null && strolling.some((s) => s.chog === p.chog)) broadcast({ t: 'leave', id: -p.chog });
@@ -237,6 +239,15 @@ wss.on('connection', (ws, req) => {
         me.x = at.x;
         me.y = at.y;
         send(ws, { t: 'fix', x: me.x, y: me.y });
+      }
+    } else if (msg.t === 'say') {
+      // Chat: the city room goes to everyone, a gang room only to that gang.
+      const m = say(me, msg.room, msg.text, now);
+      if (typeof m === 'string') send(ws, { t: 'say-no', why: m });
+      else {
+        const out = JSON.stringify({ t: 'msg', m, by: me.id });
+        for (const p of players.values())
+          if ((m.room === 'city' || p.gang === m.gang) && p.ws.readyState === p.ws.OPEN) p.ws.send(out);
       }
     } else if (msg.t === 'em' && isEmote(msg.k) && now - me.lastEmote > 900) {
       me.lastEmote = now;

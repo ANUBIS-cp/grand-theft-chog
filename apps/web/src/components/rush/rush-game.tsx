@@ -742,13 +742,11 @@ export function RushGame(props: RushGameProps) {
             </button>
           )}
           <div
-            className="flex min-w-0 items-center gap-1.5 rounded-[8px] border-2 border-ink py-1 pl-1.5 pr-2 shadow-[0_3px_0_0_#000]"
+            className="flex min-w-0 items-center gap-1.5 rounded-[8px] py-1 pl-1.5 pr-2"
             style={{ background: owner.color, color: owner.ink }}
           >
             <Vault size={16} weight="fill" className="shrink-0" />
-            <span className="truncate pt-0.5 font-display text-[16px] uppercase leading-none">
-              {owner.name}
-            </span>
+            <span className="truncate pt-0.5 font-display text-[12px] leading-none">{owner.name}</span>
           </div>
           <span
             className="hidden items-center gap-0.5 sm:flex"
@@ -759,17 +757,14 @@ export function RushGame(props: RushGameProps) {
                 key={i}
                 size={22}
                 weight="fill"
-                className={cn(
-                  'drop-shadow-[0_2px_0_#000]',
-                  i < (hud?.hearts ?? RUSH.hearts) ? 'text-[#ff4d6d]' : 'text-white/15',
-                )}
+                className={cn('drop-', i < (hud?.hearts ?? RUSH.hearts) ? 'text-[#ff4d6d]' : 'text-white/15')}
               />
             ))}
           </span>
         </div>
         <div
           className={cn(
-            'font-display text-[32px] leading-none tabular-nums sm:text-[38px]',
+            'font-display text-[24px] leading-none tabular-nums sm:text-[28px]',
             hurry ? 'animate-pulse text-[#ff4d6d]' : 'text-white',
           )}
         >
@@ -777,11 +772,11 @@ export function RushGame(props: RushGameProps) {
         </div>
         <div className="flex items-center gap-1.5 justify-self-end">
           {!!hud && hud.mult > 1 && !over && (
-            <span className="rounded-[6px] border-2 border-ink bg-[#ff8fc0] px-1.5 pb-0 pt-1 font-display text-[18px] leading-none text-ink shadow-[0_3px_0_0_#000]">
+            <span className="rounded-[6px] bg-[#ff8fc0] px-1.5 pb-0 pt-1 font-display text-[13px] leading-none text-ink">
               ×{hud.mult}
             </span>
           )}
-          <div className="rounded-[8px] border-2 border-ink bg-[#ffd666] px-2 pb-0.5 pt-1 font-display text-[22px] leading-none text-ink tabular-nums shadow-[0_3px_0_0_#000]">
+          <div className="rounded-[8px] bg-[#ffd666] px-2 pb-0.5 pt-1 font-display text-[16px] leading-none text-ink tabular-nums">
             {money(hud?.carried ?? 0)}
           </div>
           <button
@@ -807,7 +802,7 @@ export function RushGame(props: RushGameProps) {
         {hud?.started && !over && (
           <div className="pointer-events-none absolute inset-x-0 top-2 flex justify-center px-3">
             {viewer ? (
-              <div className="flex items-center gap-2 rounded-[10px] border-[3px] border-ink bg-[#3b5bdb] px-3 pb-1 pt-1.5 font-display text-[17px] uppercase leading-none text-white shadow-[0_4px_0_0_#000] sm:text-[19px]">
+              <div className="flex items-center gap-2 rounded-[10px] bg-[#3b5bdb] px-3 pb-1 pt-1.5 font-display text-[13px] leading-none text-white sm:text-[14px]">
                 {role === 'defend'
                   ? `You're a guard: catch ${robberName}!`
                   : `Watching live: ${robberName} robbing ${owner.name}`}
@@ -842,9 +837,9 @@ export function RushGame(props: RushGameProps) {
             {[...link.defenders.values()].map((d) => (
               <span
                 key={d.name}
-                className="flex items-center gap-1.5 rounded-[8px] border-2 border-ink bg-[#ffd23f] py-0.5 pl-0.5 pr-2 text-[12px] font-bold uppercase text-ink shadow-[0_3px_0_0_#000]"
+                className="flex items-center gap-1.5 rounded-[8px] bg-[#ffd23f] py-0.5 pl-0.5 pr-2 text-[12px] font-bold uppercase text-ink"
               >
-                <img src={chogImage(d.chog, 96)} alt="" className="h-6 w-6 rounded-[5px] border border-ink" />
+                <img src={chogImage(d.chog, 96)} alt="" className="h-6 w-6 rounded-[5px]" />
                 {d.who ?? 'A defender'} is guarding
               </span>
             ))}
@@ -1040,7 +1035,7 @@ function Crowd({ link, canSend }: { link: RaidLink; canSend: boolean }) {
         ))}
       </div>
       {canSend && (
-        <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5 rounded-full border-[3px] border-ink bg-[#17132b]/90 p-1.5 shadow-[0_4px_0_0_#000]">
+        <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5 rounded-full bg-[#17132b]/90 p-1.5">
           {CROWD.map((k) => (
             <button
               key={k}
@@ -1083,10 +1078,7 @@ function Dial(props: {
         className="flex flex-col items-center gap-2"
         aria-label="Stop the needle"
       >
-        <svg
-          viewBox="0 0 200 200"
-          className="h-[220px] w-[220px] drop-shadow-[0_6px_0_#000] sm:h-[260px] sm:w-[260px]"
-        >
+        <svg viewBox="0 0 200 200" className="h-[220px] w-[220px] drop- sm:h-[260px] sm:w-[260px]">
           <circle cx="100" cy="100" r="92" fill="#8c94ab" stroke="#0d0b1a" strokeWidth="6" />
           <circle cx="100" cy="100" r="78" fill="#2a2540" stroke="#0d0b1a" strokeWidth="4" />
           <path
@@ -1117,14 +1109,11 @@ function Dial(props: {
           {RUSH.dialZones.map((_, i) => (
             <span
               key={i}
-              className={cn(
-                'h-3.5 w-3.5 rounded-full border-2 border-ink',
-                i < props.hits ? 'bg-[#3ddc84]' : 'bg-white/30',
-              )}
+              className={cn('h-3.5 w-3.5 rounded-full', i < props.hits ? 'bg-[#3ddc84]' : 'bg-white/30')}
             />
           ))}
         </span>
-        <span className="rounded-[8px] border-2 border-ink bg-[#ffd666] px-3 pb-0.5 pt-1.5 font-display text-[18px] uppercase leading-none text-ink shadow-[0_3px_0_0_#000]">
+        <span className="rounded-[8px] bg-[#ffd666] px-3 pb-0.5 pt-1.5 font-display text-[13px] leading-none text-ink">
           Press E / tap in the green
         </span>
       </button>
@@ -1134,7 +1123,7 @@ function Dial(props: {
 
 function Goal({ hud, rescue, safeValue }: { hud: Hud; rescue?: RushChog; safeValue: number }) {
   const box =
-    'flex items-center gap-2 rounded-[10px] border-[3px] border-ink px-3 pb-1 pt-1.5 font-display text-[17px] uppercase leading-none shadow-[0_4px_0_0_#000] sm:text-[19px]';
+    'flex items-center gap-2 rounded-[10px] px-3 pb-1 pt-1.5 font-display text-[13px] leading-none sm:text-[14px]';
   if (hud.flip > 0)
     return (
       <div className={cn(box, 'bg-[#3a86ff] text-white')}>Guards are scared! Knock them out: {hud.flip}s</div>
@@ -1186,8 +1175,8 @@ function Coach({ hud }: { hud: Hud }) {
   ];
   const now = steps.findIndex((x) => !x.done);
   return (
-    <div className="pointer-events-none absolute bottom-3 left-3 hidden w-[250px] rounded-[14px] border-[3px] border-ink bg-[#17132b]/95 p-3 shadow-[0_5px_0_0_#000] sm:block">
-      <p className="font-display text-[14px] uppercase tracking-wide text-white/55">Practice</p>
+    <div className="pointer-events-none absolute bottom-3 left-3 hidden w-[250px] rounded-[14px] glass-strong p-3 sm:block">
+      <p className="font-display text-[12px] tracking-wide text-white/55">Practice</p>
       <ol className="mt-1 grid gap-1.5">
         {steps.map((x, i) => (
           <li key={x.label} className="flex items-start gap-2">
@@ -1234,14 +1223,10 @@ function StartCard({
 }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
-      <div className="flex max-w-[460px] items-center gap-3 rounded-[14px] border-[3px] border-ink bg-paper-raised px-3 py-2.5 text-ink shadow-[0_5px_0_0_#000]">
-        <img
-          src={chogImage(player.id, 256)}
-          alt=""
-          className="h-12 w-12 rounded-[10px] border-2 border-ink object-cover"
-        />
+      <div className="flex max-w-[460px] items-center gap-3 rounded-[14px] bg-paper-raised px-3 py-2.5 text-ink">
+        <img src={chogImage(player.id, 256)} alt="" className="h-12 w-12 rounded-[10px] object-cover" />
         <div className="text-[13px] leading-snug">
-          <strong className="block font-display text-[20px] uppercase leading-none">Move to start</strong>
+          <strong className="block font-display text-[15px] leading-none">Move to start</strong>
           {rescue
             ? `Open ${rescue.name}'s cell at the top, dodge the guards, and get out the green exit.`
             : `Grab cash in long runs for combos, crack the safe (${money(safeValue)}), and get out before the doors lock. Blue loudspeakers make the guards run.`}
@@ -1260,10 +1245,10 @@ function ViewerEnd(props: {
   const { escaped, viewer } = props;
   return (
     <div className="absolute inset-0 z-20 grid place-items-center bg-[#0b0918]/70 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-[360px] rounded-[18px] border-[3px] border-ink bg-paper-raised p-5 text-center text-ink shadow-[0_6px_0_0_#000]">
+      <div className="w-full max-w-[360px] rounded-[18px] bg-paper-raised p-5 text-center text-ink">
         <div
           className={cn(
-            'mx-auto inline-block -rotate-3 rounded-[8px] border-[3px] px-4 pb-1 pt-2 font-display text-[40px] uppercase leading-none',
+            'mx-auto inline-block -rotate-3 rounded-[8px] border-[3px] px-4 pb-1 pt-2 font-display text-[30px] leading-none',
             escaped ? 'border-jail text-jail' : 'border-cash text-cash',
           )}
         >
@@ -1276,7 +1261,7 @@ function ViewerEnd(props: {
         </p>
         <button
           onClick={props.onLeave}
-          className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-[10px] border-[3px] border-ink bg-pink font-display text-[22px] uppercase leading-none text-ink shadow-[0_4px_0_0_#000] active:translate-y-[2px]"
+          className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-[10px] bg-pink font-display text-[16px] leading-none text-ink"
         >
           <span className="pt-1">Back to the city</span>
         </button>
@@ -1324,10 +1309,10 @@ function EndCard(props: {
   ];
   return (
     <div className="absolute inset-0 z-20 grid place-items-center bg-[#0b0918]/70 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-[360px] rounded-[18px] border-[3px] border-ink bg-paper-raised p-5 text-center text-ink shadow-[0_6px_0_0_#000]">
+      <div className="w-full max-w-[360px] rounded-[18px] bg-paper-raised p-5 text-center text-ink">
         <div
           className={cn(
-            'mx-auto inline-block -rotate-3 rounded-[8px] border-[3px] px-4 pb-1 pt-2 font-display text-[44px] uppercase leading-none',
+            'mx-auto inline-block -rotate-3 rounded-[8px] border-[3px] px-4 pb-1 pt-2 font-display text-[33px] leading-none',
             escaped ? 'border-cash text-cash' : 'border-jail text-jail',
           )}
         >
@@ -1340,7 +1325,7 @@ function EndCard(props: {
                 size={34}
                 weight="fill"
                 className={cn(
-                  'drop-shadow-[0_2px_0_#000]',
+                  'drop-',
                   x.on ? 'animate-[star-pop_420ms_ease-out_both] text-[#ffc93c]' : 'text-ink/15',
                 )}
                 style={{ animationDelay: `${200 + i * 180}ms` }}
@@ -1357,7 +1342,7 @@ function EndCard(props: {
           <p className="mt-5 text-[15px] text-jail">{real.result.error}</p>
         ) : escaped && !rescue ? (
           <>
-            <div className="mt-4 font-display text-[56px] leading-none tabular-nums">{money(shown)}</div>
+            <div className="mt-4 font-display text-[41px] leading-none tabular-nums">{money(shown)}</div>
             <p className="mt-1 text-[14px] text-ink-soft">
               {real?.result?.getawayPass
                 ? `in your bag. It's only ${real.myGang}'s once you carry it to your door. Police are on the way.`
@@ -1395,7 +1380,7 @@ function EndCard(props: {
                 <img
                   src={chogImage(props.caughtBy.id, 256)}
                   alt=""
-                  className="h-14 w-14 rounded-[10px] border-2 border-ink object-cover"
+                  className="h-14 w-14 rounded-[10px] object-cover"
                 />
                 <p className="text-left text-[15px] leading-snug">
                   <strong className="block">{props.caughtBy.name}</strong>
@@ -1418,7 +1403,7 @@ function EndCard(props: {
               onClick={() => real.onLeave(real.result?.getawayPass)}
               disabled={!real.result}
               className={cn(
-                'mt-5 inline-flex h-12 w-full items-center justify-center rounded-[10px] border-[3px] border-ink font-display text-[22px] uppercase leading-none text-ink shadow-[0_4px_0_0_#000] active:translate-y-[2px] disabled:opacity-50',
+                'mt-5 inline-flex h-12 w-full items-center justify-center rounded-[10px] font-display text-[16px] leading-none text-ink disabled:opacity-50',
                 real.result?.getawayPass ? 'animate-pulse bg-[#ffd666]' : 'bg-pink',
               )}
             >
@@ -1439,7 +1424,7 @@ function EndCard(props: {
           <>
             <button
               onClick={props.onGetaway}
-              className="mt-5 inline-flex h-12 w-full animate-pulse items-center justify-center rounded-[10px] border-[3px] border-ink bg-[#ffd666] font-display text-[22px] uppercase leading-none text-ink shadow-[0_4px_0_0_#000] active:translate-y-[2px]"
+              className="mt-5 inline-flex h-12 w-full animate-pulse items-center justify-center rounded-[10px] bg-[#ffd666] font-display text-[16px] leading-none text-ink"
             >
               <span className="pt-1">Now run it home!</span>
             </button>
@@ -1457,7 +1442,7 @@ function EndCard(props: {
           <>
             <button
               onClick={props.onAgain}
-              className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[10px] border-[3px] border-ink bg-pink font-display text-[22px] uppercase leading-none text-ink shadow-[0_4px_0_0_#000] active:translate-y-[2px]"
+              className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-pink font-display text-[16px] leading-none text-ink"
             >
               <ArrowClockwise size={20} weight="bold" />
               <span className="pt-1">{replay ? 'Watch again' : 'Again'}</span>

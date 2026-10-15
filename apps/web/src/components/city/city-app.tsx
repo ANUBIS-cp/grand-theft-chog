@@ -33,12 +33,14 @@ import { GANG_COLOR } from '@/lib/theme';
 import { ago, formatLeft } from '@/lib/time';
 import { logOut } from '@/lib/wallet';
 import { BurnButton, PosterPicker, type Burns } from './burn';
+import { ChatPanel } from './chat';
 import type { PlaceLook } from './city-render';
 import { CityView, type CityHandle, type Jailed, type Stroller, type Tapped } from './city-view';
 import {
   Banner,
   type BannerData,
   type Duty,
+  ChatButton,
   EmoteButton,
   GangsButton,
   MapButton,
@@ -46,7 +48,7 @@ import {
   RoleCard,
   RoundButton,
 } from './hud';
-import type { Chase, ChaseEnd, LiveStatus } from './live-city';
+import type { Chase, ChaseEnd, ChatMsg, LiveStatus } from './live-city';
 
 interface VaultRow {
   gang: GangId;
@@ -167,8 +169,8 @@ async function post<T>(url: string, body: unknown): Promise<T> {
   return d;
 }
 
-const btn =
-  'inline-flex h-12 items-center justify-center gap-2 rounded-[8px] border-2 border-ink px-4 font-display text-[20px] uppercase leading-none shadow-[3px_3px_0_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50';
+/** The base for a big button; add a colour class (btn-primary, btn-gold, btn-glass). */
+const btn = 'btn press';
 
 export function CityApp() {
   const [board, setBoard] = useState<{
@@ -214,6 +216,16 @@ export function CityApp() {
   const [area, setArea] = useState('plaza');
   const [mapOpen, setMapOpen] = useState(false);
   const [emoteOpen, setEmoteOpen] = useState(false);
+  // The chat: every message the live server sent, whether the window is open, and what's unread.
+  const [chat, setChat] = useState<ChatMsg[]>([]);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatRefused, setChatRefused] = useState<string | null>(null);
+  const [chatSeen, setChatSeen] = useState(0);
+  const chatOpenRef = useRef(false);
+  chatOpenRef.current = chatOpen;
+  useEffect(() => {
+    if (chatOpen) setChatSeen((s) => Math.max(s, chat.at(-1)?.id ?? 0));
+  }, [chatOpen, chat]);
   const [banner, setBanner] = useState<BannerData | null>(null);
   const [boardTab, setBoardTab] = useState<'gangs' | 'hits'>('gangs');
   /** Defending your gang's vault, or watching a raid, live. */
@@ -413,6 +425,7 @@ export function CityApp() {
             chog: chog.id,
             jail: chog.jailedUntil,
             name: chog.name,
+            gang: chog.gang,
             color: chog.gang ? GANG_COLOR[chog.gang].bg : GUEST.color,
             ink: chog.gang ? GANG_COLOR[chog.gang].fg : GUEST.ink,
           }
@@ -690,10 +703,13 @@ export function CityApp() {
       if (st.sheet || st.peek) return;
       if (e.code === 'KeyM') return setMapOpen((o) => !o);
       if (st.mapOpen) return;
-      if ((e.code === 'KeyE' || e.code === 'Space' || e.code === 'Enter') && st.door && !st.doorOpen) {
-        if (e.code === 'Enter' && el?.tagName === 'BUTTON') return;
+      if ((e.code === 'KeyE' || e.code === 'Space') && st.door && !st.doorOpen) {
         e.preventDefault();
         return setDoorOpen(true);
+      }
+      if (e.code === 'Enter' && el?.tagName !== 'BUTTON') {
+        e.preventDefault();
+        return setChatOpen(true);
       }
       if (e.code === 'KeyG') return setSheet('gangs');
       if (e.code === 'KeyT') return setEmoteOpen((o) => !o);
@@ -730,7 +746,7 @@ export function CityApp() {
       return (
         <div className="fixed inset-0 z-50 grid place-items-center bg-[#0b0918] p-6 text-center text-white">
           <div>
-            <p className="font-display text-[34px] uppercase leading-none">
+            <p className="font-display text-[25px] leading-none">
               {link.status === 'failed'
                 ? 'That raid is over'
                 : raidView.role === 'defend'
@@ -738,7 +754,7 @@ export function CityApp() {
                   : 'Finding the raid…'}
             </p>
             {link.status === 'failed' && (
-              <button onClick={leave} className={cn(btn, 'mt-5 bg-[#ffd666] text-ink')}>
+              <button onClick={leave} className={cn(btn, 'mt-5 btn-gold')}>
                 <span className="pt-0.5">Back to the city</span>
               </button>
             )}
@@ -930,6 +946,11 @@ export function CityApp() {
         }
         onChase={setChases}
         onChaseEnd={chaseEnded}
+        onChat={(all, fresh, refused) => {
+          setChat([...all]);
+          setChatRefused(refused ?? null);
+          if (fresh && chatOpenRef.current) setChatSeen(fresh.id);
+        }}
         onPracticeEnd={(outcome) => {
           setPracticeRun(null);
           siren.current?.alarmOff();
@@ -974,7 +995,7 @@ export function CityApp() {
           <div className="hidden sm:block">
             <button
               onClick={() => setSheet('connect')}
-              className={cn(btn, 'pointer-events-auto h-10 bg-[#ffd666] px-3 text-[17px] text-ink')}
+              className={cn(btn, 'pointer-events-auto btn-sm btn-gold')}
             >
               <span className="pt-0.5">Connect wallet</span>
             </button>
@@ -996,16 +1017,16 @@ export function CityApp() {
 
       {practiceRun && (
         <div className="pointer-events-none absolute inset-x-0 bottom-[118px] z-30 flex justify-center px-3 sm:bottom-auto sm:top-[96px]">
-          <div className="w-full max-w-[460px] animate-[banner-in_380ms_ease-out_both] rounded-[16px] border-[3px] border-ink bg-[#ffd666] px-4 py-2.5 text-ink shadow-[0_6px_0_0_#000]">
+          <div className="w-full max-w-[460px] animate-[banner-in_380ms_ease-out_both] rounded-[16px] bg-[#ffd666] px-4 py-2.5 text-ink">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-display text-[30px] uppercase leading-[0.9]">Run it home!</p>
+                <p className="font-display text-[22px] leading-tight">Run it home!</p>
                 <p className="text-[14px] font-semibold leading-snug">
                   Practice: get to {practiceRun.to}. Follow the arrow, dodge the police.
                 </p>
                 <PoliceIn since={practiceRun.since} />
               </div>
-              <span className="grid h-14 w-16 shrink-0 place-items-center rounded-[12px] border-[3px] border-ink bg-white pt-1 font-display text-[34px] tabular-nums leading-none">
+              <span className="grid h-14 w-16 shrink-0 place-items-center rounded-[12px] bg-white pt-1 font-display text-[25px] tabular-nums leading-none">
                 {Math.max(0, Math.ceil((practiceRun.until - Date.now()) / 1000))}
               </span>
             </div>
@@ -1061,31 +1082,63 @@ export function CityApp() {
         )}
       </div>
 
+      {/* Bottom left: the chat (closed, the newest city messages float up for a moment) */}
+      {!anyCard && (
+        <div className="pointer-events-none absolute bottom-4 left-3 z-20 sm:bottom-5 sm:left-5">
+          <ChatPanel
+            open={chatOpen}
+            onOpen={() => setChatOpen(true)}
+            onClose={() => {
+              setChatOpen(false);
+              setChatSeen(chat.at(-1)?.id ?? 0);
+            }}
+            msgs={chat}
+            me={{ chog: chog?.id ?? null, gang: chog?.gang ?? null }}
+            refused={chatRefused}
+            onSend={(room, text) => view.current?.say(room, text)}
+            onConnect={() => setSheet('connect')}
+            onPerson={(w) => setPeek({ ...w, player: true })}
+          />
+        </div>
+      )}
+
       {/* Bottom right: action buttons */}
       {!anyCard && (
         <div className="pointer-events-none absolute bottom-4 right-3 z-20 flex items-end gap-3 sm:bottom-5 sm:right-5 sm:gap-4">
           {emoteOpen && (
-            <div className="pointer-events-auto absolute bottom-[calc(100%+14px)] right-0 z-30 grid w-max grid-cols-4 gap-2 rounded-[18px] border-[3px] border-ink bg-[#17132b]/95 p-2.5 shadow-[0_5px_0_0_#000] animate-[sheet-in_160ms_ease-out]">
-              {EMOTES.map((k, i) => (
-                <button
-                  key={k}
-                  onClick={() => {
-                    view.current?.emote(k);
-                    setEmoteOpen(false);
-                  }}
-                  aria-label={EMOTE_LABEL[k]}
-                  title={`${EMOTE_LABEL[k]} (${i + 1})`}
-                  className="relative grid h-14 w-14 place-items-center rounded-full border-[3px] border-ink bg-white shadow-[0_4px_0_0_#000] transition hover:-translate-y-0.5 active:translate-y-[2px] active:shadow-[0_2px_0_0_#000]"
-                >
-                  <img src={`/emotes/${k}.webp`} alt="" className="h-10 w-10" />
-                  <span className="absolute -left-1 -top-1 grid h-5 w-5 place-items-center rounded-[5px] border-2 border-ink bg-[#17132b] font-display text-[11px] leading-none text-white">
-                    {i + 1}
-                  </span>
-                </button>
-              ))}
+            <div className="glass-strong pointer-events-auto absolute bottom-[calc(100%+14px)] right-0 z-30 w-max origin-bottom-right animate-[pop-in_340ms_cubic-bezier(.2,.9,.3,1.2)] rounded-[26px] p-2">
+              <div className="grid grid-cols-4 gap-1">
+                {EMOTES.map((k, i) => (
+                  <button
+                    key={k}
+                    onClick={() => {
+                      view.current?.emote(k);
+                      setEmoteOpen(false);
+                    }}
+                    aria-label={EMOTE_LABEL[k]}
+                    title={`${EMOTE_LABEL[k]} (${i + 1})`}
+                    className="press group relative flex w-[66px] flex-col items-center gap-1 rounded-[18px] px-1 pb-1.5 pt-2 hover:bg-white/[0.08]"
+                    style={{ animation: `pop-in 360ms ${i * 28}ms cubic-bezier(.2,.9,.3,1.3) both` }}
+                  >
+                    <img
+                      src={`/emotes/${k}.webp`}
+                      alt=""
+                      className="h-11 w-11 drop-shadow-[0_4px_8px_rgba(0,0,0,0.45)] transition-transform duration-300 ease-[cubic-bezier(.2,.9,.3,1.6)] group-hover:-translate-y-1 group-hover:scale-110"
+                    />
+                    <span className="text-[11px] font-medium text-label-2">{EMOTE_LABEL[k]}</span>
+                    <span className="absolute right-1.5 top-1.5 text-[10px] font-semibold text-label-3">
+                      {i + 1}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           <div className="relative flex flex-col items-center gap-3">
+            <ChatButton
+              unread={chat.filter((m) => m.id > chatSeen && m.chog !== chog?.id).length}
+              onClick={() => setChatOpen((o) => !o)}
+            />
             <EmoteButton onClick={() => setEmoteOpen((o) => !o)} />
           </div>
           <div className="flex flex-col items-center gap-3">
@@ -1101,7 +1154,7 @@ export function CityApp() {
           <button
             onClick={() => setNotice(null)}
             role="alert"
-            className="rounded-[8px] border-2 border-ink bg-jail px-3 py-2 text-[14px] font-semibold shadow-[3px_3px_0_0_#000]"
+            className="rounded-[8px] bg-jail px-3 py-2 text-[14px] font-semibold"
           >
             {notice}
           </button>
@@ -1145,7 +1198,7 @@ export function CityApp() {
       {/* First visit */}
       {welcome && me && !me.address && !(door && doorOpen) && !sheet && !peek && (
         <Card onClose={closeWelcome}>
-          <h1 className="font-display text-[32px] uppercase leading-[0.95]">Welcome to Chog City</h1>
+          <h1 className="font-display text-[24px] leading-[0.95]">Welcome to Chog City</h1>
           <p className="mt-2 text-[15px] leading-snug text-white/80">
             Every gang has a building with a vault full of cash. Walk your Chog to a rival’s door to rob it,
             and bring the cash home.
@@ -1154,13 +1207,10 @@ export function CityApp() {
             Walk with the arrow keys or WASD, or tap where you want to go.
           </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setSheet('connect')}
-              className={cn(btn, 'bg-[#ffd666] text-[18px] text-ink')}
-            >
+            <button onClick={() => setSheet('connect')} className={cn(btn, 'btn-gold')}>
               <span className="pt-0.5">Connect wallet</span>
             </button>
-            <button onClick={closeWelcome} className={cn(btn, 'bg-[#2a2545] text-[18px] text-white')}>
+            <button onClick={closeWelcome} className={cn(btn, 'btn-glass')}>
               <span className="pt-0.5">Look around</span>
             </button>
           </div>
@@ -1170,7 +1220,7 @@ export function CityApp() {
       {/* A Chog's gang is picked once */}
       {chog && !chog.gang && !sheet && (
         <Card>
-          <h2 className="font-display text-[28px] uppercase leading-none">Pick {chog.name}’s gang</h2>
+          <h2 className="font-display text-[21px] leading-none">Pick {chog.name}’s gang</h2>
           <p className="mt-1.5 text-[14px] text-white/70">
             From its traits. This is for good: a Chog reps one gang.
           </p>
@@ -1180,7 +1230,7 @@ export function CityApp() {
                 key={g}
                 disabled={busy === 'gang'}
                 onClick={() => void pickGang(g)}
-                className="rounded-[10px] border-2 border-ink px-3 pb-2 pt-3 text-left font-display text-[20px] uppercase leading-none shadow-[3px_3px_0_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                className="rounded-[10px] px-3 pb-2 pt-3 text-left font-display text-[15px] leading-none"
                 style={{ background: GANG_COLOR[g].bg, color: GANG_COLOR[g].fg }}
               >
                 {GANGS[g].name}
@@ -1247,11 +1297,7 @@ export function CityApp() {
                   )}
                   aria-label={c.name}
                 >
-                  <img
-                    src={chogImage(c.id, 96)}
-                    alt=""
-                    className="h-11 w-11 rounded-full border-2 border-ink"
-                  />
+                  <img src={chogImage(c.id, 96)} alt="" className="h-11 w-11 rounded-full" />
                 </button>
               ))}
             </div>
@@ -1283,15 +1329,15 @@ export function CityApp() {
       {sheet === 'gangs' && (
         <Board onClose={() => setSheet(null)}>
           <div className="flex flex-wrap items-end justify-between gap-2 pr-12">
-            <h2 className="font-display text-[34px] uppercase leading-none sm:text-[42px]">Gang board</h2>
-            <div className="flex rounded-[10px] border-[3px] border-ink bg-[#0f0c1f] p-0.5">
+            <h2 className="font-display text-[25px] leading-none sm:text-[31px]">Gang board</h2>
+            <div className="flex rounded-[10px] bg-[#0f0c1f] p-0.5">
               {(['gangs', 'hits'] as const).map((k) => (
                 <button
                   key={k}
                   onClick={() => setBoardTab(k)}
                   className={cn(
-                    'rounded-[7px] px-3 pb-1 pt-1.5 font-display text-[16px] uppercase leading-none',
-                    boardTab === k ? 'bg-[#ffd666] text-ink' : 'text-white/70 hover:text-white',
+                    'rounded-[7px] px-3 pb-1 pt-1.5 font-display text-[12px] leading-none',
+                    boardTab === k ? 'btn-gold' : 'text-white/70 hover:text-white',
                   )}
                 >
                   {k === 'gangs' ? 'Richest' : 'Latest hits'}
@@ -1318,7 +1364,7 @@ export function CityApp() {
                         view.current?.walkTo(v.gang);
                       }}
                       className={cn(
-                        'group relative flex h-full w-full flex-col overflow-hidden rounded-[14px] border-[3px] border-ink bg-[#1d1838] text-left shadow-[0_5px_0_0_#000] transition hover:-translate-y-0.5',
+                        'group relative flex h-full w-full flex-col overflow-hidden rounded-[14px] bg-[#1d1838] text-left transition hover:-translate-y-0.5',
                         mine && 'ring-[3px] ring-[#ffd666] ring-offset-2 ring-offset-[#17132b]',
                       )}
                     >
@@ -1326,10 +1372,10 @@ export function CityApp() {
                         className="flex items-center gap-2 border-b-[3px] border-ink px-2.5 pb-1.5 pt-2"
                         style={{ background: c.bg, color: c.fg }}
                       >
-                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 border-ink bg-white font-display text-[15px] leading-none text-ink">
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white font-display text-[12px] leading-none text-ink">
                           {i + 1}
                         </span>
-                        <span className="min-w-0 truncate font-display text-[18px] uppercase leading-none">
+                        <span className="min-w-0 truncate font-display text-[13px] leading-none">
                           {GANGS[v.gang].name}
                         </span>
                       </span>
@@ -1339,7 +1385,7 @@ export function CityApp() {
                             key={id}
                             src={chogImage(id, 96)}
                             alt=""
-                            className="h-11 w-11 rounded-[10px] border-2 border-ink object-cover"
+                            className="h-11 w-11 rounded-[10px] object-cover"
                           />
                         ))}
                         {v.guards.length === 0 && (
@@ -1349,7 +1395,7 @@ export function CityApp() {
                         )}
                       </span>
                       <span className="flex flex-1 flex-col px-2.5 pb-2.5 pt-2">
-                        <span className="font-display text-[26px] leading-none text-[#ffd666] tabular-nums">
+                        <span className="font-display text-[19px] leading-none text-[#ffd666] tabular-nums">
                           {money(v.cash)}
                         </span>
                         <span className="mt-1 text-[12px] text-white/60">
@@ -1393,12 +1439,12 @@ export function CityApp() {
                   <li key={h.id}>
                     <Link
                       href={`/replay/${h.id}`}
-                      className="group flex items-center gap-3 rounded-[12px] border-[3px] border-ink bg-[#1d1838] p-2 text-[14px] shadow-[0_4px_0_0_#000] hover:bg-[#262046]"
+                      className="group flex items-center gap-3 rounded-[12px] bg-[#1d1838] p-2 text-[14px] hover:bg-[#262046]"
                     >
                       <img
                         src={chogImage(h.chogId, 96)}
                         alt=""
-                        className="h-12 w-12 shrink-0 rounded-[10px] border-2 border-ink object-cover"
+                        className="h-12 w-12 shrink-0 rounded-[10px] object-cover"
                       />
                       <p className="min-w-0 flex-1 leading-snug">
                         <HitLine h={h} />
@@ -1463,14 +1509,14 @@ const EMOTE_LABEL: Record<Emote, string> = {
 function Card({ children, onClose }: { children: React.ReactNode; onClose?: () => void }) {
   return (
     <div className="absolute inset-x-0 bottom-0 z-30 p-3 sm:bottom-6 sm:left-1/2 sm:right-auto sm:w-[440px] sm:-translate-x-1/2 sm:p-0">
-      <div className="relative max-h-[72dvh] animate-[sheet-in_220ms_ease-out] overflow-y-auto rounded-[18px] border-[3px] border-ink bg-[#17132b]/97 p-4 shadow-[0_6px_0_0_#000] backdrop-blur">
+      <div className="glass-strong relative max-h-[72dvh] animate-[glass-in_380ms_cubic-bezier(.2,.9,.3,1)] overflow-y-auto rounded-[28px] p-5 text-white">
         {onClose && (
           <button
             onClick={onClose}
-            className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-full text-white/60 hover:text-white"
+            className="press absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-fill text-label-2 hover:text-white"
             aria-label="Close"
           >
-            <X size={18} weight="bold" />
+            <X size={14} weight="bold" />
           </button>
         )}
         {children}
@@ -1493,11 +1539,11 @@ function Board({ children, onClose }: { children: React.ReactNode; onClose: () =
     >
       <section
         onClick={(e) => e.stopPropagation()}
-        className="relative max-h-full w-full max-w-[1040px] animate-[sheet-in_220ms_ease-out] overflow-y-auto rounded-[22px] border-[3px] border-ink bg-[#17132b] p-4 shadow-[0_8px_0_0_#000] sm:p-6"
+        className="relative max-h-full w-full max-w-[1040px] animate-[sheet-in_220ms_ease-out] overflow-y-auto rounded-[22px] bg-[#17132b] p-4 sm:p-6"
       >
         <button
           onClick={onClose}
-          className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border-[3px] border-ink bg-white text-ink shadow-[0_3px_0_0_#000]"
+          className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full bg-white text-ink"
           aria-label="Close"
         >
           <X size={18} weight="bold" />
@@ -1525,21 +1571,23 @@ function Sheet({
   }, [onClose]);
   return (
     <div
-      className="absolute inset-0 z-40 flex items-end justify-end bg-black/40 sm:items-stretch"
+      className="absolute inset-0 z-40 flex animate-[fade-in_200ms] items-end justify-end bg-black/45 sm:items-stretch sm:p-3"
       onClick={onClose}
     >
       <aside
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[85dvh] w-full overflow-y-auto rounded-t-[18px] border-2 border-ink bg-[#151229] p-4 shadow-[-4px_0_0_0_#000] sm:max-h-none sm:w-[420px] sm:rounded-none sm:border-y-0 sm:border-r-0"
+        className="glass-strong max-h-[88dvh] w-full animate-[slide-up_420ms_cubic-bezier(.32,.72,0,1)] overflow-y-auto rounded-t-[28px] p-5 text-white sm:max-h-none sm:w-[420px] sm:animate-[glass-in_380ms_cubic-bezier(.2,.9,.3,1)] sm:rounded-[28px]"
       >
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-display text-[30px] uppercase leading-none">{title}</h2>
+        {/* The grabber, like an iOS sheet. */}
+        <div className="mx-auto -mt-2 mb-3 h-1.5 w-10 rounded-full bg-white/25 sm:hidden" />
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-display text-[26px] leading-none">{title}</h2>
           <button
             onClick={onClose}
-            className="grid h-9 w-9 place-items-center rounded-full text-white/60 hover:text-white"
+            className="press grid h-8 w-8 place-items-center rounded-full bg-fill text-label-2 hover:text-white"
             aria-label="Close"
           >
-            <X size={20} weight="bold" />
+            <X size={14} weight="bold" />
           </button>
         </div>
         {children}
@@ -1557,23 +1605,19 @@ function ChogCard(props: {
 }) {
   const { chog, now } = props;
   return (
-    <div className="rounded-[14px] border-2 border-ink bg-[#1d1838] p-3 shadow-[3px_3px_0_0_#000]">
+    <div className="rounded-[14px] bg-[#1d1838] p-3">
       <div className="flex items-center gap-3">
-        <img
-          src={chogImage(chog.id, 256)}
-          alt=""
-          className="h-20 w-20 shrink-0 rounded-[10px] border-2 border-ink"
-        />
+        <img src={chogImage(chog.id, 256)} alt="" className="h-20 w-20 shrink-0 rounded-[10px]" />
         <div className="min-w-0">
           <Link
             href={`/chog/${chog.id}`}
-            className="inline-flex items-center gap-1 font-display text-[24px] uppercase leading-none hover:underline"
+            className="inline-flex items-center gap-1 font-display text-[18px] leading-none hover:underline"
           >
             {chog.name} <ArrowSquareOut size={16} />
           </Link>
           {chog.gang && (
             <div
-              className="mt-1 inline-block rounded-[5px] border-2 border-ink px-1.5 pt-1 font-display text-[14px] uppercase leading-none"
+              className="mt-1 inline-block rounded-[5px] px-1.5 pt-1 font-display text-[12px] leading-none"
               style={{ background: GANG_COLOR[chog.gang].bg, color: GANG_COLOR[chog.gang].fg }}
             >
               {GANGS[chog.gang].name}
@@ -1647,11 +1691,17 @@ function DoorCard(props: {
   if (place.kind === 'training')
     return (
       <>
-        <h2 className="font-display text-[28px] uppercase leading-none text-[#7cf0c4]">Practice vault</h2>
+        <h2 className="font-display text-[21px] leading-none text-[#7cf0c4]">Practice vault</h2>
         <p className="mt-2 text-[15px] leading-snug text-white/80">
           A safe place to learn: no wallet, no jail, no real cash.
         </p>
-        <button onClick={props.onPractice} className={cn(btn, 'mt-4 w-full bg-[#7cf0c4] text-ink')}>
+        <button
+          onClick={props.onPractice}
+          className={cn(
+            btn,
+            'mt-4 w-full btn-gold !bg-[linear-gradient(180deg,#7cf0c4,#34c79a)] !text-[#032a1e]',
+          )}
+        >
           <span className="pt-0.5">Start practice</span>
         </button>
       </>
@@ -1660,7 +1710,7 @@ function DoorCard(props: {
     const inside = props.jailed.filter((j) => j.until > props.now);
     return (
       <>
-        <h2 className="font-display text-[28px] uppercase leading-none text-[#ff5a4f]">Jail</h2>
+        <h2 className="font-display text-[21px] leading-none text-[#ff5a4f]">Jail</h2>
         <p className="mt-1.5 text-[14px] text-white/70">
           Chogs caught robbing sit here for 30 minutes. Sneak in and open a gang-mate’s cell to get them out
           early.
@@ -1671,14 +1721,14 @@ function DoorCard(props: {
           <ul className="mt-3 max-h-[180px] space-y-1.5 overflow-y-auto">
             {inside.map((j) => (
               <li key={j.id} className="flex items-center gap-2 text-[14px]">
-                <img src={chogImage(j.id, 96)} alt="" className="h-7 w-7 rounded-full border-2 border-ink" />
+                <img src={chogImage(j.id, 96)} alt="" className="h-7 w-7 rounded-full" />
                 <span className="flex-1 truncate">{j.name}</span>
                 <span className="text-white/60">{formatLeft(j.until - props.now)}</span>
                 {chog?.gang === j.gang && chog.id !== j.id && !props.jailedNow && (
                   <button
                     disabled={props.busy !== null}
                     onClick={() => props.onBreakOut(j.id)}
-                    className="rounded-[6px] border-2 border-ink bg-pink px-2 pb-0.5 pt-1 font-display text-[14px] uppercase leading-none text-ink shadow-[2px_2px_0_0_#000] disabled:opacity-50"
+                    className="rounded-[6px] bg-pink px-2 pb-0.5 pt-1 font-display text-[12px] leading-none text-ink disabled:opacity-50"
                   >
                     {props.busy === `free${j.id}` ? '…' : 'Break out'}
                   </button>
@@ -1703,13 +1753,13 @@ function DoorCard(props: {
     <>
       <div className="flex items-start gap-3 pr-8">
         <span
-          className="mt-0.5 h-9 w-2.5 shrink-0 rounded-full border border-ink"
+          className="mt-0.5 h-9 w-2.5 shrink-0 rounded-full"
           style={{ background: GANG_COLOR[gang].bg }}
         />
         <div className="min-w-0">
           <Link
             href={`/gangs/${gang}`}
-            className="block truncate font-display text-[28px] uppercase leading-none hover:underline"
+            className="block truncate font-display text-[21px] leading-none hover:underline"
           >
             {GANGS[gang].name}
           </Link>
@@ -1720,21 +1770,16 @@ function DoorCard(props: {
       </div>
       <div className="mt-3 flex items-end justify-between gap-3">
         <div>
-          <div className="text-[12px] uppercase tracking-wide text-white/50">In the vault</div>
-          <div className="font-display text-[34px] leading-none text-[#ffd666] tabular-nums">
+          <div className="section-label">In the vault</div>
+          <div className="font-display text-[25px] leading-none text-[#ffd666] tabular-nums">
             {money(row?.cash ?? 0)}
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[12px] uppercase tracking-wide text-white/50">Guards</div>
+          <div className="section-label">Guards</div>
           <div className="mt-1 flex -space-x-2">
             {(row?.guards ?? []).slice(0, 4).map((g) => (
-              <img
-                key={g}
-                src={chogImage(g, 96)}
-                alt=""
-                className="h-8 w-8 rounded-full border-2 border-ink"
-              />
+              <img key={g} src={chogImage(g, 96)} alt="" className="h-8 w-8 rounded-full" />
             ))}
           </div>
         </div>
@@ -1750,8 +1795,8 @@ function DoorCard(props: {
               ['2', `Grab the cash (safe ${money(SAFE_BY_TIER[row?.tier ?? 0] ?? 0)})`],
               ['3', 'Run it home past the police'],
             ].map(([n, label]) => (
-              <li key={n} className="rounded-[8px] border-2 border-ink bg-white/10 px-1.5 py-1.5">
-                <span className="block font-display text-[18px] leading-none text-[#ffd666]">{n}</span>
+              <li key={n} className="rounded-[8px] bg-white/10 px-1.5 py-1.5">
+                <span className="block font-display text-[13px] leading-none text-[#ffd666]">{n}</span>
                 {label}
               </li>
             ))}
@@ -1771,20 +1816,13 @@ function DoorCard(props: {
       {props.robbing && props.robbing.run && props.robbing.since > props.now - 180_000 && (
         <div className="mt-2 grid grid-cols-2 gap-2">
           {mine && props.loggedIn && !props.jailedNow && (
-            <button
-              onClick={() => props.onDefendRaid(props.robbing!)}
-              className={cn(btn, 'h-11 bg-[#ff2d55] text-[17px] text-white')}
-            >
+            <button onClick={() => props.onDefendRaid(props.robbing!)} className={cn(btn, 'btn-primary')}>
               <span className="pt-0.5">Defend</span>
             </button>
           )}
           <button
             onClick={() => props.onWatch(props.robbing!)}
-            className={cn(
-              btn,
-              'h-11 bg-white text-[17px] text-ink',
-              !(mine && props.loggedIn) && 'col-span-2',
-            )}
+            className={cn(btn, 'btn-glass', !(mine && props.loggedIn) && 'col-span-2')}
           >
             <span className="pt-0.5">Watch live</span>
           </button>
@@ -1812,7 +1850,7 @@ function DoorCard(props: {
           <HomeInfo gang={gang} info={props.info} now={props.now} onPoster={props.onPoster} />
         </>
       ) : block === 'connect' ? (
-        <button onClick={props.onConnect} className={cn(btn, 'mt-4 w-full bg-[#ffd666] text-ink')}>
+        <button onClick={props.onConnect} className={cn(btn, 'mt-4 w-full btn-gold')}>
           <span className="pt-0.5">Connect wallet to rob it</span>
         </button>
       ) : (
@@ -1828,7 +1866,7 @@ function DoorCard(props: {
             className={cn(
               btn,
               'mt-3 w-full',
-              block ? 'bg-white/10 text-white/50 shadow-none' : 'bg-pink text-ink',
+              block ? 'bg-white/10 text-white/50 shadow-none' : 'btn-primary',
             )}
           >
             <Vault size={20} weight="fill" />
@@ -1855,7 +1893,7 @@ function Defend(props: {
   return (
     <div className="mt-3 rounded-[10px] border-2 border-white/10 p-2.5">
       <div className="flex items-baseline justify-between gap-2">
-        <div className="text-[12px] uppercase tracking-wide text-white/50">Add defence for 24 hours</div>
+        <div className="section-label">Add defence for 24 hours</div>
         {row.boughtUntil && (
           <div className="text-[12px] text-white/60">{formatLeft(row.boughtUntil - props.now)} left</div>
         )}
@@ -1872,9 +1910,9 @@ function Defend(props: {
                 key={l}
                 disabled={poor || props.jailed || props.busy !== null}
                 onClick={() => props.onDefend(l)}
-                className="rounded-[8px] border-2 border-ink bg-[#2a2545] px-2 pb-1.5 pt-2 text-left shadow-[2px_2px_0_0_#000] hover:bg-[#342d55] disabled:opacity-40 disabled:shadow-none"
+                className="rounded-[8px] bg-[#2a2545] px-2 pb-1.5 pt-2 text-left hover:bg-[#342d55] disabled:opacity-40 disabled:shadow-none"
               >
-                <span className="block font-display text-[16px] uppercase leading-none">{DEFENCE[l]}</span>
+                <span className="block font-display text-[12px] leading-none">{DEFENCE[l]}</span>
                 <span className="mt-0.5 block text-[12px] text-[#ffd666]">{money(price)}</span>
               </button>
             );
@@ -1901,7 +1939,7 @@ function GangBanner(props: {
   return (
     <div className="mt-3 rounded-[10px] border-2 border-white/10 p-2.5">
       <div className="flex items-baseline justify-between gap-2">
-        <div className="text-[12px] uppercase tracking-wide text-white/50">Gang banner for 24 hours</div>
+        <div className="section-label">Gang banner for 24 hours</div>
         {up && <div className="text-[12px] text-white/60">{formatLeft(up.until - props.now)} left</div>}
       </div>
       <p className="mt-1 text-[12px] leading-snug text-white/55">
@@ -1936,14 +1974,14 @@ function HomeInfo({
   return (
     <div className="mt-3 grid gap-3 text-[13px]">
       <div>
-        <div className="text-[12px] uppercase tracking-wide text-white/50">Best robbers</div>
+        <div className="section-label">Best robbers</div>
         {info.members.length === 0 ? (
           <p className="mt-1 text-white/70">Nobody has robbed for this gang yet. Be the first.</p>
         ) : (
           <ul className="mt-1 space-y-1">
             {info.members.slice(0, 3).map((m) => (
               <li key={m.id} className="flex items-center gap-2">
-                <img src={chogImage(m.id, 96)} alt="" className="h-6 w-6 rounded-full border border-ink" />
+                <img src={chogImage(m.id, 96)} alt="" className="h-6 w-6 rounded-full" />
                 <span className="flex-1 truncate">{m.name}</span>
                 <span className="font-semibold text-[#ffd666]">{money(m.stolen)}</span>
               </li>
@@ -1952,7 +1990,7 @@ function HomeInfo({
         )}
       </div>
       <div>
-        <div className="text-[12px] uppercase tracking-wide text-white/50">Robbed lately</div>
+        <div className="section-label">Robbed lately</div>
         {robbed.length === 0 ? (
           <p className="mt-1 text-white/70">Nobody has got out of your vault with cash yet.</p>
         ) : (
@@ -1960,11 +1998,7 @@ function HomeInfo({
             {robbed.map((h) => (
               <li key={h.id}>
                 <Link href={`/replay/${h.id}`} className="flex items-center gap-2 hover:underline">
-                  <img
-                    src={chogImage(h.chogId, 96)}
-                    alt=""
-                    className="h-6 w-6 rounded-full border border-ink"
-                  />
+                  <img src={chogImage(h.chogId, 96)} alt="" className="h-6 w-6 rounded-full" />
                   <span className="flex-1 truncate">
                     {GANGS[h.gang].name} took <strong className="text-[#ffd666]">{money(h.moved)}</strong>
                   </span>
@@ -1980,7 +2014,7 @@ function HomeInfo({
                       player: false,
                     })
                   }
-                  className="mt-0.5 rounded-[5px] bg-[#f3e3b5] px-1.5 pt-0.5 font-display text-[12px] uppercase leading-tight text-[#c1121f]"
+                  className="mt-0.5 rounded-[5px] bg-[#f3e3b5] px-1.5 pt-0.5 font-display text-[12px] leading-tight text-[#c1121f]"
                 >
                   Wanted poster
                 </button>
@@ -2007,17 +2041,13 @@ function Peek(props: {
   return (
     <>
       <div className="flex items-center gap-3 pr-8">
-        <img
-          src={chogImage(who.chog, 256)}
-          alt=""
-          className="h-20 w-20 shrink-0 rounded-[10px] border-2 border-ink"
-        />
+        <img src={chogImage(who.chog, 256)} alt="" className="h-20 w-20 shrink-0 rounded-[10px]" />
         <div className="min-w-0">
-          <div className="truncate font-display text-[24px] uppercase leading-none">{who.name}</div>
+          <div className="truncate font-display text-[18px] leading-none">{who.name}</div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {who.gang && (
               <span
-                className="rounded-[5px] border-2 border-ink px-1.5 pt-1 font-display text-[13px] uppercase leading-none"
+                className="rounded-[5px] px-1.5 pt-1 font-display text-[12px] leading-none"
                 style={{ background: GANG_COLOR[who.gang].bg, color: GANG_COLOR[who.gang].fg }}
               >
                 {GANGS[who.gang].name}
@@ -2053,10 +2083,10 @@ function ChaseBar(props: { c: Chase; mine: boolean; ours: boolean; canChase: boo
   const left = Math.max(0, Math.ceil((c.until - Date.now()) / 1000));
   if (mine)
     return (
-      <div className="pointer-events-none w-full max-w-[460px] animate-[banner-in_380ms_ease-out_both] rounded-[16px] border-[3px] border-ink bg-[#ffd666] px-4 py-2.5 text-ink shadow-[0_6px_0_0_#000]">
+      <div className="pointer-events-none w-full max-w-[460px] animate-[banner-in_380ms_ease-out_both] rounded-[16px] bg-[#ffd666] px-4 py-2.5 text-ink">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="font-display text-[30px] uppercase leading-[0.9]">Run it home!</p>
+            <p className="font-display text-[22px] leading-tight">Run it home!</p>
             <p className="text-[14px] font-semibold leading-snug">
               {money(c.bag)} to {GANGS[c.home].name}’s door. Dodge the police.
             </p>
@@ -2064,7 +2094,7 @@ function ChaseBar(props: { c: Chase; mine: boolean; ours: boolean; canChase: boo
           </div>
           <span
             className={cn(
-              'grid h-14 w-16 shrink-0 place-items-center rounded-[12px] border-[3px] border-ink pt-1 font-display text-[34px] tabular-nums leading-none',
+              'grid h-14 w-16 shrink-0 place-items-center rounded-[12px] pt-1 font-display text-[25px] tabular-nums leading-none',
               left <= 10 ? 'animate-pulse bg-jail text-white' : 'bg-white',
             )}
           >
@@ -2076,17 +2106,13 @@ function ChaseBar(props: { c: Chase; mine: boolean; ours: boolean; canChase: boo
   return (
     <div
       className={cn(
-        'pointer-events-auto flex w-full max-w-[460px] items-center gap-3 rounded-[14px] border-[3px] border-ink py-1.5 pl-1.5 pr-2 shadow-[0_4px_0_0_#000]',
-        ours ? 'bg-[#ff2d55] text-white' : 'bg-[#1d1838] text-white',
+        'pointer-events-auto flex w-full max-w-[460px] items-center gap-3 rounded-[14px] py-1.5 pl-1.5 pr-2',
+        ours ? 'btn-primary' : 'bg-[#1d1838] text-white',
       )}
     >
-      <img
-        src={chogImage(c.chog, 96)}
-        alt=""
-        className="h-11 w-11 shrink-0 rounded-[9px] border-2 border-ink object-cover"
-      />
+      <img src={chogImage(c.chog, 96)} alt="" className="h-11 w-11 shrink-0 rounded-[9px] object-cover" />
       <p className="min-w-0 flex-1 text-[14px] font-semibold leading-snug">
-        <span className="block font-display text-[20px] uppercase leading-none">
+        <span className="block font-display text-[15px] leading-none">
           {ours ? 'Stop the robber!' : 'Getaway!'}
         </span>
         {c.name} is running from {GANGS[c.from].name} with {money(c.bag)} · {left}s
@@ -2094,7 +2120,7 @@ function ChaseBar(props: { c: Chase; mine: boolean; ours: boolean; canChase: boo
       {props.canChase && (
         <button
           onClick={props.onChase}
-          className="h-10 shrink-0 rounded-[10px] border-[3px] border-ink bg-[#ffd666] px-3 pt-1 font-display text-[18px] uppercase leading-none text-ink shadow-[0_3px_0_0_#000] active:translate-y-[2px]"
+          className="h-10 shrink-0 rounded-[10px] bg-[#ffd666] px-3 pt-1 font-display text-[13px] leading-none text-ink"
         >
           {ours ? 'Chase' : 'Watch'}
         </button>
@@ -2108,7 +2134,7 @@ function PoliceIn({ since }: { since: number }) {
   const left = Math.ceil(HEAD_START - (Date.now() - since) / 1000);
   if (left < -1) return null;
   return (
-    <p className="mt-1 font-display text-[18px] uppercase leading-none text-jail">
+    <p className="mt-1 font-display text-[13px] leading-none text-jail">
       {left > 0 ? `Police in ${left}…` : 'Run!'}
     </p>
   );

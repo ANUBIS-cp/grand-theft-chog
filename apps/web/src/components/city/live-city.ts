@@ -20,6 +20,8 @@ export interface Remote {
   moving: boolean;
   seen: number;
   emote?: { kind: Emote; at: number };
+  /** The last thing they said in the city room, shown in a bubble over them for a few seconds. */
+  said?: { text: string; at: number };
   /** Police in a getaway (not a player or a stroller). */
   cop?: boolean;
 }
@@ -51,6 +53,18 @@ export interface ChaseEnd {
   bag: number;
 }
 
+/** A chat message: the city room, or your gang's. */
+export interface ChatMsg {
+  id: number;
+  room: 'city' | 'gang';
+  gang: GangId | null;
+  chog: number;
+  name: string;
+  from: GangId | null;
+  text: string;
+  at: number;
+}
+
 interface Info {
   id: number;
   chog: number | null;
@@ -76,6 +90,7 @@ export class LiveCity {
   you: number | null = null;
   people = new Map<number, Remote>();
   chases = new Map<string, Chase>();
+  chat: ChatMsg[] = [];
   /** Your own getaway pass, sent again after a reconnect so the run carries on. */
   private myRun: string | null = null;
   private ws: WebSocket | null = null;
@@ -91,6 +106,10 @@ export class LiveCity {
       status: (s: LiveStatus, online: number) => void;
       chase?: () => void;
       chaseEnd?: (e: ChaseEnd) => void;
+      /** The chat changed: a new message (or the history on connecting), or a message was refused. */
+      chat?: (fresh: ChatMsg | null, refused?: string) => void;
+      /** Your own last city-room message, for the bubble over your head. */
+      said?: (text: string) => void;
     },
   ) {
     queueMicrotask(() => void this.connect());
@@ -228,6 +247,30 @@ export class LiveCity {
         }
         break;
       }
+      case 'chat': {
+        // History on (re)connecting: keep anything newer we already have.
+        const seen = new Set(this.chat.map((c) => c.id));
+        this.chat = [...this.chat, ...(m.msgs as ChatMsg[]).filter((c) => !seen.has(c.id))]
+          .sort((a, b) => a.at - b.at)
+          .slice(-150);
+        this.on.chat?.(null);
+        break;
+      }
+      case 'msg': {
+        const c = m.m as ChatMsg;
+        if (this.chat.some((x) => x.id === c.id)) break;
+        this.chat = [...this.chat, c].slice(-150);
+        if (c.room === 'city') {
+          const p = this.people.get(m.by as number);
+          if (p) p.said = { text: c.text, at: now };
+          if (m.by === this.you) this.on.said?.(c.text);
+        }
+        this.on.chat?.(c);
+        break;
+      }
+      case 'say-no':
+        this.on.chat?.(null, m.why as string);
+        break;
       case 'bye':
         this.stopped = true;
         this.setStatus('elsewhere');
@@ -260,6 +303,11 @@ export class LiveCity {
     this.myRun = pass;
     if (this.ws?.readyState === WebSocket.OPEN && this.you !== null)
       this.ws.send(JSON.stringify({ t: 'run', pass }));
+  }
+
+  /** Says something in the city room or your gang's. */
+  say(room: 'city' | 'gang', text: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'say', room, text }));
   }
 
   emote(kind: Emote) {
