@@ -11,7 +11,8 @@ and can see you run. Built for Chogathon 2026.
 
 1. Open the link. You arrive in the plaza as a guest.
 2. Walk: drag anywhere (phone) or use the arrow keys / WASD (computer).
-3. Walk to the **Practice** warehouse next to the plaza and press **Use** (or E). This runs a whole robbery with no
+3. Walk straight down from the plaza to the **Practice** warehouse at the bottom of the map (open the map to tap
+   it and pick **Walk there**) and press **Use** (or E) at its door. This runs a whole robbery with no
    real cash:
    - **Break in:** one of four locks, depending on the gang you rob (pins, wires, slot reels or a safe dial). Slip
      more than once and the alarm goes off, so the vault starts loud.
