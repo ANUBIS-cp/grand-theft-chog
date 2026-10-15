@@ -1,5 +1,13 @@
 'use client';
-import { placeOf, trackAt, trackLength, type GetawayTrack } from '@chog-city/game/city';
+import {
+  placeOf,
+  seeded,
+  spawnPatrol,
+  stepPatrol,
+  trackAt,
+  trackLength,
+  type GetawayTrack,
+} from '@chog-city/game/city';
 import type { GangId } from '@chog-city/data';
 import { ArrowClockwise } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
@@ -52,6 +60,10 @@ export function GetawayReplay(props: GetawayReplayProps) {
     const t0 = performance.now();
     let raf = 0;
     let shown = -1;
+    let last = t0;
+    const rnd = seeded(7);
+    const start = trackAt(track, 0).me;
+    r.sirens = [spawnPatrol(start, rnd), spawnPatrol(start, rnd)];
     setOver(false);
     const frame = (now: number) => {
       const p = propsRef.current;
@@ -90,6 +102,8 @@ export function GetawayReplay(props: GetawayReplayProps) {
           me: true,
         }),
       ];
+      if (ms < len) stepPatrol(r.sirens, at.me, Math.min(0.1, (now - last) / 1000), rnd);
+      last = now;
       const home = placeOf(p.home)?.door;
       r.places = p.places;
       r.follow(at.me.x, at.me.y);

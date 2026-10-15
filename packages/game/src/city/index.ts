@@ -3,3 +3,4 @@ export * from './walkers.ts';
 export * from './emotes.ts';
 export * from './police.ts';
 export * from './track.ts';
+export * from './patrol.ts';

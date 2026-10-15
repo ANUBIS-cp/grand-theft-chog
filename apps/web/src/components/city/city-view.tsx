@@ -18,10 +18,13 @@ import {
   slideInPen,
   smooth,
   spawnCops,
+  spawnPatrol,
   standable,
   stepCops,
+  stepPatrol,
   stepWalker,
   type Cop,
+  type PatrolCar,
   type Place,
   type Walker,
 } from '@chog-city/game/city';
@@ -163,6 +166,8 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     area: '',
     walkers: new Map<number, Walker>(),
     rand: rng(Date.now() & 0xffff),
+    /** Police cars circling whoever has a bag (for the show; the officers on foot make the catch). */
+    patrol: [] as PatrolCar[],
     r: null as CityRenderer | null,
     net: null as LiveCity | null,
     /** Everyone drawn last frame, for taps. */
@@ -551,6 +556,13 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         }
       }
       s.drawn = people;
+      // Two police cars come round each bag (four at most) and drive off when it's over.
+      const bagged = people.filter((q) => q.bag || (q.me && pr));
+      const want = Math.min(4, bagged.length * 2);
+      while (s.patrol.length > want) s.patrol.pop();
+      while (s.patrol.length < want) s.patrol.push(spawnPatrol(bagged[s.patrol.length >> 1]!, s.rand));
+      s.patrol.forEach((car, i) => stepPatrol([car], bagged[i >> 1]!, dt, s.rand));
+      r.sirens = s.patrol;
       const home = mine ? placeOf(mine.home)?.door : pr ? pr.home : undefined;
 
       r.places = p.places;
@@ -1295,7 +1307,16 @@ function PhoneMap(props: {
           const ps = [...pts.current.values()];
           const v = phoneMap.view;
           if (ps.length === 1)
-            gest.current = { x: ps[0]!.x, y: ps[0]!.y, tx: v.tx, ty: v.ty, zoom: v.zoom, dist: 0, moved: false, pinched: false };
+            gest.current = {
+              x: ps[0]!.x,
+              y: ps[0]!.y,
+              tx: v.tx,
+              ty: v.ty,
+              zoom: v.zoom,
+              dist: 0,
+              moved: false,
+              pinched: false,
+            };
           else if (ps.length === 2 && gest.current) {
             const [a, b] = ps as [{ x: number; y: number }, { x: number; y: number }];
             Object.assign(gest.current, {
@@ -1321,7 +1342,12 @@ function PhoneMap(props: {
             const [a, b] = ps as [{ x: number; y: number }, { x: number; y: number }];
             const mx = (a.x + b.x) / 2;
             const my = (a.y + b.y) / 2;
-            const z = zoomAt((gs.zoom * Math.hypot(a.x - b.x, a.y - b.y)) / Math.max(1, gs.dist), gs.x, gs.y, start);
+            const z = zoomAt(
+              (gs.zoom * Math.hypot(a.x - b.x, a.y - b.y)) / Math.max(1, gs.dist),
+              gs.x,
+              gs.y,
+              start,
+            );
             z.tx += mx - gs.x;
             z.ty += my - gs.y;
             clamp(z);

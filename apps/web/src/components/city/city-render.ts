@@ -1,5 +1,15 @@
 import type { GangId } from '@chog-city/data';
-import { BH, BW, CITY, Ground, ROAD, groundAt, type Place, type Prop } from '@chog-city/game/city';
+import {
+  BH,
+  BW,
+  CITY,
+  Ground,
+  ROAD,
+  groundAt,
+  type PatrolCar,
+  type Place,
+  type Prop,
+} from '@chog-city/game/city';
 import { chogImage } from '@/lib/images';
 import { makePiece, type Piece } from '../chog/piece';
 import {
@@ -142,6 +152,8 @@ export class CityRenderer {
   bodyFont = 'Arial, sans-serif';
   places: Record<string, PlaceLook> = {};
   board: Board = { lines: [] };
+  /** Police cars on a getaway (packages/game/src/city/patrol.ts): drawn with their sirens going. */
+  sirens: PatrolCar[] = [];
   private g: CanvasRenderingContext2D;
   private dark!: HTMLCanvasElement;
   private tiles: Record<string, HTMLCanvasElement> = {};
@@ -1195,6 +1207,149 @@ export class CityRenderer {
     g.restore();
   }
 
+  /** Which colour a car's light bar shows now: red, blue, or (briefly) both off. */
+  private siren(c: PatrolCar, now: number) {
+    const k = ((now + c.phase) % 500) / 500;
+    return k < 0.46 ? 'red' : k > 0.5 && k < 0.96 ? 'blue' : 'off';
+  }
+
+  /** A police car with its light bar going: side-on driving across, front or back on driving up and down. */
+  private drawPatrol(c: PatrolCar, now: number) {
+    const { g, t } = this;
+    const x = this.sx(c.x);
+    const y = this.sy(c.y);
+    const lit = this.siren(c, now);
+    const RED = '#ff3b4f';
+    const BLUE = '#3d8bff';
+    g.save();
+    g.lineWidth = 2;
+    g.strokeStyle = INK;
+    g.fillStyle = 'rgba(0,0,0,0.38)';
+    const across = c.dir === 1 || c.dir === 3;
+    g.beginPath();
+    g.ellipse(x, y + t * 0.18, across ? t * 0.95 : t * 0.5, t * 0.2, 0, 0, Math.PI * 2);
+    g.fill();
+    const bar = (bx: number, by: number, w: number) => {
+      const h = t * 0.13;
+      g.fillStyle = lit === 'red' ? RED : '#5a1620';
+      g.beginPath();
+      g.roundRect(bx - w / 2, by - h, w / 2, h, [h / 2, 0, 0, h / 2]);
+      g.fill();
+      g.fillStyle = lit === 'blue' ? BLUE : '#14284f';
+      g.beginPath();
+      g.roundRect(bx, by - h, w / 2, h, [0, h / 2, h / 2, 0]);
+      g.fill();
+      g.strokeRect(bx - w / 2, by - h, w, h);
+    };
+    if (across) {
+      const L = t * 1.7;
+      const H = t * 0.62;
+      const top = y - H * 0.9;
+      g.translate(x, 0);
+      g.scale(c.dir === 1 ? 1 : -1, 1);
+      // Roof and windows.
+      g.fillStyle = '#f4f4f8';
+      g.beginPath();
+      g.moveTo(-L * 0.28, top);
+      g.lineTo(-L * 0.18, top - H * 0.55);
+      g.lineTo(L * 0.2, top - H * 0.55);
+      g.lineTo(L * 0.34, top);
+      g.closePath();
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#9fd3ff';
+      g.beginPath();
+      g.moveTo(-L * 0.22, top - 2);
+      g.lineTo(-L * 0.15, top - H * 0.45);
+      g.lineTo(L * 0.17, top - H * 0.45);
+      g.lineTo(L * 0.28, top - 2);
+      g.closePath();
+      g.fill();
+      // Black body, white doors.
+      g.fillStyle = '#17151f';
+      g.beginPath();
+      g.roundRect(-L / 2, top, L, H, H * 0.38);
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#f4f4f8';
+      g.fillRect(-L * 0.24, top + 2, L * 0.48, H - 4);
+      g.fillStyle = '#17151f';
+      g.font = `900 ${Math.round(H * 0.34)}px ${this.font}`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      // The flip would mirror the word.
+      g.save();
+      g.scale(c.dir === 1 ? 1 : -1, 1);
+      g.fillText('POLICE', 0, top + H * 0.52);
+      g.restore();
+      g.fillStyle = '#fff3b0';
+      g.fillRect(L / 2 - H * 0.22, top + H * 0.25, H * 0.16, H * 0.2);
+      g.fillStyle = '#ff4d4d';
+      g.fillRect(-L / 2 + H * 0.06, top + H * 0.25, H * 0.14, H * 0.2);
+      for (const wx of [-L * 0.3, L * 0.3]) {
+        g.fillStyle = '#1a1622';
+        g.beginPath();
+        g.arc(wx, top + H, H * 0.3, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+        g.fillStyle = '#8a8aa0';
+        g.beginPath();
+        g.arc(wx, top + H, H * 0.12, 0, Math.PI * 2);
+        g.fill();
+      }
+      bar(0, top - H * 0.55, L * 0.3);
+    } else {
+      // Seen from the front (driving down) or the back (driving up).
+      const W = t * 0.92;
+      const H = t * 0.78;
+      const top = y - H * 0.95;
+      g.fillStyle = '#1a1622';
+      for (const wx of [-W * 0.36, W * 0.36])
+        g.fillRect(x + wx - t * 0.08, top + H - t * 0.06, t * 0.16, t * 0.2);
+      g.fillStyle = '#17151f';
+      g.beginPath();
+      g.roundRect(x - W / 2, top + H * 0.35, W, H * 0.65, H * 0.18);
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#f4f4f8';
+      g.beginPath();
+      g.roundRect(x - W * 0.38, top, W * 0.76, H * 0.42, [H * 0.16, H * 0.16, 0, 0]);
+      g.fill();
+      g.stroke();
+      g.fillStyle = c.dir === 2 ? '#9fd3ff' : '#6f8fb3';
+      g.fillRect(x - W * 0.3, top + H * 0.08, W * 0.6, H * 0.26);
+      const lamp = c.dir === 2 ? '#fff3b0' : '#ff4d4d';
+      g.fillStyle = lamp;
+      g.fillRect(x - W * 0.42, top + H * 0.55, W * 0.18, H * 0.14);
+      g.fillRect(x + W * 0.24, top + H * 0.55, W * 0.18, H * 0.14);
+      g.fillStyle = '#f4f4f8';
+      g.fillRect(x - W * 0.2, top + H * 0.74, W * 0.4, H * 0.12);
+      bar(x, top, W * 0.5);
+    }
+    g.restore();
+  }
+
+  /** Red and blue light thrown on the street by each car's sirens, over the night. */
+  private drawSirenGlow(now: number, inView: (x: number, y: number, m: number) => boolean) {
+    const { g, t } = this;
+    for (const c of this.sirens) {
+      if (!inView(c.x, c.y, 4)) continue;
+      const lit = this.siren(c, now);
+      if (lit === 'off') continue;
+      const x = this.sx(c.x);
+      const y = this.sy(c.y) - t * 0.6;
+      const r = t * 2.8;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, lit === 'red' ? 'rgba(255,50,80,0.32)' : 'rgba(60,130,255,0.34)');
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      g.fillStyle = gr;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+      g.restore();
+    }
+  }
+
   /** A food stall: a cart with a striped canopy. */
   private drawStall(x: number, y: number, n: number, now: number) {
     const { g, t } = this;
@@ -1725,6 +1880,8 @@ export class CityRenderer {
       if (inView(pr.x, pr.y, 4)) things.push({ y: pr.y + 0.2, draw: () => this.drawProp(pr, now) });
     for (const p of opts.jailed)
       if (inView(p.x, p.y, 2)) things.push({ y: p.y, draw: () => this.drawPerson(p, now) });
+    for (const c of this.sirens)
+      if (inView(c.x, c.y, 3)) things.push({ y: c.y + 0.3, draw: () => this.drawPatrol(c, now) });
     // Your Chog is never hidden: anyone in front of it, and any name tag over it, fades to see-through.
     const me = people.find((p) => p.me);
     this.mine = null;
@@ -1756,7 +1913,10 @@ export class CityRenderer {
       const pc = this.piece(p);
       lit.push({ x: this.sx(p.x), y: this.sy(p.y) + t * 0.12 - pc.top * 0.5, r: pc.top * 0.95 });
     }
+    for (const c of this.sirens)
+      if (inView(c.x, c.y, 3)) lit.push({ x: this.sx(c.x), y: this.sy(c.y), r: t * 1.6 });
     this.drawNight(x0, y0, x1, y1, now, lit);
+    this.drawSirenGlow(now, inView);
 
     for (const p of CITY.places) {
       const look = this.places[p.id];
