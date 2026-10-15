@@ -40,7 +40,7 @@ const STEP_MS = 1000 / LOCK_TPS;
 const HOW: Record<LockKind, { title: string; how: string }> = {
   tumbler: { title: 'Pick the lock', how: 'Tap when the pin is in the gold band' },
   wires: { title: 'Cut the alarm', how: 'Watch the order, then cut the wires in it' },
-  reels: { title: 'Crack the slot lock', how: 'Stop each reel on the gang’s building' },
+  reels: { title: 'Stop the reels', how: 'Stop each reel on the gang’s building' },
   dial: { title: 'Spin the dial', how: 'Turn to each number and hold still on it' },
 };
 
@@ -175,23 +175,55 @@ export function LockGame(props: {
   const shaking = now - st.current.shake < 260;
   const how = HOW[s.kind];
 
+  const tapKind = s.kind === 'tumbler' || s.kind === 'reels';
+  const steps =
+    s.kind === 'tumbler'
+      ? s.pins.length
+      : s.kind === 'reels'
+        ? s.reels.length
+        : s.kind === 'wires'
+          ? s.order.length
+          : s.combo.length;
+  const slipsLeft = Math.max(0, LOCK_SLIPS - s.slips);
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0b0918] px-4 text-white">
+    <div
+      className="fixed inset-0 z-50 flex select-none flex-col bg-[#0b0918] text-white"
+      style={{ touchAction: 'manipulation' }}
+      onPointerDown={(e) => {
+        // The pins and the reels: a tap anywhere on the screen counts, so your thumb never has to aim.
+        if (tapKind && !result) {
+          e.preventDefault();
+          press(TAP);
+        }
+      }}
+    >
       <div
-        className="pointer-events-none absolute inset-0 opacity-40"
-        style={{ background: `radial-gradient(ellipse at 50% 40%, ${color.bg}55, transparent 65%)` }}
+        className="pointer-events-none absolute inset-0 opacity-50"
+        style={{ background: `radial-gradient(ellipse at 50% 30%, ${color.bg}66, transparent 62%)` }}
       />
-      <div className="relative w-full max-w-[440px]">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="font-display text-[12px] tracking-wide text-white/60">
-              Break in · {GANGS[gang].name}
+      <div className="relative mx-auto flex w-full max-w-[460px] flex-1 flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-[max(14px,env(safe-area-inset-top))]">
+        {/* Whose door, how loud you've been, and the clock. */}
+        <div className="flex items-center gap-3">
+          <span
+            className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[14px] ring-2 ring-inset ring-white/20"
+            style={{ background: color.bg }}
+          >
+            <img
+              src={`/art/city/small/gang-${gang}.webp`}
+              alt=""
+              className="max-h-10 max-w-10 object-contain"
+            />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[12px] font-semibold text-white/60">
+              Breaking into {GANGS[gang].name}
             </p>
-            <h1 className="font-display text-[30px] leading-none">{how.title}</h1>
+            <h1 className="truncate font-display text-[26px] leading-none">{how.title}</h1>
           </div>
           <span
             className={cn(
-              'mb-1 inline-flex items-center gap-1.5 rounded-full px-3 pb-0.5 pt-1 font-display text-[13px] leading-none text-ink',
+              'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 pb-0.5 pt-1 font-display text-[13px] leading-none text-ink',
               loud ? 'bg-jail' : 'bg-[#7cf0c4]',
             )}
           >
@@ -200,64 +232,156 @@ export function LockGame(props: {
           </span>
         </div>
         {/* The clock: run it out and you force the door, loudly. */}
-        <div className="mt-3 h-3 overflow-hidden rounded-full bg-black/50">
-          <div
+        <div className="mt-3 flex items-center gap-2.5">
+          <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/10">
+            <div
+              className={cn('h-full rounded-full', left < 4 ? 'bg-sys-red' : 'bg-sys-gold')}
+              style={{ width: `${(left / (LOCK_LIMIT / LOCK_TPS)) * 100}%` }}
+            />
+          </div>
+          <span
             className={cn(
-              'h-full rounded-full transition-[width] duration-100',
-              left < 4 ? 'bg-sys-red' : 'bg-sys-gold',
+              'w-8 text-right font-display text-[17px] leading-none tabular-nums',
+              left < 4 ? 'text-sys-red' : 'text-white',
             )}
-            style={{ width: `${(left / (LOCK_LIMIT / LOCK_TPS)) * 100}%` }}
-          />
+          >
+            {Math.ceil(left)}
+          </span>
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[12px] font-semibold text-white/60">
+          <span className="flex items-center gap-1.5">
+            {Array.from({ length: steps }, (_, i) => (
+              <span
+                key={i}
+                className={cn(
+                  'h-2 w-5 rounded-full',
+                  i < s.done ? 'bg-[#7cf0c4]' : i === s.done ? 'bg-white' : 'bg-white/15',
+                )}
+              />
+            ))}
+          </span>
+          <span>
+            {loud
+              ? 'It’s loud now'
+              : slipsLeft > 0
+                ? `${slipsLeft} slip allowed`
+                : 'Next slip sets off the alarm'}
+          </span>
         </div>
 
-        <div
-          className={cn(
-            'relative mt-4 select-none rounded-[20px] p-4',
-            shaking && 'animate-[lock-shake_260ms_ease-in-out]',
-          )}
-          style={{ background: `linear-gradient(180deg, ${color.bg}, ${shade(color.bg)})` }}
-          onPointerDown={(e) => {
-            if (s.kind === 'tumbler' || s.kind === 'reels') {
-              e.preventDefault();
-              press(TAP);
-            }
-          }}
-        >
-          {s.kind === 'tumbler' && <Tumbler s={s} />}
-          {s.kind === 'wires' && <Wires s={s} onCut={(i) => press(WIRE(i))} />}
-          {s.kind === 'reels' && <Reels s={s} gang={gang} />}
-          {s.kind === 'dial' && <Dial s={s} onHold={hold} onRelease={() => (st.current.held = 0)} />}
-          {result && (
-            <div className="absolute inset-0 grid place-items-center rounded-[17px] bg-[#0b0918]/75">
-              <div
-                className={cn(
-                  'animate-[banner-in_380ms_ease-out_both] -rotate-3 rounded-[10px] border-[3px] px-5 pb-1 pt-2 text-center font-display leading-none',
-                  result === 'quiet' ? 'border-[#7cf0c4] text-[#7cf0c4]' : 'border-jail text-jail',
-                )}
-              >
-                <span className="block text-[46px]">{result === 'quiet' ? 'You’re in' : 'Alarm!'}</span>
-                <span className="block pb-1 text-[16px] text-white/80">
-                  {result === 'quiet'
-                    ? 'Quietly. The guards are on patrol.'
-                    : 'The guards know you’re coming.'}
-                </span>
+        <div className="flex flex-1 items-center py-4">
+          <div
+            className={cn(
+              'relative w-full rounded-[24px] p-3 shadow-[0_20px_60px_rgba(0,0,0,0.45)] ring-1 ring-inset ring-white/10 sm:p-4',
+              shaking && 'animate-[lock-shake_260ms_ease-in-out]',
+            )}
+            style={{ background: `linear-gradient(180deg, ${color.bg}, ${shade(color.bg)})` }}
+          >
+            {s.kind === 'tumbler' && <Tumbler s={s} />}
+            {s.kind === 'wires' && <Wires s={s} onCut={(i) => press(WIRE(i))} />}
+            {s.kind === 'reels' && <Reels s={s} gang={gang} />}
+            {s.kind === 'dial' && <Dial s={s} />}
+            {result && (
+              <div className="absolute inset-0 grid place-items-center rounded-[23px] bg-[#0b0918]/75">
+                <div
+                  className={cn(
+                    'animate-[banner-in_380ms_ease-out_both] -rotate-3 rounded-[10px] border-[3px] px-5 pb-1 pt-2 text-center font-display leading-none',
+                    result === 'quiet' ? 'border-[#7cf0c4] text-[#7cf0c4]' : 'border-jail text-jail',
+                  )}
+                >
+                  <span className="block text-[46px]">{result === 'quiet' ? 'You’re in' : 'Alarm!'}</span>
+                  <span className="block pb-1 text-[16px] text-white/80">
+                    {result === 'quiet'
+                      ? 'Quietly. The guards are on patrol.'
+                      : 'The guards know you’re coming.'}
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-        <p className="mt-4 text-center text-[16px] font-semibold">
+
+        {/* Under your thumb: what to do, and the buttons to do it. */}
+        <p className="text-center text-[16px] font-semibold leading-snug">
           {st.current.started ? how.how : `${how.how}. The clock starts on your first move.`}
         </p>
-        <p className="mt-1 text-center text-[13px] text-white/55">
+        <p className="mt-1 hidden text-center text-[13px] text-white/55 [@media(hover:hover)_and_(pointer:fine)]:block">
           {s.kind === 'dial'
-            ? 'Hold ← → (or A D), or the buttons'
+            ? 'Hold ← → (or A D)'
             : s.kind === 'wires'
-              ? 'Tap a wire, or keys 1–5'
-              : 'Tap anywhere, or Space'}
-          {` · ${LOCK_SLIPS} slip allowed, then it gets loud`}
+              ? 'Click a wire, or keys 1–5'
+              : 'Click anywhere, or Space'}
         </p>
+        <div className="mt-4 h-[76px]">
+          {tapKind && (
+            <div
+              className={cn(
+                'grid h-full place-items-center rounded-[24px] font-display text-[26px] leading-none text-ink shadow-[0_8px_0_rgba(0,0,0,0.35)]',
+                result ? 'bg-white/20' : 'bg-sys-gold',
+              )}
+            >
+              <span className="pt-1">{s.kind === 'reels' ? 'Stop' : 'Tap'}</span>
+            </div>
+          )}
+          {s.kind === 'dial' && (
+            <div className="flex h-full gap-3">
+              <DialButton
+                dir={LEFT}
+                label="Turn left"
+                onHold={hold}
+                onRelease={() => (st.current.held = 0)}
+              />
+              <DialButton
+                dir={RIGHT}
+                label="Turn right"
+                onHold={hold}
+                onRelease={() => (st.current.held = 0)}
+              />
+            </div>
+          )}
+          {s.kind === 'wires' && (
+            <p className="grid h-full place-items-center text-center text-[14px] text-white/55">
+              {showing(s) !== null ? 'Watch the order…' : 'Tap the wires in the order you saw'}
+            </p>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+/** One of the dial's two big buttons: hold to turn. */
+function DialButton({
+  dir,
+  label,
+  onHold,
+  onRelease,
+}: {
+  dir: LockInput;
+  label: string;
+  onHold: (i: LockInput) => void;
+  onRelease: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      className="press grid flex-1 place-items-center rounded-[24px] bg-white/[0.14] text-white ring-1 ring-inset ring-white/15 active:bg-white/25"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          /* no live pointer */
+        }
+        onHold(dir);
+      }}
+      onPointerUp={onRelease}
+      onPointerCancel={onRelease}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {dir === LEFT ? <ArrowLeft size={34} weight="bold" /> : <ArrowRight size={34} weight="bold" />}
+    </button>
   );
 }
 
@@ -346,14 +470,6 @@ function Wires({ s, onCut }: { s: LockState; onCut: (i: number) => void }) {
     <div className="rounded-[14px] bg-[#14102a] p-3">
       <div className="mb-2 flex items-center justify-between font-display text-[12px] leading-none">
         <span className={watching ? 'text-[#ffd666]' : 'text-white/60'}>{watching ? 'Watch…' : 'Cut!'}</span>
-        <span className="flex gap-1">
-          {s.order.map((_, i) => (
-            <span
-              key={i}
-              className={cn('h-3 w-6 rounded-full', i < s.done ? 'bg-[#7cf0c4]' : 'bg-white/15')}
-            />
-          ))}
-        </span>
       </div>
       {WIRE_COLORS.map((c, i) => {
         const glow = lit === i;
@@ -367,7 +483,7 @@ function Wires({ s, onCut }: { s: LockState; onCut: (i: number) => void }) {
               e.preventDefault();
               onCut(i);
             }}
-            className="relative flex h-[42px] w-full items-center gap-2"
+            className="relative flex h-[52px] w-full items-center gap-2"
           >
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-[6px] bg-[#3a3556] font-mono text-[12px] text-white/70">
               {i + 1}
@@ -447,7 +563,7 @@ function Reels({ s, gang }: { s: LockState; gang: GangId }) {
                     style={{ height: H, top: k * H }}
                   >
                     <img
-                      src={`/art/city/small/gang-${faceGang((((k % FACES) + FACES) % FACES))}.webp`}
+                      src={`/art/city/small/gang-${faceGang(((k % FACES) + FACES) % FACES)}.webp`}
                       alt=""
                       draggable={false}
                       decoding="sync"
@@ -468,30 +584,11 @@ function Reels({ s, gang }: { s: LockState; gang: GangId }) {
 }
 
 /** A safe dial: turn to each number and rest on it until it clicks. */
-function Dial({
-  s,
-  onHold,
-  onRelease,
-}: {
-  s: LockState;
-  onHold: (i: LockInput) => void;
-  onRelease: () => void;
-}) {
+function Dial({ s }: { s: LockState }) {
   const R = 118;
   const angle = -(s.dial / (DIAL * 4)) * 360;
   const want = s.combo[s.done];
   const on = want !== undefined && dialNumber(s.dial) === want;
-  const btn =
-    'press grid h-14 w-16 place-items-center rounded-[18px] bg-white/[0.12] text-white ring-1 ring-inset ring-white/10';
-  const holdProps = (i: LockInput) => ({
-    onPointerDown: (e: React.PointerEvent) => {
-      e.preventDefault();
-      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-      onHold(i);
-    },
-    onPointerUp: onRelease,
-    onPointerCancel: onRelease,
-  });
   return (
     <div className="flex flex-col items-center">
       <div className="mb-2 flex items-center gap-2 font-display leading-none">
@@ -511,11 +608,8 @@ function Dial({
           </span>
         ))}
       </div>
-      <div className="flex items-center gap-3">
-        <button type="button" className={btn} {...holdProps(LEFT)} aria-label="Turn left">
-          <ArrowLeft size={26} weight="bold" />
-        </button>
-        <svg viewBox="-130 -136 260 266" className="w-[220px]">
+      <div className="flex items-center">
+        <svg viewBox="-130 -136 260 266" className="w-[min(72vw,280px)]">
           <polygon
             points="0,-128 -9,-142 9,-142"
             fill="#ffd666"
@@ -576,9 +670,6 @@ function Dial({
             {dialNumber(s.dial)}
           </text>
         </svg>
-        <button type="button" className={btn} {...holdProps(RIGHT)} aria-label="Turn right">
-          <ArrowRight size={26} weight="bold" />
-        </button>
       </div>
     </div>
   );

@@ -236,10 +236,12 @@ export function CityApp() {
         requestAnimationFrame(() => requestAnimationFrame(() => view.current?.practiceChase(home)));
       },
       stop: () => setPracticeRun(null),
+      lock: () => startPracticeRef.current(),
       banner: () =>
         setBanner({ id: `d${Date.now()}`, title: 'Got away!', line: 'You ran $420 home to your gang.', tone: 'win' }),
     };
   }, []);
+  const startPracticeRef = useRef(() => {});
   const startPractice = () => {
     const pool = GANG_IDS.filter((g) => g !== chog?.gang);
     setPractice({
@@ -249,6 +251,7 @@ export function CityApp() {
       loud: false,
     });
   };
+  startPracticeRef.current = startPractice;
   /** The door you're standing at, and whether its card is open. */
   const [door, setDoor] = useState<Place | null>(null);
   const [doorOpen, setDoorOpen] = useState(false);
