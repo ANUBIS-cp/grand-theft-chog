@@ -9,7 +9,7 @@ const nunito = Nunito({ subsets: ['latin'], weight: ['700', '800', '900'], varia
 const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains', display: 'swap' });
 
 export const metadata: Metadata = {
-  title: 'Chog City',
+  title: 'Chog World',
   description:
     'Every gang has a vault full of cash. Sneak your Chog into a rival’s vault, grab what you can, get out.',
 };

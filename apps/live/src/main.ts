@@ -27,7 +27,10 @@ import { WebSocketServer, type WebSocket } from 'ws';
 
 const PORT = Number(process.env.LIVE_PORT ?? 3001);
 const HOST = process.env.LIVE_HOST ?? '127.0.0.1';
-const ORIGIN = process.env.PUBLIC_HOST ? `https://${process.env.PUBLIC_HOST}` : null;
+/** Pages allowed to connect: every name in PUBLIC_HOST (a list while the site moves to a new address). */
+const ORIGINS = process.env.PUBLIC_HOST
+  ? process.env.PUBLIC_HOST.split(',').map((h) => `https://${h.trim()}`)
+  : null;
 const TICK_MS = 100;
 const MAX_PLAYERS = 600;
 const MAX_PER_IP = 8;
@@ -138,7 +141,7 @@ const http = createServer((req, res) => {
 const wss = new WebSocketServer({ server: http, maxPayload: 2048 });
 
 wss.on('connection', (ws, req) => {
-  if (ORIGIN && req.headers.origin !== ORIGIN) return ws.close(1008, 'origin');
+  if (ORIGINS && !ORIGINS.includes(req.headers.origin ?? '')) return ws.close(1008, 'origin');
   // Behind Caddy the real address is in X-Forwarded-For; trust it only from the local proxy.
   const direct = req.socket.remoteAddress ?? '';
   const fwd = String(req.headers['x-forwarded-for'] ?? '')

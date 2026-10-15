@@ -24,10 +24,18 @@ export async function POST(req: Request) {
   if (!body.success) return error('BAD_REQUEST');
   const { message, signature } = body.data;
   const fields = parseSiweMessage(message);
-  const host =
-    process.env.PUBLIC_HOST ?? req.headers.get('x-forwarded-host') ?? req.headers.get('host') ?? '';
-  if (!fields.nonce || !fields.address || fields.domain !== host || fields.chainId !== 143)
-    return error('BAD_MESSAGE');
+  // PUBLIC_HOST can list several names (the new address first) while the site moves to a new one.
+  const hosts = (
+    process.env.PUBLIC_HOST ??
+    req.headers.get('x-forwarded-host') ??
+    req.headers.get('host') ??
+    ''
+  )
+    .split(',')
+    .map((h) => h.trim())
+    .filter(Boolean);
+  const host = fields.domain && hosts.includes(fields.domain) ? fields.domain : '';
+  if (!fields.nonce || !fields.address || !host || fields.chainId !== 143) return error('BAD_MESSAGE');
 
   // The nonce is single-use and only valid for 15 minutes.
   const used = await (

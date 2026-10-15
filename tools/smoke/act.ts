@@ -19,7 +19,7 @@ const message = (nonce: string) =>
     nonce,
     uri: base,
     version: '1',
-    statement: 'Log in to Chog City. This costs nothing and does not move any tokens.',
+    statement: 'Log in to Chog World. This costs nothing and does not move any tokens.',
   });
 
 if (rest[0] === 'sign') {

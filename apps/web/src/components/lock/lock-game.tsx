@@ -202,7 +202,7 @@ export function LockGame(props: {
         {/* The clock: run it out and you force the door, loudly. */}
         <div className="mt-3 h-3 overflow-hidden rounded-full bg-black/50">
           <div
-            className={cn('h-full rounded-full', left < 4 ? 'bg-jail' : 'bg-[#ffd666]')}
+            className={cn('h-full rounded-full transition-[width] duration-100', left < 4 ? 'bg-sys-red' : 'bg-sys-gold')}
             style={{ width: `${(left / (LOCK_LIMIT / LOCK_TPS)) * 100}%` }}
           />
         </div>
@@ -474,7 +474,7 @@ function Dial({
   const angle = -(s.dial / (DIAL * 4)) * 360;
   const want = s.combo[s.done];
   const on = want !== undefined && dialNumber(s.dial) === want;
-  const btn = 'grid h-14 w-16 place-items-center rounded-[12px] bg-white text-ink';
+  const btn = 'press grid h-14 w-16 place-items-center rounded-[18px] bg-white/[0.12] text-white ring-1 ring-inset ring-white/10';
   const holdProps = (i: LockInput) => ({
     onPointerDown: (e: React.PointerEvent) => {
       e.preventDefault();
@@ -493,9 +493,9 @@ function Dial({
             className={cn(
               'grid h-11 w-14 place-items-center rounded-[8px] pt-1 text-[26px] tabular-nums',
               i < s.done
-                ? 'bg-[#7cf0c4] text-ink'
+                ? 'bg-sys-green text-black'
                 : i === s.done
-                  ? 'bg-white text-ink'
+                  ? 'bg-white text-black'
                   : 'bg-black/40 text-white/40',
             )}
           >

@@ -1017,20 +1017,11 @@ export function CityApp() {
 
       {practiceRun && (
         <div className="pointer-events-none absolute inset-x-0 bottom-[118px] z-30 flex justify-center px-3 sm:bottom-auto sm:top-[96px]">
-          <div className="w-full max-w-[460px] animate-[banner-in_380ms_ease-out_both] rounded-[16px] bg-[#ffd666] px-4 py-2.5 text-ink">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-display text-[22px] leading-tight">Run it home!</p>
-                <p className="text-[14px] font-semibold leading-snug">
-                  Practice: get to {practiceRun.to}. Follow the arrow, dodge the police.
-                </p>
-                <PoliceIn since={practiceRun.since} />
-              </div>
-              <span className="grid h-14 w-16 shrink-0 place-items-center rounded-[12px] bg-white pt-1 font-display text-[25px] tabular-nums leading-none">
-                {Math.max(0, Math.ceil((practiceRun.until - Date.now()) / 1000))}
-              </span>
-            </div>
-          </div>
+          <RunBar
+            line={`Practice: get to ${practiceRun.to}. Follow the arrow, dodge the police.`}
+            since={practiceRun.since}
+            until={practiceRun.until}
+          />
         </div>
       )}
 
@@ -1198,7 +1189,7 @@ export function CityApp() {
       {/* First visit */}
       {welcome && me && !me.address && !(door && doorOpen) && !sheet && !peek && (
         <Card onClose={closeWelcome}>
-          <h1 className="font-display text-[24px] leading-[0.95]">Welcome to Chog City</h1>
+          <h1 className="font-display text-[24px] leading-[0.95]">Welcome to Chog World</h1>
           <p className="mt-2 text-[15px] leading-snug text-white/80">
             Every gang has a building with a vault full of cash. Walk your Chog to a rival’s door to rob it,
             and bring the cash home.
@@ -1264,7 +1255,7 @@ export function CityApp() {
           <p className="mb-3 text-[14px] text-white/70">
             Walk in as your own Chog. Logging in is free and moves no tokens.
           </p>
-          <div className="rounded-[12px] bg-paper text-ink">
+          <div className="rounded-[20px] bg-white text-[#15131f]">
             <ConnectPanel
               onLoggedIn={() => {
                 setSheet(null);
@@ -1330,14 +1321,18 @@ export function CityApp() {
         <Board onClose={() => setSheet(null)}>
           <div className="flex flex-wrap items-end justify-between gap-2 pr-12">
             <h2 className="font-display text-[25px] leading-none sm:text-[31px]">Gang board</h2>
-            <div className="flex rounded-[10px] bg-[#0f0c1f] p-0.5">
+            <div className="relative grid grid-cols-2 rounded-[11px] bg-fill-2 p-[3px]">
+              <span
+                className="absolute bottom-[3px] left-[3px] top-[3px] w-[calc(50%-3px)] rounded-[9px] bg-white/[0.16] shadow-[0_3px_8px_rgba(0,0,0,0.25)] transition-transform duration-300 ease-[cubic-bezier(.2,.9,.3,1.1)]"
+                style={{ transform: `translateX(${boardTab === 'hits' ? '100%' : '0'})` }}
+              />
               {(['gangs', 'hits'] as const).map((k) => (
                 <button
                   key={k}
                   onClick={() => setBoardTab(k)}
                   className={cn(
-                    'rounded-[7px] px-3 pb-1 pt-1.5 font-display text-[12px] leading-none',
-                    boardTab === k ? 'btn-gold' : 'text-white/70 hover:text-white',
+                    'relative h-8 px-4 text-[14px] font-semibold transition-colors',
+                    boardTab === k ? 'text-white' : 'text-label-2 hover:text-white',
                   )}
                 >
                   {k === 'gangs' ? 'Richest' : 'Latest hits'}
@@ -1357,68 +1352,83 @@ export function CityApp() {
                 const mine = chog?.gang === v.gang;
                 const hit = chog?.hitToday.includes(v.gang);
                 return (
-                  <li key={v.gang}>
+                  <li
+                    key={v.gang}
+                    style={{ animation: `glass-in 420ms ${i * 22}ms cubic-bezier(.2,.9,.3,1) both` }}
+                  >
                     <button
                       onClick={() => {
                         setSheet(null);
                         view.current?.walkTo(v.gang);
                       }}
                       className={cn(
-                        'group relative flex h-full w-full flex-col overflow-hidden rounded-[14px] bg-[#1d1838] text-left transition hover:-translate-y-0.5',
-                        mine && 'ring-[3px] ring-[#ffd666] ring-offset-2 ring-offset-[#17132b]',
+                        'press group relative flex h-full w-full flex-col overflow-hidden rounded-[22px] text-left ring-1 ring-inset ring-white/[0.08] transition-shadow hover:ring-white/20',
+                        mine && 'ring-2 ring-sys-pink hover:ring-sys-pink',
                       )}
+                      style={{
+                        background: `linear-gradient(170deg, ${c.bg}55 0%, ${c.bg}18 45%, rgba(255,255,255,0.03) 100%)`,
+                      }}
                     >
-                      <span
-                        className="flex items-center gap-2 border-b-[3px] border-ink px-2.5 pb-1.5 pt-2"
-                        style={{ background: c.bg, color: c.fg }}
-                      >
-                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white font-display text-[12px] leading-none text-ink">
+                      {/* The gang's building, as the card's picture. */}
+                      <span className="relative block h-[88px] px-3 pt-3">
+                        <img
+                          src={`/art/city/gang-${v.gang}.webp`}
+                          alt=""
+                          className="h-full w-full object-contain object-bottom drop-shadow-[0_8px_14px_rgba(0,0,0,0.45)] transition-transform duration-500 ease-[cubic-bezier(.2,.9,.3,1.2)] group-hover:scale-[1.05]"
+                          onError={(e) => (e.currentTarget.style.visibility = 'hidden')}
+                        />
+                        <span
+                          className={cn(
+                            'absolute left-2.5 top-2.5 grid h-7 min-w-7 place-items-center rounded-full px-1.5 text-[13px] font-bold tabular-nums shadow-[0_2px_8px_rgba(0,0,0,0.4)]',
+                            i === 0 ? 'bg-sys-gold text-black' : 'bg-black/55 text-white backdrop-blur-md',
+                          )}
+                        >
                           {i + 1}
                         </span>
-                        <span className="min-w-0 truncate font-display text-[13px] leading-none">
-                          {GANGS[v.gang].name}
-                        </span>
                       </span>
-                      <span className="flex -space-x-2 px-2.5 pt-2.5">
-                        {v.guards.slice(0, 4).map((id) => (
-                          <img
-                            key={id}
-                            src={chogImage(id, 96)}
-                            alt=""
-                            className="h-11 w-11 rounded-[10px] object-cover"
-                          />
-                        ))}
-                        {v.guards.length === 0 && (
-                          <span className="h-11 text-[13px] leading-[44px] text-white/50">
-                            No members yet
+                      <span className="flex flex-1 flex-col px-3 pb-3 pt-2">
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.bg }} />
+                          <span className="min-w-0 truncate font-display text-[16px] leading-tight">
+                            {GANGS[v.gang].name}
                           </span>
-                        )}
-                      </span>
-                      <span className="flex flex-1 flex-col px-2.5 pb-2.5 pt-2">
-                        <span className="font-display text-[19px] leading-none text-[#ffd666] tabular-nums">
+                        </span>
+                        <span className="mt-1 font-display text-[22px] leading-none tabular-nums text-sys-gold">
                           {money(v.cash)}
                         </span>
-                        <span className="mt-1 text-[12px] text-white/60">
-                          {plural(v.members, 'member')} · {DEFENCE[v.tier]}
+                        <span className="mt-2 flex items-center gap-2">
+                          <span className="flex -space-x-2">
+                            {v.guards.slice(0, 4).map((id) => (
+                              <img
+                                key={id}
+                                src={chogImage(id, 96)}
+                                alt=""
+                                className="h-7 w-7 rounded-full object-cover ring-2 ring-[#1a1828]"
+                              />
+                            ))}
+                          </span>
+                          <span className="text-[12px] text-label-2">
+                            {plural(v.members, 'member')} · {DEFENCE[v.tier]}
+                          </span>
                         </span>
-                        <span className="mt-1.5 flex flex-wrap gap-1">
+                        <span className="mt-2 flex flex-wrap gap-1">
                           {mine && (
-                            <span className="rounded-[5px] bg-[#ffd666] px-1.5 py-0.5 text-[11px] font-bold uppercase text-ink">
+                            <span className="rounded-full bg-sys-pink px-2 py-0.5 text-[11px] font-semibold text-white">
                               Your gang
                             </span>
                           )}
                           {revenge.includes(v.gang) && (
-                            <span className="inline-flex items-center gap-1 rounded-[5px] bg-pink px-1.5 py-0.5 text-[11px] font-bold uppercase text-ink">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-sys-orange/20 px-2 py-0.5 text-[11px] font-semibold text-sys-orange">
                               <ArrowBendUpLeft size={11} weight="bold" /> Revenge
                             </span>
                           )}
                           {hit && (
-                            <span className="rounded-[5px] bg-white/15 px-1.5 py-0.5 text-[11px] font-bold uppercase text-white/80">
+                            <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-label-2">
                               Hit today
                             </span>
                           )}
                           {alarms[v.gang] && alarms[v.gang]!.since > now - 180_000 && (
-                            <span className="rounded-[5px] bg-[#ff2d55] px-1.5 py-0.5 text-[11px] font-bold uppercase text-white">
+                            <span className="animate-pulse rounded-full bg-sys-red px-2 py-0.5 text-[11px] font-semibold text-white">
                               Being robbed
                             </span>
                           )}
@@ -1439,12 +1449,12 @@ export function CityApp() {
                   <li key={h.id}>
                     <Link
                       href={`/replay/${h.id}`}
-                      className="group flex items-center gap-3 rounded-[12px] bg-[#1d1838] p-2 text-[14px] hover:bg-[#262046]"
+                      className="press group flex items-center gap-3 rounded-[18px] bg-white/[0.05] p-2.5 text-[14px] ring-1 ring-inset ring-white/[0.06] hover:bg-white/[0.08]"
                     >
                       <img
                         src={chogImage(h.chogId, 96)}
                         alt=""
-                        className="h-12 w-12 shrink-0 rounded-[10px] object-cover"
+                        className="h-12 w-12 shrink-0 rounded-[14px] object-cover"
                       />
                       <p className="min-w-0 flex-1 leading-snug">
                         <HitLine h={h} />
@@ -1534,19 +1544,19 @@ function Board({ children, onClose }: { children: React.ReactNode; onClose: () =
   }, [onClose]);
   return (
     <div
-      className="absolute inset-0 z-40 grid place-items-center bg-black/55 p-2 backdrop-blur-[2px] sm:p-6"
+      className="absolute inset-0 z-40 grid animate-[fade-in_200ms] place-items-center bg-black/55 p-2 backdrop-blur-[6px] sm:p-6"
       onClick={onClose}
     >
       <section
         onClick={(e) => e.stopPropagation()}
-        className="relative max-h-full w-full max-w-[1040px] animate-[sheet-in_220ms_ease-out] overflow-y-auto rounded-[22px] bg-[#17132b] p-4 sm:p-6"
+        className="glass-strong relative max-h-full w-full max-w-[1040px] animate-[glass-in_380ms_cubic-bezier(.2,.9,.3,1)] overflow-y-auto rounded-[30px] p-4 text-white sm:p-6"
       >
         <button
           onClick={onClose}
-          className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full bg-white text-ink"
+          className="press absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-fill text-label-2 hover:text-white"
           aria-label="Close"
         >
-          <X size={18} weight="bold" />
+          <X size={14} weight="bold" />
         </button>
         {children}
       </section>
@@ -1605,7 +1615,7 @@ function ChogCard(props: {
 }) {
   const { chog, now } = props;
   return (
-    <div className="rounded-[14px] bg-[#1d1838] p-3">
+    <div className="rounded-[20px] bg-white/[0.05] p-3.5 ring-1 ring-inset ring-white/[0.06]">
       <div className="flex items-center gap-3">
         <img src={chogImage(chog.id, 256)} alt="" className="h-20 w-20 shrink-0 rounded-[10px]" />
         <div className="min-w-0">
@@ -1728,7 +1738,7 @@ function DoorCard(props: {
                   <button
                     disabled={props.busy !== null}
                     onClick={() => props.onBreakOut(j.id)}
-                    className="rounded-[6px] bg-pink px-2 pb-0.5 pt-1 font-display text-[12px] leading-none text-ink disabled:opacity-50"
+                    className="btn btn-sm press btn-primary disabled:opacity-50"
                   >
                     {props.busy === `free${j.id}` ? '…' : 'Break out'}
                   </button>
@@ -1807,7 +1817,7 @@ function DoorCard(props: {
         </>
       )}
       {props.robbing && props.robbing.since > props.now - 180_000 && (
-        <p className="mt-2 flex items-center gap-2 rounded-[8px] bg-[#ff2d55] px-2.5 py-1.5 text-[13px] font-semibold text-ink">
+        <p className="mt-2 flex items-center gap-2 rounded-[14px] bg-sys-red/15 px-3 py-2 text-[13px] font-semibold text-sys-red">
           <span className="h-2 w-2 animate-pulse rounded-full bg-ink" />
           {GANGS[props.robbing.gang].name} {verb(props.robbing.gang)} {mine ? 'robbing you' : 'inside'} right
           now
@@ -1856,7 +1866,7 @@ function DoorCard(props: {
       ) : (
         <>
           {props.revenge && !block && (
-            <p className="mt-3 inline-flex items-center gap-1 rounded-[4px] bg-pink px-1.5 py-0.5 text-[12px] font-bold uppercase text-ink">
+            <p className="mt-3 inline-flex items-center gap-1 rounded-full bg-sys-orange/20 px-2 py-0.5 text-[12px] font-semibold text-sys-orange">
               <ArrowBendUpLeft size={12} weight="bold" /> Revenge: they robbed you. +25%
             </p>
           )}
@@ -1891,7 +1901,7 @@ function Defend(props: {
   if (!row) return null;
   const options = [1, 2, 3].filter((l) => l > row.tier);
   return (
-    <div className="mt-3 rounded-[10px] border-2 border-white/10 p-2.5">
+    <div className="mt-3 rounded-[20px] bg-white/[0.05] p-3.5 ring-1 ring-inset ring-white/[0.06]">
       <div className="flex items-baseline justify-between gap-2">
         <div className="section-label">Add defence for 24 hours</div>
         {row.boughtUntil && (
@@ -1910,7 +1920,7 @@ function Defend(props: {
                 key={l}
                 disabled={poor || props.jailed || props.busy !== null}
                 onClick={() => props.onDefend(l)}
-                className="rounded-[8px] bg-[#2a2545] px-2 pb-1.5 pt-2 text-left hover:bg-[#342d55] disabled:opacity-40 disabled:shadow-none"
+                className="press rounded-[14px] bg-white/[0.07] px-3 py-2.5 text-left ring-1 ring-inset ring-white/[0.06] hover:bg-white/[0.11] disabled:opacity-40"
               >
                 <span className="block font-display text-[12px] leading-none">{DEFENCE[l]}</span>
                 <span className="mt-0.5 block text-[12px] text-[#ffd666]">{money(price)}</span>
@@ -1937,7 +1947,7 @@ function GangBanner(props: {
 }) {
   const up = props.burns.banners.find((b) => b.gang === props.gang && b.until > props.now);
   return (
-    <div className="mt-3 rounded-[10px] border-2 border-white/10 p-2.5">
+    <div className="mt-3 rounded-[20px] bg-white/[0.05] p-3.5 ring-1 ring-inset ring-white/[0.06]">
       <div className="flex items-baseline justify-between gap-2">
         <div className="section-label">Gang banner for 24 hours</div>
         {up && <div className="text-[12px] text-white/60">{formatLeft(up.until - props.now)} left</div>}
@@ -2054,7 +2064,7 @@ function Peek(props: {
               </span>
             )}
             {who.player && (
-              <span className="rounded-full bg-[#3ddc84] px-1.5 py-0.5 text-[11px] font-bold uppercase text-ink">
+              <span className="rounded-full bg-sys-green/20 px-2 py-0.5 text-[11px] font-semibold text-sys-green">
                 Playing now
               </span>
             )}
@@ -2083,48 +2093,79 @@ function ChaseBar(props: { c: Chase; mine: boolean; ours: boolean; canChase: boo
   const left = Math.max(0, Math.ceil((c.until - Date.now()) / 1000));
   if (mine)
     return (
-      <div className="pointer-events-none w-full max-w-[460px] animate-[banner-in_380ms_ease-out_both] rounded-[16px] bg-[#ffd666] px-4 py-2.5 text-ink">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="font-display text-[22px] leading-tight">Run it home!</p>
-            <p className="text-[14px] font-semibold leading-snug">
-              {money(c.bag)} to {GANGS[c.home].name}’s door. Dodge the police.
-            </p>
-            <PoliceIn since={c.since} />
-          </div>
-          <span
-            className={cn(
-              'grid h-14 w-16 shrink-0 place-items-center rounded-[12px] pt-1 font-display text-[25px] tabular-nums leading-none',
-              left <= 10 ? 'animate-pulse bg-jail text-white' : 'bg-white',
-            )}
-          >
-            {left}
-          </span>
-        </div>
-      </div>
+      <RunBar
+        line={`${money(c.bag)} to ${GANGS[c.home].name}’s door. Dodge the police.`}
+        since={c.since}
+        until={c.until}
+      />
     );
   return (
     <div
       className={cn(
-        'pointer-events-auto flex w-full max-w-[460px] items-center gap-3 rounded-[14px] py-1.5 pl-1.5 pr-2',
-        ours ? 'btn-primary' : 'bg-[#1d1838] text-white',
+        'glass-strong pointer-events-auto flex w-full max-w-[460px] animate-[banner-drop_480ms_cubic-bezier(.2,1.2,.3,1)] items-center gap-3 rounded-[24px] py-2 pl-2 pr-2.5 text-white',
+        ours && 'ring-2 ring-sys-red/70',
       )}
     >
-      <img src={chogImage(c.chog, 96)} alt="" className="h-11 w-11 shrink-0 rounded-[9px] object-cover" />
-      <p className="min-w-0 flex-1 text-[14px] font-semibold leading-snug">
-        <span className="block font-display text-[15px] leading-none">
-          {ours ? 'Stop the robber!' : 'Getaway!'}
+      <span className="relative shrink-0">
+        <img src={chogImage(c.chog, 96)} alt="" className="h-11 w-11 rounded-[14px] object-cover" />
+        <span className="absolute -bottom-1 -right-1 rounded-full bg-sys-gold px-1.5 text-[10px] font-bold text-black">
+          $
+        </span>
+      </span>
+      <p className="min-w-0 flex-1 text-[13px] leading-snug text-label-2">
+        <span
+          className={cn('block font-display text-[16px] leading-tight', ours ? 'text-sys-red' : 'text-white')}
+        >
+          {ours ? 'Stop the robber!' : 'Getaway'}
         </span>
         {c.name} is running from {GANGS[c.from].name} with {money(c.bag)} · {left}s
       </p>
       {props.canChase && (
         <button
           onClick={props.onChase}
-          className="h-10 shrink-0 rounded-[10px] bg-[#ffd666] px-3 pt-1 font-display text-[13px] leading-none text-ink"
+          className={cn('btn btn-sm press shrink-0', ours ? 'btn-primary' : 'btn-glass')}
         >
           {ours ? 'Chase' : 'Watch'}
         </button>
       )}
+    </div>
+  );
+}
+
+/** Your getaway (or the practice one): where to go, the head start, and the time left in a ring. */
+function RunBar({ line, since, until }: { line: string; since: number; until: number }) {
+  const left = Math.max(0, (until - Date.now()) / 1000);
+  const total = Math.max(1, (until - since) / 1000);
+  const k = left / total;
+  const low = left <= 10;
+  return (
+    <div className="glass-strong pointer-events-none w-full max-w-[460px] animate-[banner-drop_480ms_cubic-bezier(.2,1.2,.3,1)] rounded-[26px] py-3 pl-4 pr-3 text-white ring-1 ring-sys-gold/35">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-display text-[22px] leading-tight text-sys-gold">Run it home!</p>
+          <p className="text-[14px] leading-snug text-label-2">{line}</p>
+          <PoliceIn since={since} />
+        </div>
+        <span className="relative grid h-[58px] w-[58px] shrink-0 place-items-center">
+          <svg className="absolute inset-0 -rotate-90" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="8" />
+            <circle
+              cx="50"
+              cy="50"
+              r="44"
+              fill="none"
+              stroke={low ? '#ff453a' : '#ffd60a'}
+              strokeWidth="8"
+              strokeLinecap="round"
+              strokeDasharray={`${k * 276.5} 276.5`}
+              className="transition-[stroke-dasharray] duration-1000 ease-linear"
+            />
+          </svg>
+          <span className={cn('font-display text-[20px] tabular-nums', low && 'animate-pulse text-sys-red')}>
+            {Math.ceil(left)}
+          </span>
+        </span>
+      </div>
     </div>
   );
 }
@@ -2134,7 +2175,7 @@ function PoliceIn({ since }: { since: number }) {
   const left = Math.ceil(HEAD_START - (Date.now() - since) / 1000);
   if (left < -1) return null;
   return (
-    <p className="mt-1 font-display text-[13px] leading-none text-jail">
+    <p className="mt-1 font-display text-[15px] leading-none text-sys-red">
       {left > 0 ? `Police in ${left}…` : 'Run!'}
     </p>
   );

@@ -772,11 +772,11 @@ export function RushGame(props: RushGameProps) {
         </div>
         <div className="flex items-center gap-1.5 justify-self-end">
           {!!hud && hud.mult > 1 && !over && (
-            <span className="rounded-[6px] bg-[#ff8fc0] px-1.5 pb-0 pt-1 font-display text-[13px] leading-none text-ink">
+            <span className="rounded-full bg-sys-pink px-2 py-0.5 font-display text-[13px] leading-none text-white">
               ×{hud.mult}
             </span>
           )}
-          <div className="rounded-[8px] bg-[#ffd666] px-2 pb-0.5 pt-1 font-display text-[16px] leading-none text-ink tabular-nums">
+          <div className="rounded-full bg-sys-gold px-2.5 py-1 font-display text-[16px] leading-none text-black tabular-nums">
             {money(hud?.carried ?? 0)}
           </div>
           <button
@@ -837,7 +837,7 @@ export function RushGame(props: RushGameProps) {
             {[...link.defenders.values()].map((d) => (
               <span
                 key={d.name}
-                className="flex items-center gap-1.5 rounded-[8px] bg-[#ffd23f] py-0.5 pl-0.5 pr-2 text-[12px] font-bold uppercase text-ink"
+                className="flex items-center gap-1.5 rounded-full bg-sys-gold py-0.5 pl-0.5 pr-2.5 text-[12px] font-semibold text-black"
               >
                 <img src={chogImage(d.chog, 96)} alt="" className="h-6 w-6 rounded-[5px]" />
                 {d.who ?? 'A defender'} is guarding
@@ -1113,7 +1113,7 @@ function Dial(props: {
             />
           ))}
         </span>
-        <span className="rounded-[8px] bg-[#ffd666] px-3 pb-0.5 pt-1.5 font-display text-[13px] leading-none text-ink">
+        <span className="rounded-full bg-sys-gold px-3 py-1 font-display text-[13px] leading-none text-black">
           Press E / tap in the green
         </span>
       </button>
@@ -1123,7 +1123,7 @@ function Dial(props: {
 
 function Goal({ hud, rescue, safeValue }: { hud: Hud; rescue?: RushChog; safeValue: number }) {
   const box =
-    'flex items-center gap-2 rounded-[10px] px-3 pb-1 pt-1.5 font-display text-[13px] leading-none sm:text-[14px]';
+    'flex items-center gap-2 rounded-full px-3.5 py-1.5 font-display text-[14px] leading-none shadow-[0_8px_24px_rgba(0,0,0,0.35)] sm:text-[15px]';
   if (hud.flip > 0)
     return (
       <div className={cn(box, 'bg-[#3a86ff] text-white')}>Guards are scared! Knock them out: {hud.flip}s</div>
@@ -1134,18 +1134,18 @@ function Goal({ hud, rescue, safeValue }: { hud: Hud; rescue?: RushChog; safeVal
     );
   if (hud.seconds <= RUSH.hurry)
     return (
-      <div className={cn(box, 'animate-pulse bg-[#ffb347] text-ink')}>
+      <div className={cn(box, 'animate-pulse bg-sys-orange text-black')}>
         Doors lock in {hud.seconds}s: get out!
       </div>
     );
   if (!hud.safeOpen)
     return (
-      <div className={cn(box, 'bg-[#ffd666] text-ink')}>
+      <div className={cn(box, 'bg-sys-gold text-black')}>
         <Vault size={18} weight="fill" />
         {rescue ? 'Open the cell, then get out' : `Grab cash · crack the safe: ${money(safeValue)}`}
       </div>
     );
-  return <div className={cn(box, 'bg-[#7dffa8] text-ink')}>Safe cracked! Out the green exit</div>;
+  return <div className={cn(box, 'bg-sys-green text-black')}>Safe cracked! Out the green exit</div>;
 }
 
 /** Practice: the steps, ticked off as you do them. */
@@ -1184,7 +1184,7 @@ function Coach({ hud }: { hud: Hud }) {
               className={cn(
                 'mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border-2 text-[11px] font-bold',
                 x.done
-                  ? 'border-[#3ddc84] bg-[#3ddc84] text-ink'
+                  ? 'border-sys-green bg-sys-green text-black'
                   : i === now
                     ? 'border-[#ffd666] text-[#ffd666]'
                     : 'border-white/30 text-white/40',
@@ -1223,7 +1223,7 @@ function StartCard({
 }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
-      <div className="flex max-w-[460px] items-center gap-3 rounded-[14px] bg-paper-raised px-3 py-2.5 text-ink">
+      <div className="flex max-w-[460px] items-center gap-3 glass-strong rounded-[22px] px-3.5 py-3 text-white">
         <img src={chogImage(player.id, 256)} alt="" className="h-12 w-12 rounded-[10px] object-cover" />
         <div className="text-[13px] leading-snug">
           <strong className="block font-display text-[15px] leading-none">Move to start</strong>
@@ -1245,7 +1245,7 @@ function ViewerEnd(props: {
   const { escaped, viewer } = props;
   return (
     <div className="absolute inset-0 z-20 grid place-items-center bg-[#0b0918]/70 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-[360px] rounded-[18px] bg-paper-raised p-5 text-center text-ink">
+      <div className="w-full max-w-[360px] glass-strong animate-[glass-in_420ms_cubic-bezier(.2,.9,.3,1)] rounded-[30px] p-6 text-center text-white">
         <div
           className={cn(
             'mx-auto inline-block -rotate-3 rounded-[8px] border-[3px] px-4 pb-1 pt-2 font-display text-[30px] leading-none',
@@ -1261,7 +1261,7 @@ function ViewerEnd(props: {
         </p>
         <button
           onClick={props.onLeave}
-          className="mt-5 inline-flex h-12 w-full items-center justify-center rounded-[10px] bg-pink font-display text-[16px] leading-none text-ink"
+          className="btn press btn-primary mt-5 w-full"
         >
           <span className="pt-1">Back to the city</span>
         </button>
@@ -1309,7 +1309,7 @@ function EndCard(props: {
   ];
   return (
     <div className="absolute inset-0 z-20 grid place-items-center bg-[#0b0918]/70 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-[360px] rounded-[18px] bg-paper-raised p-5 text-center text-ink">
+      <div className="w-full max-w-[360px] glass-strong animate-[glass-in_420ms_cubic-bezier(.2,.9,.3,1)] rounded-[30px] p-6 text-center text-white">
         <div
           className={cn(
             'mx-auto inline-block -rotate-3 rounded-[8px] border-[3px] px-4 pb-1 pt-2 font-display text-[33px] leading-none',
@@ -1326,24 +1326,24 @@ function EndCard(props: {
                 weight="fill"
                 className={cn(
                   'drop-',
-                  x.on ? 'animate-[star-pop_420ms_ease-out_both] text-[#ffc93c]' : 'text-ink/15',
+                  x.on ? 'animate-[star-pop_420ms_ease-out_both] text-[#ffc93c]' : 'text-white/15',
                 )}
                 style={{ animationDelay: `${200 + i * 180}ms` }}
               />
-              <span className={cn('text-[11px] font-semibold leading-tight', !x.on && 'text-ink-soft')}>
+              <span className={cn('text-[11px] font-semibold leading-tight', !x.on && 'text-label-2')}>
                 {x.label}
               </span>
             </span>
           ))}
         </div>
         {real && !real.result ? (
-          <p className="mt-5 animate-pulse text-[15px] text-ink-soft">Counting the cash…</p>
+          <p className="mt-5 animate-pulse text-[15px] text-label-2">Counting the cash…</p>
         ) : real?.result?.error ? (
           <p className="mt-5 text-[15px] text-jail">{real.result.error}</p>
         ) : escaped && !rescue ? (
           <>
             <div className="mt-4 font-display text-[41px] leading-none tabular-nums">{money(shown)}</div>
-            <p className="mt-1 text-[14px] text-ink-soft">
+            <p className="mt-1 text-[14px] text-label-2">
               {real?.result?.getawayPass
                 ? `in your bag. It's only ${real.myGang}'s once you carry it to your door. Police are on the way.`
                 : real
@@ -1357,13 +1357,13 @@ function EndCard(props: {
                 <span>Cash grabbed</span>
                 <span className="font-mono tabular-nums">{money(hud.carried - hud.safeTaken)}</span>
               </li>
-              <li className={cn('flex justify-between', !hud.safeTaken && 'text-ink-soft')}>
+              <li className={cn('flex justify-between', !hud.safeTaken && 'text-label-2')}>
                 <span>Safe</span>
                 <span className="font-mono tabular-nums">
                   {hud.safeTaken ? money(hud.safeTaken) : 'not opened'}
                 </span>
               </li>
-              <li className={cn('flex justify-between', !hud.swept && 'text-ink-soft line-through')}>
+              <li className={cn('flex justify-between', !hud.swept && 'text-label-2 line-through')}>
                 <span>Cleaned out</span>
                 <span className="font-mono">+25%</span>
               </li>
@@ -1390,7 +1390,7 @@ function EndCard(props: {
             ) : (
               <p className="mt-4 text-[15px]">The doors locked before you got out.</p>
             )}
-            <p className="mt-3 text-[14px] leading-snug text-ink-soft">
+            <p className="mt-3 text-[14px] leading-snug text-label-2">
               {real
                 ? `Your Chog is in jail for 30 minutes.${real.result?.moved ? ` ${real.myGang} paid ${props.owner} ${money(real.result.moved)}.` : ''}`
                 : `In a real raid your gang would pay what you carried plus a fine, and your Chog goes to jail.`}
@@ -1403,8 +1403,8 @@ function EndCard(props: {
               onClick={() => real.onLeave(real.result?.getawayPass)}
               disabled={!real.result}
               className={cn(
-                'mt-5 inline-flex h-12 w-full items-center justify-center rounded-[10px] font-display text-[16px] leading-none text-ink disabled:opacity-50',
-                real.result?.getawayPass ? 'animate-pulse bg-[#ffd666]' : 'bg-pink',
+                'btn press mt-5 w-full',
+                real.result?.getawayPass ? 'btn-gold animate-pulse' : 'btn-primary',
               )}
             >
               <span className="pt-1">{real.result?.getawayPass ? 'Run it home!' : 'Back to the city'}</span>
@@ -1424,11 +1424,11 @@ function EndCard(props: {
           <>
             <button
               onClick={props.onGetaway}
-              className="mt-5 inline-flex h-12 w-full animate-pulse items-center justify-center rounded-[10px] bg-[#ffd666] font-display text-[16px] leading-none text-ink"
+              className="btn press btn-gold mt-5 w-full animate-pulse"
             >
               <span className="pt-1">Now run it home!</span>
             </button>
-            <p className="mt-2 text-[13px] text-ink-soft">
+            <p className="mt-2 text-[13px] text-label-2">
               The last part: carry the bag through the city with the police after you.
             </p>
             <button
@@ -1442,7 +1442,7 @@ function EndCard(props: {
           <>
             <button
               onClick={props.onAgain}
-              className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-pink font-display text-[16px] leading-none text-ink"
+              className="btn press btn-primary mt-5 w-full"
             >
               <ArrowClockwise size={20} weight="bold" />
               <span className="pt-1">{replay ? 'Watch again' : 'Again'}</span>
@@ -1455,7 +1455,7 @@ function EndCard(props: {
                 Back to the city
               </button>
             ) : (
-              <p className="mt-2 hidden text-[12px] text-ink-soft sm:block">or press R</p>
+              <p className="mt-2 hidden text-[12px] text-label-2 sm:block">or press R</p>
             )}
           </>
         )}

@@ -1,4 +1,4 @@
-// Chog City worker: keeps owners in sync with the chain and opens each game day on time.
+// Chog World worker: keeps owners in sync with the chain and opens each game day on time.
 import { ensureDay, expireGetaways, monad, seedStates } from '@chog-city/server';
 import { connect } from '@chog-city/server/db';
 import { dayOf } from '@chog-city/game';

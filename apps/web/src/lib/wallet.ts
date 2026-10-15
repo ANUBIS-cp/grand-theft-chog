@@ -60,7 +60,7 @@ export async function logIn(wallet: WalletOption): Promise<string> {
   const address = accounts[0];
   if (!address) throw new LoginError('The wallet has no account unlocked.');
   const nonceRes = await fetch('/api/auth/nonce', { cache: 'no-store' });
-  if (!nonceRes.ok) throw new LoginError('Could not reach Chog City. Try again in a moment.');
+  if (!nonceRes.ok) throw new LoginError('Could not reach Chog World. Try again in a moment.');
   const { nonce } = (await nonceRes.json()) as { nonce: string };
   const message = createSiweMessage({
     address: address as `0x${string}`,
@@ -69,7 +69,7 @@ export async function logIn(wallet: WalletOption): Promise<string> {
     nonce,
     uri: window.location.origin,
     version: '1',
-    statement: 'Log in to Chog City. This costs nothing and does not move any tokens.',
+    statement: 'Log in to Chog World. This costs nothing and does not move any tokens.',
   });
   let signature: string;
   try {

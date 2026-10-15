@@ -86,7 +86,7 @@ export function BurnButton(props: {
         disabled={busy}
         onClick={go}
         className={cn(
-          'flex w-full items-center justify-center gap-2 rounded-[10px] bg-[#ff7a1a] px-3 pb-1.5 pt-2 font-display text-[13px] leading-none text-ink disabled:opacity-60',
+          'btn press w-full bg-[linear-gradient(180deg,#ff9f40,#ff6a00)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_8px_24px_rgba(255,106,0,0.35)] disabled:opacity-60',
           props.className,
         )}
       >
@@ -116,7 +116,7 @@ export function PosterPicker(props: {
   const [line, setLine] = useState(1);
   const up = props.burns.posters.find((p) => p.chog === props.chogId);
   return (
-    <div className="mt-3 rounded-[10px] border-2 border-white/10 p-2.5">
+    <div className="mt-3 rounded-[20px] bg-white/[0.05] p-3.5 ring-1 ring-inset ring-white/[0.06]">
       <div className="section-label">{up ? `Wanted: “${up.line}”` : 'Wanted poster for 24 hours'}</div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {props.burns.lines.map((l, i) => (
@@ -124,8 +124,8 @@ export function PosterPicker(props: {
             key={l}
             onClick={() => setLine(i)}
             className={cn(
-              'rounded-full border-2 px-2 py-0.5 text-[12px] font-semibold',
-              i === line ? 'border-ink bg-[#f3e3b5] text-[#c1121f]' : 'border-white/20 text-white/70',
+              'press rounded-full border px-2.5 py-1 text-[13px] font-medium',
+              i === line ? 'border-transparent bg-white text-[#15131f]' : 'border-white/15 text-label-2 hover:text-white',
             )}
           >
             {l}

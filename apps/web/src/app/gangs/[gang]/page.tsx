@@ -19,7 +19,7 @@ const LEVEL = ['Light', 'Guarded', 'Heavy', 'Fortress'];
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const g = (await params).gang as GangId;
-  return { title: GANG_IDS.includes(g) ? `${GANGS[g].name} · Chog City` : 'Gang not found · Chog City' };
+  return { title: GANG_IDS.includes(g) ? `${GANGS[g].name} · Chog World` : 'Gang not found · Chog World' };
 }
 
 export default async function GangPage({ params }: Props) {
@@ -38,7 +38,7 @@ export default async function GangPage({ params }: Props) {
     <main className="min-h-dvh bg-[#0b0918] text-white">
       <header className="mx-auto flex max-w-[960px] items-center justify-between px-4 py-3">
         <Link href="/" className="font-display text-[22px] uppercase leading-none">
-          Chog City
+          Chog World
         </Link>
         <Link href="/" className="text-[13px] font-semibold hover:underline">
           Gang vaults

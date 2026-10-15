@@ -633,10 +633,15 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
           className="absolute inset-0 z-30 grid animate-[fade-in_200ms] place-items-center bg-black/55 p-3 backdrop-blur-[6px] sm:p-6"
           onPointerDown={(e) => e.target === e.currentTarget && props.onCloseMap()}
         >
-          <div className="glass-strong flex max-h-full w-full max-w-[860px] animate-[glass-in_380ms_cubic-bezier(.2,.9,.3,1)] flex-col overflow-hidden rounded-[28px] text-white">
+          <div
+            className="glass-strong flex max-h-full animate-[glass-in_380ms_cubic-bezier(.2,.9,.3,1)] flex-col overflow-hidden rounded-[28px] text-white"
+            style={{
+              width: `min(860px, 100%, calc((100dvh - 150px) * ${(CITY.w / CITY.h).toFixed(4)} + 24px))`,
+            }}
+          >
             <div className="flex items-center justify-between gap-3 px-5 pb-3 pt-4">
               <div>
-                <h2 className="font-display text-[24px] leading-none">Chog City</h2>
+                <h2 className="font-display text-[24px] leading-none">Chog World</h2>
                 <p className="mt-1 text-[13px] text-label-2">Tap anywhere to walk there.</p>
               </div>
               <div className="hidden items-center gap-3 text-[12px] font-medium text-label-2 sm:flex">
@@ -666,7 +671,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
                 ref={bigRef}
                 onPointerDown={onMap}
                 aria-label="Map of the city. Tap a spot to walk there."
-                className="w-full cursor-pointer rounded-[20px]"
+                className="block w-full cursor-pointer rounded-[20px]"
                 style={{ aspectRatio: `${CITY.w} / ${CITY.h}` }}
               />
             </div>

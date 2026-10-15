@@ -1,5 +1,6 @@
-# Chog City. Add the DuckDNS name next to the sslip.io one when it exists: "a.sslip.io, b.duckdns.org {".
-chogcity.35-212-31-75.sslip.io {
+# Chog World. install-config.sh puts the first name from PUBLIC_HOST here (/etc/chog-city/app.env)
+# and adds a redirect from every other name to it, so an old address keeps working after a move.
+__MAIN__ {
 	encode zstd gzip
 
 	header {

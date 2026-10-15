@@ -39,4 +39,5 @@ if [ "${1:-}" = "--config" ]; then "${SSH[@]}" "sudo bash $REL/deploy/install-co
   curl -fsS -o /dev/null http://127.0.0.1:3001/health && echo 'live server up'
   cd /opt/chog-city/releases && ls -1t | tail -n +6 | xargs -r sudo rm -rf
 "
-echo "live: https://chogcity.35-212-31-75.sslip.io/"
+MAIN=$("${SSH[@]}" "sudo grep -m1 ^PUBLIC_HOST= /etc/chog-city/app.env | cut -d= -f2 | cut -d, -f1")
+echo "live: https://$MAIN/"
