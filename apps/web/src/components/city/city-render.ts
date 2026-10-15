@@ -523,7 +523,8 @@ export class CityRenderer {
     const size = Math.round(t * 0.46);
     g.save();
     g.translate(this.sx(p.x), this.sy(p.y));
-    this.paintRibbon(g, W, p.h * t - this.artHeight(p, img) - size * 0.55, look);
+    // Just above the top of the drawing, so it never covers a rooftop landmark (the Royals' crown).
+    this.paintRibbon(g, W, p.h * t - this.artHeight(p, img) - size * 1.05, look);
     g.restore();
   }
 
