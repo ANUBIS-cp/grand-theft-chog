@@ -6,35 +6,46 @@ import { readStick, stickWay, type StickState } from './stick';
 function slide(l: StickState, from: [number, number], to: [number, number]) {
   const n = Math.max(1, Math.ceil(Math.hypot(to[0] - from[0], to[1] - from[1]) / 2));
   let d = l.d;
-  for (let i = 1; i <= n; i++) d = readStick(l, from[0] + ((to[0] - from[0]) * i) / n, from[1] + ((to[1] - from[1]) * i) / n);
+  for (let i = 1; i <= n; i++)
+    d = readStick(l, from[0] + ((to[0] - from[0]) * i) / n, from[1] + ((to[1] - from[1]) * i) / n);
   return d;
 }
+const at = (): StickState => ({ cx: 0, cy: 0, d: -1 });
 
 describe('the phone stick', () => {
-  it('turns down with a short pull after holding right far out (the slant that used to read "right")', () => {
-    const l: StickState = { px: 100, py: 100, d: -1 };
-    expect(slide(l, [100, 100], [160, 100])).toBe(1);
-    expect(slide(l, [160, 100], [160, 116])).toBe(2);
+  it('reads where the thumb is in the ring: right, then below the middle is down', () => {
+    const l = at();
+    expect(slide(l, [0, 0], [40, 0])).toBe(1);
+    expect(slide(l, [40, 0], [0, 40])).toBe(2);
   });
-  it("doesn't turn from the drift of a long curved slide", () => {
-    const l: StickState = { px: 0, py: 0, d: -1 };
-    // 120 px right while the thumb drifts 18 px down, like a thumb's arc.
+  it('rolling round the ring from down to left reads left, never up', () => {
+    const l = at();
+    expect(slide(l, [0, 0], [0, 40])).toBe(2);
     let d = l.d;
-    for (let i = 1; i <= 60; i++) d = readStick(l, i * 2, Math.sin((i / 60) * (Math.PI / 2)) * 18);
-    expect(d).toBe(1);
+    const seen = new Set<number>();
+    for (let a = 90; a <= 180; a += 3) {
+      d = readStick(l, Math.cos((a * Math.PI) / 180) * 40, Math.sin((a * Math.PI) / 180) * 40);
+      seen.add(d);
+    }
+    expect(d).toBe(3);
+    expect([...seen].sort()).toEqual([2, 3]);
   });
-  it('reverses with a short move back, and ignores a tiny wobble', () => {
-    const l: StickState = { px: 0, py: 0, d: -1 };
-    expect(slide(l, [0, 0], [6, 0])).toBe(-1);
-    expect(slide(l, [6, 0], [40, 0])).toBe(1);
-    expect(slide(l, [40, 0], [40, 5])).toBe(1);
-    expect(slide(l, [40, 5], [14, 5])).toBe(3);
+  it("doesn't flicker on the diagonal", () => {
+    const l = at();
+    expect(slide(l, [0, 0], [40, 0])).toBe(1);
+    expect(slide(l, [40, 0], [38, 40])).toBe(1);
+    expect(slide(l, [38, 40], [30, 45])).toBe(2);
   });
-  it('chains turns: up, then left, then down', () => {
-    const l: StickState = { px: 0, py: 0, d: -1 };
-    expect(slide(l, [0, 0], [0, -30])).toBe(0);
-    expect(slide(l, [0, -30], [-16, -30])).toBe(3);
-    expect(slide(l, [-16, -30], [-16, -14])).toBe(2);
+  it('a small wobble does nothing; back to the middle stops', () => {
+    const l = at();
+    expect(slide(l, [0, 0], [7, 4])).toBe(-1);
+    expect(slide(l, [7, 4], [0, -30])).toBe(0);
+    expect(slide(l, [0, -30], [2, -3])).toBe(-1);
+  });
+  it('the ring follows a thumb that goes far past it, so turning back is quick', () => {
+    const l = at();
+    expect(slide(l, [0, 0], [150, 0])).toBe(1);
+    expect(slide(l, [150, 0], [70, 0])).toBe(3);
   });
 });
 

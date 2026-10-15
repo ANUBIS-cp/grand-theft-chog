@@ -227,7 +227,12 @@ export function CityApp() {
   useEffect(() => {
     if (location.hostname !== 'localhost') return;
     (window as unknown as { __chogDemo: object }).__chogDemo = {
-      run: () => setPracticeRun({ since: Date.now(), until: Date.now() + 40_000, to: 'the fountain' }),
+      run: () => {
+        // The same as leaving the practice vault with cash: the run bar, the police and the arrow home.
+        const home = placeOf('mcga')!.door;
+        setPracticeRun({ since: Date.now(), until: Date.now() + 40_000, to: 'MCGA Gang’s door' });
+        requestAnimationFrame(() => requestAnimationFrame(() => view.current?.practiceChase(home)));
+      },
       stop: () => setPracticeRun(null),
       banner: () =>
         setBanner({ id: `d${Date.now()}`, title: 'Got away!', line: 'You ran $420 home to your gang.', tone: 'win' }),

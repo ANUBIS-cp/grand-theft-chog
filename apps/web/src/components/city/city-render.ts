@@ -1393,10 +1393,20 @@ export class CityRenderer {
       g.restore();
     }
     const style = p.cop ? 'zip' : p.gang ? WALK_OF[p.gang] : 'swagger';
+    // In front of your Chog and over it: see-through, so it never hides you.
+    const m = this.mine;
+    const over =
+      !p.me &&
+      !!m &&
+      p.y > m.y &&
+      x + piece.w * 0.5 > m.l &&
+      x - piece.w * 0.5 < m.r &&
+      y + piece.h - piece.fy > m.t &&
+      y - piece.top < m.b;
     drawWalker(g, piece, x, y, w, style, now, {
       seed: keySeed(p.key),
       emoted: p.emote ? now - p.emote.at : undefined,
-      alpha: p.npc && !p.cop ? 0.92 : 1,
+      alpha: over ? (p.cop ? 0.55 : 0.3) : p.npc && !p.cop ? 0.92 : 1,
     });
     if (p.cop) {
       // The light on the cap: red and blue, flashing.
@@ -1420,6 +1430,9 @@ export class CityRenderer {
   }
 
   /** Names and speech bubbles go on top of the darkness so they stay readable. */
+  /** Where your own Chog is on screen this frame (CSS px), so nothing is drawn over it. */
+  private mine: { l: number; r: number; t: number; b: number; y: number } | null = null;
+
   private drawTag(p: Person, now: number) {
     const { g, t } = this;
     const piece = this.piece(p);
@@ -1432,7 +1445,13 @@ export class CityRenderer {
     const w = g.measureText(p.name).width + size * 1.9;
     const h = size * 1.7;
     const ty = top - h * 0.8;
-    g.globalAlpha = p.npc ? 0.78 : 1;
+    // Someone else's tag (or what they're saying) over your Chog fades right down.
+    const m = this.mine;
+    const k =
+      !p.me && m && x + w / 2 > m.l && x - w / 2 < m.r && ty + h / 2 > m.t && ty - h / 2 - t * 1.6 < m.b
+        ? 0.18
+        : 1;
+    g.globalAlpha = (p.npc ? 0.78 : 1) * k;
     // A frosted capsule with a dot of the gang's colour; yours is white with dark text.
     g.save();
     g.shadowColor = 'rgba(0,0,0,0.45)';
@@ -1454,7 +1473,7 @@ export class CityRenderer {
     g.fill();
     g.fillStyle = p.me ? '#15131f' : '#ffffff';
     g.fillText(p.name, x + h * 0.2, ty + 0.5);
-    g.globalAlpha = 1;
+    g.globalAlpha = k;
     if (p.bag) {
       // The bag's value, over their head, gold.
       const label = `$${p.bag.toLocaleString('en-US')}`;
@@ -1501,11 +1520,13 @@ export class CityRenderer {
       this.drawEmote(p.emote.kind, x, ty - h / 2 - t * 0.5, now - p.emote.at);
     else if (p.said && now - p.said.at < 6000)
       this.drawSaid(p.said.text, x, ty - h / 2 - 6, now - p.said.at, p.me);
+    g.globalAlpha = 1;
   }
 
   /** A chat message as a speech bubble over the Chog, iMessage-style: up to three lines, then it fades. */
   private drawSaid(text: string, x: number, bottom: number, age: number, mine?: boolean) {
     const { g, t } = this;
+    const base = g.globalAlpha;
     const size = Math.max(12, Math.round(t * 0.24));
     g.font = `500 ${size}px ${this.bodyFont}`;
     const maxW = t * 4.2;
@@ -1531,7 +1552,7 @@ export class CityRenderer {
     const fade = age > 5300 ? Math.max(0, 1 - (age - 5300) / 700) : 1;
     const by = bottom - h - size * 0.5;
     g.save();
-    g.globalAlpha = fade;
+    g.globalAlpha = fade * base;
     g.translate(x, bottom);
     g.scale(pop, pop);
     g.translate(-x, -bottom);
@@ -1569,6 +1590,7 @@ export class CityRenderer {
   /** An emote: the emoji pops up in a bubble over the Chog's head, bounces, then fades. */
   private drawEmote(kind: Emote, x: number, y: number, age: number) {
     const { g, t } = this;
+    const base = g.globalAlpha;
     // A springy pop (overshoots, settles), a gentle float upward, then a fade.
     const k = Math.min(1, age / 420);
     const spring = 1 - Math.exp(-7 * k) * Math.cos(k * 13);
@@ -1578,7 +1600,7 @@ export class CityRenderer {
     const s = t * 0.52 * spring;
     const cy = y - rise + bob;
     g.save();
-    g.globalAlpha = fade;
+    g.globalAlpha = fade * base;
     // Frosted bubble with a soft shadow and a little tail.
     g.shadowColor = 'rgba(0,0,0,0.45)';
     g.shadowBlur = 14;
@@ -1605,7 +1627,7 @@ export class CityRenderer {
     if (age < 500) {
       const q = age / 500;
       g.save();
-      g.globalAlpha = 1 - q;
+      g.globalAlpha = (1 - q) * base;
       g.fillStyle = '#ffd60a';
       for (let i = 0; i < 6; i++) {
         const a2 = (i / 6) * Math.PI * 2;
@@ -1684,6 +1706,21 @@ export class CityRenderer {
       if (inView(pr.x, pr.y, 4)) things.push({ y: pr.y + 0.2, draw: () => this.drawProp(pr, now) });
     for (const p of opts.jailed)
       if (inView(p.x, p.y, 2)) things.push({ y: p.y, draw: () => this.drawPerson(p, now) });
+    // Your Chog is never hidden: anyone in front of it, and any name tag over it, fades to see-through.
+    const me = people.find((p) => p.me);
+    this.mine = null;
+    if (me) {
+      const pc = this.piece(me);
+      const x = this.sx(me.x);
+      const y = this.sy(me.y) + t * 0.12;
+      this.mine = {
+        l: x - pc.w * 0.55,
+        r: x + pc.w * 0.55,
+        t: y - pc.top - (this.walks.get(me.key)?.lift ?? 0) - t * 0.45,
+        b: y + pc.h - pc.fy,
+        y: me.y,
+      };
+    }
     for (const p of people)
       if (inView(p.x, p.y, 2)) things.push({ y: p.y, draw: () => this.drawPerson(p, now) });
     // The jail's fence goes in front of the yard.
@@ -1709,8 +1746,10 @@ export class CityRenderer {
     }
 
     for (const p of opts.jailed) if (inView(p.x, p.y, 2)) this.drawTag(p, now);
-    // Your own name last, so it's never under someone else's.
-    for (const p of people) if (!p.me && inView(p.x, p.y, 2)) this.drawTag(p, now);
+    // Your own name last, so it's never under someone else's. On a getaway the wandering Chogs' names go, so
+    // all you see is you, the police and the way home.
+    for (const p of people)
+      if (!p.me && inView(p.x, p.y, 2) && !(opts.goal && p.npc && !p.bag)) this.drawTag(p, now);
     for (const p of people) if (p.me) this.drawTag(p, now);
     if (opts.door) this.drawDoorHint(opts.door, now);
     if (opts.goal) this.drawGoal(opts.goal, now);

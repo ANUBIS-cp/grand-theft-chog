@@ -5,57 +5,47 @@ import { DIRS, open, type RushMap, type RushState } from '@chog-city/game/rush';
 
 export type Dir = 0 | 1 | 2 | 3;
 
-/** A move this long from rest picks a way. */
-const DEAD = 10;
-/** How far behind your thumb the stick's pivot trails while you hold a way. */
-const LAG = 12;
-const UNIT: Record<Dir, [number, number]> = { 0: [0, -1], 1: [1, 0], 2: [0, 1], 3: [-1, 0] };
+/** The ring's radius: the knob stops at it. */
+export const RING = 56;
+/** Past this the ring is dragged after your thumb, so it never ends up out of reach. */
+const FOLLOW = 64;
+/** The knob has to be this far out to move you, and back inside the smaller one to stop. */
+const DEAD_IN = 13;
+const DEAD_OUT = 8;
+/** Changing between up/down and left/right needs the knob about 5 degrees past the diagonal, so it doesn't flicker. */
+const SWITCH = 1.19;
 
-const dominant = (x: number, y: number): Dir =>
-  Math.abs(x) > Math.abs(y) ? (x > 0 ? 1 : 3) : y > 0 ? 2 : 0;
-
-/** Where the stick is: its pivot and the way it's held. */
+/** The stick: the ring's middle (where your thumb landed) and the way it reads. */
 export interface StickState {
-  px: number;
-  py: number;
+  cx: number;
+  cy: number;
   d: Dir | -1;
 }
 
-/** Feeds one finger position to the stick; returns the way it now reads (and moves the pivot). */
+/**
+ * Reads the stick like any phone game's: the way is wherever your thumb is inside the ring, in four slices,
+ * exactly what the knob shows. The ring stays where you put your thumb down (it only follows if you go well
+ * past its edge). Returns the way and moves the ring if needed.
+ */
 export function readStick(l: StickState, fx: number, fy: number): Dir | -1 {
-  const vx = fx - l.px;
-  const vy = fy - l.py;
-  if (l.d === -1) {
-    if (Math.hypot(vx, vy) < DEAD) return -1;
-  } else {
-    const [ux, uy] = UNIT[l.d];
-    const along = vx * ux + vy * uy;
-    // The sideways part of the move, as a vector.
-    const sx = vx - along * ux;
-    const sy = vy - along * uy;
-    const side = Math.hypot(sx, sy);
-    // Turn when the thumb has clearly moved another way since the pivot: sideways more than along, or back.
-    const turn = (side >= DEAD && side > along) || (-along >= DEAD && -along > side);
-    if (!turn) {
-      if (along > LAG) {
-        // Holding the same way: the pivot trails behind your thumb and forgives half the sideways drift, so a
-        // long slide that curves a little doesn't add up to a turn.
-        const step = along - LAG;
-        const k = Math.min(1, (step * 0.5) / Math.max(1, side));
-        l.px += ux * step + sx * k;
-        l.py += uy * step + sy * k;
-      }
-      return l.d;
-    }
+  let vx = fx - l.cx;
+  let vy = fy - l.cy;
+  const r = Math.hypot(vx, vy);
+  if (r > FOLLOW) {
+    l.cx += (vx / r) * (r - FOLLOW);
+    l.cy += (vy / r) * (r - FOLLOW);
+    vx = fx - l.cx;
+    vy = fy - l.cy;
   }
-  const d = dominant(vx, vy);
-  // A new way: the pivot goes just behind your thumb on it, so the next turn is a short move from here.
-  l.px = fx - UNIT[d][0] * LAG;
-  l.py = fy - UNIT[d][1] * LAG;
-  l.d = d;
-  return d;
+  const len = Math.hypot(vx, vy);
+  if (len < (l.d === -1 ? DEAD_IN : DEAD_OUT)) return (l.d = -1);
+  const ax = Math.abs(vx);
+  const ay = Math.abs(vy);
+  const wasX = l.d === 1 || l.d === 3;
+  const wasY = l.d === 0 || l.d === 2;
+  const useX = wasX ? ay <= ax * SWITCH : wasY ? ax > ay * SWITCH : ax > ay;
+  return (l.d = useX ? (vx > 0 ? 1 : 3) : vy > 0 ? 2 : 0);
 }
-
 
 /**
  * The phone's stick asks for one way at a time. Pushing a way you can't go yet would leave your Chog running
