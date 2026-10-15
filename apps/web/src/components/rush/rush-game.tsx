@@ -28,7 +28,7 @@ import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
 import { chogImage } from '@/lib/images';
 import { Fx } from '../heist/fx';
-import { prepareSound, Sound } from '../heist/sound';
+import { prepareSound, Sound, soundOn, soundTap, watchSound } from '../heist/sound';
 import type { RaidLink, RaidResult } from './raid-link';
 import { powerHint } from './power-fx';
 import { stickPick } from './stick';
@@ -717,6 +717,15 @@ export function RushGame(props: RushGameProps) {
     } else if (g.started) g.power = what;
   };
 
+  // Whether the phone has let sound start (for the "Tap for sound" button).
+  const [audioOn, setAudioOn] = useState(true);
+  useEffect(() => {
+    setAudioOn(soundOn());
+    const stop = watchSound(setAudioOn);
+    return () => {
+      stop();
+    };
+  }, []);
   const toggleMute = () => {
     const m = !muted;
     setMuted(m);
@@ -813,13 +822,23 @@ export function RushGame(props: RushGameProps) {
           <div className="rounded-full bg-sys-gold px-2.5 py-1 font-display text-[16px] leading-none text-black tabular-nums">
             {money(hud?.carried ?? 0)}
           </div>
-          <button
-            onClick={toggleMute}
-            className="grid h-9 w-9 place-items-center rounded-full text-white/60 hover:text-white"
-            aria-label={muted ? 'Sound on' : 'Sound off'}
-          >
-            {muted ? <SpeakerSlash size={20} weight="bold" /> : <SpeakerHigh size={20} weight="bold" />}
-          </button>
+          {!muted && !audioOn ? (
+            // The phone hasn't let sound start yet: one tap here switches it on.
+            <button
+              onClick={() => soundTap()}
+              className="press flex h-9 items-center gap-1.5 rounded-full bg-white/[0.12] px-3 text-[13px] font-semibold text-white"
+            >
+              <SpeakerSlash size={16} weight="bold" /> Tap for sound
+            </button>
+          ) : (
+            <button
+              onClick={toggleMute}
+              className="grid h-9 w-9 place-items-center rounded-full text-white/60 hover:text-white"
+              aria-label={muted ? 'Sound on' : 'Sound off'}
+            >
+              {muted ? <SpeakerSlash size={20} weight="bold" /> : <SpeakerHigh size={20} weight="bold" />}
+            </button>
+          )}
         </div>
       </div>
 

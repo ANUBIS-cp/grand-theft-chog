@@ -1,74 +1,130 @@
 // Small synthesised sounds (no files to load).
 //
-// One audio engine for the whole game, made once and shared by every screen. (Each vault and lock used to make
-// its own and never close it; phones only allow a few, so after a few robberies the new ones stayed silent.)
-// Phones only switch audio on from a real tap: on iPhone the tap counts when the finger LIFTS (touchend), not
-// when it lands, so the engine is woken from any touchend, click or key anywhere on the page, with a silent
-// blip that fully unlocks it. Sounds asked for while it's still asleep are skipped rather than queued, so
-// nothing plays late; and it's woken again when you come back to the tab (iPhone pauses it in the background).
+// One audio engine for the whole game, shared by every screen. (Each vault and lock used to make its own and
+// never close it; phones only allow a few, so after a few robberies the new ones stayed silent.)
+//
+// Phones only let a page start sound from inside a tap. Chrome on iPhone is Apple's web engine underneath, and
+// it is strict: the engine has to be MADE inside a tap too; one made on page load can stay silent for good.
+// So it's made by the first tap, key or click anywhere (the finger lifting, which iPhone counts as the tap),
+// and woken again by any later tap if the phone put it to sleep (another app, the lock screen, a call), with a
+// silent blip played inside the tap, which is what finally switches it on. Every sound is made on that one
+// warm engine, so it starts at once (a fresh engine per screen started cold, which was the delay).
+// `soundOn()` says whether the engine is on, for a "tap for sound" button.
 
 let shared: AudioContext | null = null;
 let noiseBuf: AudioBuffer | null = null;
+const watchers = new Set<(on: boolean) => void>();
 
-function context(): AudioContext | null {
-  if (shared) return shared;
-  if (typeof window === 'undefined') return null;
-  const Ctx =
-    window.AudioContext ??
-    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!Ctx) return null;
-  shared = new Ctx({ latencyHint: 'interactive' });
-  const wake = () => {
-    const ac = shared!;
-    if (ac.state !== 'running') void ac.resume().catch(() => {});
-    // A one-sample silent sound, played inside the tap: what finally unlocks audio on iPhone.
+const tell = () => {
+  const on = soundOn();
+  for (const w of watchers) w(on);
+};
+
+/** Makes the engine (if needed) and wakes it. Only works from inside a tap, key or click. */
+function wake() {
+  if (typeof window === 'undefined') return;
+  if (!shared) {
+    const Ctx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    try {
+      shared = new Ctx();
+    } catch {
+      return;
+    }
+    shared.onstatechange = tell;
+  }
+  const ac = shared;
+  if (ac.state !== 'running') void ac.resume().then(tell, () => {});
+  try {
     const b = ac.createBuffer(1, 1, ac.sampleRate);
     const src = ac.createBufferSource();
     src.buffer = b;
     src.connect(ac.destination);
     src.start(0);
-  };
-  for (const ev of ['touchend', 'click', 'keydown'])
-    window.addEventListener(ev, wake, { capture: true, passive: true });
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && shared?.state !== 'running') void shared?.resume().catch(() => {});
-  });
-  return shared;
+  } catch {
+    /* not ready */
+  }
+  tell();
 }
 
-/** Make the engine early (on page load), so the first tap anywhere already unlocks it. */
+let listening = false;
+/** Listen for the first tap anywhere (and every later one), so sound comes on as soon as you touch the game. */
 export function prepareSound() {
-  context();
+  if (listening || typeof window === 'undefined') return;
+  listening = true;
+  for (const ev of ['touchend', 'click', 'keydown'])
+    window.addEventListener(
+      ev,
+      () => {
+        if (!shared || shared.state !== 'running') wake();
+      },
+      { capture: true, passive: true },
+    );
+}
+
+/** Whether sound is actually on right now. */
+export function soundOn() {
+  return !!shared && shared.state === 'running';
+}
+
+/** Calls back whenever sound goes on or off. Returns a function to stop. */
+export function watchSound(cb: (on: boolean) => void) {
+  watchers.add(cb);
+  return () => watchers.delete(cb);
+}
+
+/** For a button: switch sound on from this tap. */
+export function soundTap() {
+  wake();
 }
 
 export class Sound {
-  private ac: AudioContext | null = null;
-  private master: GainNode | null = null;
+  private masterOf: AudioContext | null = null;
+  private masterNode: GainNode | null = null;
   private siren: { osc: OscillatorNode; lfo: OscillatorNode; gain: GainNode } | null = null;
   muted = false;
 
   constructor() {
-    this.ac = context();
-    if (this.ac) {
-      this.master = this.ac.createGain();
-      this.master.gain.value = this.muted ? 0 : 0.5;
-      this.master.connect(this.ac.destination);
+    prepareSound();
+  }
+
+  /** The shared engine, once a tap has made it. */
+  private get ac() {
+    return shared;
+  }
+
+  /** This screen's volume knob on the shared engine (made the first time it's needed). */
+  private get master() {
+    if (!shared) return null;
+    if (this.masterOf !== shared) {
+      this.masterOf = shared;
+      this.masterNode = shared.createGain();
+      this.masterNode.gain.value = this.muted ? 0 : 0.5;
+      this.masterNode.connect(shared.destination);
     }
+    return this.masterNode;
   }
 
-  /** Called from taps and keys: wakes the shared engine if it's asleep. */
+  /** Called from taps and keys: makes or wakes the shared engine. */
   unlock() {
-    if (this.ac && this.ac.state !== 'running') void this.ac.resume().catch(() => {});
+    if (!shared || shared.state !== 'running') wake();
   }
 
-  /** Only make sounds while audio is actually on, so none come out late. */
+  /**
+   * Whether to make a sound. Not gated on the engine saying it's "running": iPhone can report it asleep while
+   * it plays, and a gate on that silenced everything. If it's really asleep, nudge it awake as well.
+   */
   private get live() {
-    return !!this.ac && !!this.master && this.ac.state === 'running';
+    if (!shared || shared.state === 'closed' || !this.master) return false;
+    if (shared.state !== 'running') void shared.resume().catch(() => {});
+    return true;
   }
 
   setMuted(m: boolean) {
     this.muted = m;
-    if (this.master) this.master.gain.value = m ? 0 : 0.5;
+    if (this.masterNode) this.masterNode.gain.value = m ? 0 : 0.5;
   }
 
   private tone(freq: number, at: number, dur: number, type: OscillatorType, vol: number, slideTo?: number) {
