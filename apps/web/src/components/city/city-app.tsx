@@ -134,6 +134,7 @@ const POWER_ICON: Record<PowerId, Parameters<typeof SkillIcon>[0]['skill']> = {
 
 const START_ERRORS: Record<string, string> = {
   jailed: 'This Chog is in jail.',
+  'bad-gang': 'That Chog already has its gang.',
   'done-today': 'This Chog already did that today. Try again tomorrow.',
   'own-gang': 'That’s your own gang’s vault.',
   'no-gang': 'Pick a gang first.',
@@ -189,7 +190,25 @@ export function CityApp() {
     revenge: Record<string, GangId[]>;
   } | null>(null);
   const [city, setCity] = useState<CityData | null>(null);
-  const [picked, setPicked] = useState<number | null>(null);
+  // The Chog you play as, remembered in this browser so a reload keeps it.
+  const [picked, setPickedState] = useState<number | null>(null);
+  const setPicked = useCallback((id: number | null) => {
+    setPickedState(id);
+    try {
+      if (id === null) localStorage.removeItem('chog-world:picked');
+      else localStorage.setItem('chog-world:picked', String(id));
+    } catch {
+      /* private window: just for this visit */
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      const v = Number(localStorage.getItem('chog-world:picked'));
+      if (Number.isInteger(v) && v > 0) setPickedState(v);
+    } catch {
+      /* nothing saved */
+    }
+  }, []);
   const [run, setRun] = useState<Run | null>(null);
   const [chases, setChases] = useState<Chase[]>([]);
   const siren = useRef<Sound | null>(null);
@@ -449,6 +468,8 @@ export function CityApp() {
       await post('/api/war/gang', { chogId: chog.id, gang });
       await Promise.all([loadMe(), loadBoard()]);
     } catch (e) {
+      // Already picked (another tab, or a slow first try): just show what it is now.
+      await loadMe();
       setNotice((e as Error).message);
     } finally {
       setBusy(null);
@@ -784,135 +805,140 @@ export function CityApp() {
     );
   }
 
-  if (run && chog && run.stage === 'lock') {
-    const r = run;
-    return (
-      <LockGame
-        key={r.id}
-        gang={r.target}
-        seed={rushSeed(r.id)}
-        onDone={(inputs) => {
-          post<{ loud: boolean; pass: string }>('/api/heist/lock', {
-            runId: r.id,
-            inputs: encodeLock(inputs),
-          })
-            .then((d) =>
-              setRun({
-                ...r,
-                stage: 'vault',
-                loud: d.loud,
-                link: new RaidLink({ t: 'raid', pass: d.pass }),
-              }),
-            )
-            .catch((e: unknown) => {
-              setNotice(e instanceof Error ? e.message : 'Could not open the door.');
-              backTo(r.target);
-            });
-        }}
-      />
-    );
-  }
-
-  if (run && chog) {
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0918]">
-        <RushGame
-          key={run.id}
-          mapId={run.vault}
-          rules={rushRules(run.tier, !!run.prisoner, run.loud)}
-          seed={rushSeed(run.id)}
-          link={run.link}
-          player={{
-            id: chog.id,
-            name: chog.name,
-            gang: chog.gang ? GANGS[chog.gang].name : null,
-            powers: run.powers,
-          }}
-          guards={run.guards}
-          owner={
-            run.prisoner
-              ? { name: 'The jail', color: '#ff5a4f', ink: '#111111' }
-              : {
-                  name: GANGS[run.target].name,
-                  color: GANG_COLOR[run.target].bg,
-                  ink: GANG_COLOR[run.target].fg,
-                }
-          }
-          rescue={
-            run.prisoner
-              ? {
-                  id: run.prisoner,
-                  name: city?.jailed.find((j) => j.id === run.prisoner)?.name ?? 'your gang-mate',
-                }
-              : undefined
-          }
-          real={{
-            myGang: chog.gang ? GANGS[chog.gang].name : 'your gang',
-            replayHref: `/replay/${run.id}`,
-            finish: async (inputs) =>
-              (await post<{ result: RealResult }>('/api/heist/finish', { runId: run.id, inputs })).result,
-            onLeave: (getawayPass) => {
-              backTo(run.prisoner ? 'jail' : run.target);
-              // Out with a bag: run it home through the city (the live server starts the chase).
-              if (getawayPass) {
-                siren.current ??= new Sound();
-                siren.current.unlock();
-                requestAnimationFrame(() => view.current?.run(getawayPass));
-              }
-              void loadMe();
-              void loadBoard();
-              void loadCity();
-            },
+  // A robbery or practice runs over the city instead of replacing it, so the city stays connected and
+  // drawn: coming out of the vault you're straight back on the street (no reconnect, no reloading).
+  const heistScreen = (() => {
+    if (run && chog && run.stage === 'lock') {
+      const r = run;
+      return (
+        <LockGame
+          key={r.id}
+          gang={r.target}
+          seed={rushSeed(r.id)}
+          onDone={(inputs) => {
+            post<{ loud: boolean; pass: string }>('/api/heist/lock', {
+              runId: r.id,
+              inputs: encodeLock(inputs),
+            })
+              .then((d) =>
+                setRun({
+                  ...r,
+                  stage: 'vault',
+                  loud: d.loud,
+                  link: new RaidLink({ t: 'raid', pass: d.pass }),
+                }),
+              )
+              .catch((e: unknown) => {
+                setNotice(e instanceof Error ? e.message : 'Could not open the door.');
+                backTo(r.target);
+              });
           }}
         />
-      </div>
-    );
-  }
+      );
+    }
 
-  if (practice?.stage === 'lock') {
-    const pr = practice;
-    return (
-      <LockGame
-        key={pr.seed}
-        gang={pr.gang}
-        seed={pr.seed}
-        onDone={(_, quiet) => setPractice({ ...pr, stage: 'vault', loud: !quiet })}
-      />
-    );
-  }
+    if (run && chog) {
+      return (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0918]">
+          <RushGame
+            key={run.id}
+            mapId={run.vault}
+            rules={rushRules(run.tier, !!run.prisoner, run.loud)}
+            seed={rushSeed(run.id)}
+            link={run.link}
+            player={{
+              id: chog.id,
+              name: chog.name,
+              gang: chog.gang ? GANGS[chog.gang].name : null,
+              powers: run.powers,
+            }}
+            guards={run.guards}
+            owner={
+              run.prisoner
+                ? { name: 'The jail', color: '#ff5a4f', ink: '#111111' }
+                : {
+                    name: GANGS[run.target].name,
+                    color: GANG_COLOR[run.target].bg,
+                    ink: GANG_COLOR[run.target].fg,
+                  }
+            }
+            rescue={
+              run.prisoner
+                ? {
+                    id: run.prisoner,
+                    name: city?.jailed.find((j) => j.id === run.prisoner)?.name ?? 'your gang-mate',
+                  }
+                : undefined
+            }
+            real={{
+              myGang: chog.gang ? GANGS[chog.gang].name : 'your gang',
+              replayHref: `/replay/${run.id}`,
+              finish: async (inputs) =>
+                (await post<{ result: RealResult }>('/api/heist/finish', { runId: run.id, inputs })).result,
+              onLeave: (getawayPass) => {
+                backTo(run.prisoner ? 'jail' : run.target);
+                // Out with a bag: run it home through the city (the live server starts the chase).
+                if (getawayPass) {
+                  siren.current ??= new Sound();
+                  siren.current.unlock();
+                  requestAnimationFrame(() => view.current?.run(getawayPass));
+                }
+                void loadMe();
+                void loadBoard();
+                void loadCity();
+              },
+            }}
+          />
+        </div>
+      );
+    }
 
-  if (practice && city) {
-    const player = chog ? { id: chog.id, name: chog.name, powers: chog.powers } : city.practice;
-    const guards = city.strollers.slice(0, 4).map((s) => ({ id: s.id, name: s.name }));
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0918]">
-        <RushGame
-          mapId={RUSH_BANK.id}
-          rules={rushRules(1, false, practice.loud)}
-          coach
-          player={{ ...player, gang: chog?.gang ? GANGS[chog.gang].name : null }}
-          guards={guards}
-          owner={{ name: 'Practice vault', color: '#7cf0c4', ink: '#111111' }}
-          onLeave={() => backTo('training')}
-          onGetaway={() => {
-            backTo('training');
-            // Run it to your gang's door, or the fountain in the plaza if you haven't got one.
-            const home = chog?.gang ? placeOf(chog.gang)!.door : { x: CITY.spawn.x, y: CITY.spawn.y - 2.2 };
-            siren.current ??= new Sound();
-            siren.current.unlock();
-            siren.current.alarmOn();
-            const from = placeOf('training')!.door;
-            setPracticeRun({
-              since: Date.now(),
-              until: Date.now() + getawayTime(from, home),
-              to: chog?.gang ? `${GANGS[chog.gang].name}’s door` : 'the fountain',
-            });
-            requestAnimationFrame(() => requestAnimationFrame(() => view.current?.practiceChase(home)));
-          }}
+    if (practice?.stage === 'lock') {
+      const pr = practice;
+      return (
+        <LockGame
+          key={pr.seed}
+          gang={pr.gang}
+          seed={pr.seed}
+          onDone={(_, quiet) => setPractice({ ...pr, stage: 'vault', loud: !quiet })}
         />
-      </div>
-    );
-  }
+      );
+    }
+
+    if (practice && city) {
+      const player = chog ? { id: chog.id, name: chog.name, powers: chog.powers } : city.practice;
+      const guards = city.strollers.slice(0, 4).map((s) => ({ id: s.id, name: s.name }));
+      return (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0918]">
+          <RushGame
+            mapId={RUSH_BANK.id}
+            rules={rushRules(1, false, practice.loud)}
+            coach
+            player={{ ...player, gang: chog?.gang ? GANGS[chog.gang].name : null }}
+            guards={guards}
+            owner={{ name: 'Practice vault', color: '#7cf0c4', ink: '#111111' }}
+            onLeave={() => backTo('training')}
+            onGetaway={() => {
+              backTo('training');
+              // Run it to your gang's door, or the fountain in the plaza if you haven't got one.
+              const home = chog?.gang ? placeOf(chog.gang)!.door : { x: CITY.spawn.x, y: CITY.spawn.y - 2.2 };
+              siren.current ??= new Sound();
+              siren.current.unlock();
+              siren.current.alarmOn();
+              const from = placeOf('training')!.door;
+              setPracticeRun({
+                since: Date.now(),
+                until: Date.now() + getawayTime(from, home),
+                to: chog?.gang ? `${GANGS[chog.gang].name}’s door` : 'the fountain',
+              });
+              requestAnimationFrame(() => requestAnimationFrame(() => view.current?.practiceChase(home)));
+            }}
+          />
+        </div>
+      );
+    }
+    return null;
+  })();
 
   const anyCard = !!(
     (door && doorOpen) ||
@@ -925,15 +951,17 @@ export function CityApp() {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-[#07060d] text-white">
+      {heistScreen && <div className="fixed inset-0 z-[70]">{heistScreen}</div>}
       <CityView
         ref={view}
         me={meLook}
+        hidden={!!heistScreen}
         strollers={city?.strollers ?? []}
         jailed={city?.jailed ?? []}
         places={looks}
         wanted={city?.burns.posters.map((p) => p.chog)}
         board={screen}
-        paused={!!sheet || !!peek || mapOpen || (!!chog && !chog.gang)}
+        paused={!!heistScreen || !!sheet || !!peek || mapOpen || (!!chog && !chog.gang)}
         onDoor={(p, asked) => {
           setDoor(p);
           setDoorOpen(!!p && asked);

@@ -84,6 +84,8 @@ interface Props {
   places: Record<string, PlaceLook>;
   /** Chogs with a Wanted poster on them ($CHOG). */
   wanted?: number[];
+  /** Covered by a robbery: keep moving and connected, but don't draw. */
+  hidden?: boolean;
   board: Board;
   /** Keys and taps do nothing while a card or the heist is open over the city. */
   paused: boolean;
@@ -534,14 +536,15 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       s.look.x += ((ldx / ll) * lead - s.look.x) * Math.min(1, dt * 2.5);
       s.look.y += ((ldy / ll) * lead - s.look.y) * Math.min(1, dt * 2.5);
       r.follow(s.x + s.look.x, s.y + s.look.y);
-      r.draw(people, now, {
-        jailed: [],
-        target: s.target,
-        door,
-        goal: home ? { x: home.x, y: home.y, from: { x: s.x, y: s.y } } : null,
-      });
+      if (!p.hidden)
+        r.draw(people, now, {
+          jailed: [],
+          target: s.target,
+          door,
+          goal: home ? { x: home.x, y: home.y, from: { x: s.x, y: s.y } } : null,
+        });
 
-      if (now - miniAt > 120) {
+      if (!p.hidden && now - miniAt > 120) {
         miniAt = now;
         lastAt.x = s.x;
         lastAt.y = s.y;
