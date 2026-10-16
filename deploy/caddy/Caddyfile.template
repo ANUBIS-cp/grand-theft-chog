@@ -25,4 +25,17 @@ __MAIN__ {
 	handle {
 		reverse_proxy 127.0.0.1:3000
 	}
+
+	# The few seconds the app restarts on a deploy: a page that tries again by itself, not a blank screen.
+	handle_errors 502 503 504 {
+		header Content-Type "text/html; charset=utf-8"
+		header Cache-Control "no-store"
+		header Retry-After "3"
+		respond <<HTML
+			<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+			<title>Chog World</title><meta http-equiv="refresh" content="3">
+			<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0918;color:#fff;font:600 17px -apple-system,system-ui,sans-serif;text-align:center}p{color:#a59fc9;font-weight:500;font-size:15px}</style></head>
+			<body><div><div style="font-size:26px;font-weight:800">Chog World is updating</div><p>Back in a few seconds. This page tries again by itself.</p></div></body></html>
+			HTML 503
+	}
 }
