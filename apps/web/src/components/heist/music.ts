@@ -2,7 +2,12 @@ import { audioEngine, wakeSound } from './sound';
 
 // The game's music: four licensed tracks (Pixabay Content License: free, no credit needed, fine in a game),
 // in public/music, levelled to the same loudness:
-//   city       Atmospheric Phonk Synthwave (Password Infinity), Evgeny Bardyuzha  - walking the city at night
+//   city       walking the city at night, a playlist (shuffled, a new song as each one ends):
+//                Atmospheric Phonk Synthwave (Password Infinity), Evgeny Bardyuzha
+//                Charming Phonk, FreeMusicLab
+//                No Sleep, kontraa
+//                Kugelsicher, TremoxBeatz
+//                The Blackest Bouquet, Leonell Cassio
 //   vault      Spinning Head, Gvidon                                              - the lock and the vault
 //   chase      Risk, StudioKolomna                                                - carrying the bag home
 //   halloween  The Paranormal Is Real, Leonell Cassio                             - the city in Halloween week
@@ -16,6 +21,25 @@ export type Track = 'city' | 'vault' | 'chase' | 'halloween';
 // hits), the bass and the top left alone so it still has punch, and it ducks for a moment under each sound.
 const VOLUME = 0.19;
 const FADE = 1.4;
+
+const CITY = ['city', 'city-2', 'city-3', 'city-4', 'city-5'];
+// A shuffled order, played through before it repeats; it never plays the same song twice in a row.
+let cityOrder: string[] = [];
+let lastCity = '';
+function nextCity(): string {
+  if (!cityOrder.length) {
+    const last = lastCity;
+    cityOrder = [...CITY];
+    for (let i = cityOrder.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [cityOrder[i], cityOrder[j]] = [cityOrder[j]!, cityOrder[i]!];
+    }
+    if (cityOrder[0] === last) cityOrder.push(cityOrder.shift()!);
+  }
+  lastCity = cityOrder.shift()!;
+  return lastCity;
+}
+const fileFor = (t: Track) => `/music/${t === 'city' ? nextCity() : t}.mp3`;
 
 interface Deck {
   el: HTMLAudioElement;
@@ -39,7 +63,14 @@ function setup() {
     el.loop = true;
     el.preload = 'auto';
     el.setAttribute('playsinline', '');
-    return { el, gain: null, track: null };
+    const d: Deck = { el, gain: null, track: null };
+    // The city's playlist: the next song as this one ends (the other tracks loop).
+    el.addEventListener('ended', () => {
+      if (d.track !== 'city' || d !== decks![live]) return;
+      el.src = fileFor('city');
+      void el.play().catch(() => {});
+    });
+    return d;
   });
   // The first tap anywhere: start both players silently, so the phone lets them play from then on.
   const unlock = () => {
@@ -66,7 +97,12 @@ function setup() {
   for (const ev of ['touchend', 'click', 'keydown'])
     window.addEventListener(ev, unlock, { capture: true, passive: true });
   // Local testing only: what each player is doing.
-  if (location.hostname === 'localhost')
+  if (location.hostname === 'localhost') {
+    // ...and a jump to a few seconds before the song's end, to hear the next one come in.
+    (window as unknown as { __musicEnd: () => void }).__musicEnd = () => {
+      const el = decks![live]!.el;
+      el.currentTime = Math.max(0, el.duration - 3);
+    };
     (window as unknown as { __music: () => unknown }).__music = () => ({
       wanted,
       unlocked,
@@ -74,10 +110,12 @@ function setup() {
       decks: decks!.map((d) => ({
         track: d.track,
         paused: d.el.paused,
+        src: d.el.src.split('/').pop(),
         t: Math.round(d.el.currentTime),
         gain: d.gain?.gain.value,
       })),
     });
+  }
   document.addEventListener('visibilitychange', () => {
     for (const d of decks!) if (document.hidden) d.el.pause();
     if (!document.hidden) apply();
@@ -128,7 +166,8 @@ function apply() {
     const next = decks[1 - live]!;
     if (wanted) {
       if (next.track !== wanted) {
-        next.el.src = `/music/${wanted}.mp3`;
+        next.el.src = fileFor(wanted);
+        next.el.loop = wanted !== 'city';
         next.track = wanted;
       }
       if (unlocked && !document.hidden) void next.el.play().catch(() => {});
