@@ -21,7 +21,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChogPass, type Peek as Pass } from '@/components/chog-pass';
 import type { RealResult } from '@/components/heist/heist-game';
-import { playMusic, setMusicMuted, type Track } from '@/components/heist/music';
+import { playMusic, type Track } from '@/components/heist/music';
 import { prepareSound, Sound } from '@/components/heist/sound';
 import { LockGame } from '@/components/lock/lock-game';
 import { RaidLink } from '@/components/rush/raid-link';
@@ -36,6 +36,7 @@ import { ago, formatLeft } from '@/lib/time';
 import { hasWalletConnectSession, logOut } from '@/lib/wallet';
 import { BurnButton, PosterPicker, type Burns } from './burn';
 import { ChatPanel } from './chat';
+import { MusicButton } from './music-button';
 import type { PlaceLook } from './city-render';
 import { CityView, type CityHandle, type Jailed, type Stroller, type Tapped } from './city-view';
 import {
@@ -1106,13 +1107,6 @@ export function CityApp() {
         ? 'halloween'
         : 'city';
   useEffect(() => playMusic(track), [track]);
-  useEffect(() => {
-    try {
-      setMusicMuted(localStorage.getItem('heist-muted') === '1');
-    } catch {
-      /* no storage */
-    }
-  }, []);
 
   const anyCard = !!(
     (door && doorOpen) ||
@@ -1213,18 +1207,27 @@ export function CityApp() {
             </button>
           </div>
         )}
-        <MiniMap
-          area={areaName}
-          online={
-            live.status === 'live'
-              ? `${live.online} playing now`
-              : live.status === 'elsewhere'
-                ? 'Open in another window'
-                : 'Connecting…'
-          }
-          dot={live.status === 'live' ? '#3ddc84' : live.status === 'elsewhere' ? '#ff5a4f' : '#ffffff66'}
-          onOpen={() => setMapOpen(true)}
-        />
+        {/* The music button sits beside the map; on a phone, under it, clear of your card. */}
+        <div className="max-sm:hidden">
+          <MusicButton />
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <MiniMap
+            area={areaName}
+            online={
+              live.status === 'live'
+                ? `${live.online} playing now`
+                : live.status === 'elsewhere'
+                  ? 'Open in another window'
+                  : 'Connecting…'
+            }
+            dot={live.status === 'live' ? '#3ddc84' : live.status === 'elsewhere' ? '#ff5a4f' : '#ffffff66'}
+            onOpen={() => setMapOpen(true)}
+          />
+          <div className="sm:hidden">
+            <MusicButton />
+          </div>
+        </div>
       </div>
 
       {/* Your run, other getaways and banners. On a phone they live along the top edge, out of the middle of

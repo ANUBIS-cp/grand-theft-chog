@@ -361,3 +361,19 @@ canvas {
     transform: translate(0, 0);
   }
 }
+
+/* The music button's little level bars. */
+@keyframes eq {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .eq-bar {
+    animation: none !important;
+  }
+}

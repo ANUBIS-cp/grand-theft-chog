@@ -85,6 +85,37 @@ export function watchSound(cb: (on: boolean) => void) {
   return () => watchers.delete(cb);
 }
 
+// The game's sounds on or off for every screen at once (the music has its own switch, in music.ts), kept for
+// the next visit.
+let gameMuted = (() => {
+  try {
+    return typeof window !== 'undefined' && localStorage.getItem('heist-muted') === '1';
+  } catch {
+    return false;
+  }
+})();
+const muteWatchers = new Set<(m: boolean) => void>();
+
+/** Whether the game's sounds are off. */
+export const gameSoundsMuted = () => gameMuted;
+
+/** Switch the game's sounds off or on, everywhere. */
+export function setGameMuted(m: boolean) {
+  gameMuted = m;
+  try {
+    localStorage.setItem('heist-muted', m ? '1' : '0');
+  } catch {
+    /* no storage */
+  }
+  for (const w of muteWatchers) w(m);
+}
+
+/** Calls back when the game's sounds are switched off or on. Returns a function to stop. */
+export function watchGameMuted(cb: (m: boolean) => void) {
+  muteWatchers.add(cb);
+  return () => muteWatchers.delete(cb);
+}
+
 /** For a button: switch sound on from this tap. */
 export function soundTap() {
   wake();
@@ -115,7 +146,7 @@ export class Sound {
     this.hushed(() => this.dialTickSound());
   }
   private get mutedNow() {
-    return this.muted;
+    return this.muted || gameMuted;
   }
   muted = false;
 
@@ -134,9 +165,11 @@ export class Sound {
     if (this.masterOf !== shared) {
       this.masterOf = shared;
       this.masterNode = shared.createGain();
-      this.masterNode.gain.value = this.muted ? 0 : 0.5;
       this.masterNode.connect(shared.destination);
     }
+    // Follows the switch for the whole game too (a siren already wailing goes quiet with it).
+    const vol = this.mutedNow ? 0 : 0.5;
+    if (this.masterNode!.gain.value !== vol) this.masterNode!.gain.value = vol;
     return this.masterNode;
   }
 
@@ -157,7 +190,7 @@ export class Sound {
 
   setMuted(m: boolean) {
     this.muted = m;
-    if (this.masterNode) this.masterNode.gain.value = m ? 0 : 0.5;
+    if (this.masterNode) this.masterNode.gain.value = this.mutedNow ? 0 : 0.5;
   }
 
   private tone(freq: number, at: number, dur: number, type: OscillatorType, vol: number, slideTo?: number) {

@@ -13,7 +13,8 @@ import { audioEngine, wakeSound } from './sound';
 //   halloween  The Paranormal Is Real, Leonell Cassio                             - the city in Halloween week
 // Two players take turns so a change of scene fades one track out as the next comes in. Phones only let a page
 // start music from a tap, so both are started (silently) by the first tap and kept running from then on. The
-// sound button mutes the music with everything else; it pauses while the tab is hidden.
+// music button switches it off (kept for the next visit) or skips to the next city song; it pauses while the tab
+// is hidden.
 
 export type Track = 'city' | 'vault' | 'chase' | 'halloween';
 
@@ -41,6 +42,30 @@ function nextCity(): string {
 }
 const fileFor = (t: Track) => `/music/${t === 'city' ? nextCity() : t}.mp3`;
 
+/** Each song's name and artist, for the music button. */
+export const SONGS: Record<string, { title: string; artist: string }> = {
+  city: { title: 'Password Infinity', artist: 'Evgeny Bardyuzha' },
+  'city-2': { title: 'Charming Phonk', artist: 'FreeMusicLab' },
+  'city-3': { title: 'No Sleep', artist: 'kontraa' },
+  'city-4': { title: 'Kugelsicher', artist: 'TremoxBeatz' },
+  'city-5': { title: 'The Blackest Bouquet', artist: 'Leonell Cassio' },
+  vault: { title: 'Spinning Head', artist: 'Gvidon' },
+  chase: { title: 'Risk', artist: 'StudioKolomna' },
+  halloween: { title: 'The Paranormal Is Real', artist: 'Leonell Cassio' },
+};
+
+export interface MusicState {
+  /** Switched off with the music button. */
+  off: boolean;
+  /** The scene's track, and the song playing in it ("city-3"), or null before anything plays. */
+  track: Track | null;
+  song: string | null;
+  /** Whether a tap has let the music start yet. */
+  started: boolean;
+}
+
+const listeners = new Set<(s: MusicState) => void>();
+
 interface Deck {
   el: HTMLAudioElement;
   gain: GainNode | null;
@@ -53,8 +78,35 @@ let duck: GainNode | null = null;
 let lastDuck = 0;
 let live = 0;
 let wanted: Track | null = null;
-let muted = false;
+let off = (() => {
+  try {
+    return typeof window !== 'undefined' && localStorage.getItem('cw-music-off') === '1';
+  } catch {
+    return false;
+  }
+})();
 let unlocked = false;
+let skip = false;
+
+const songOf = (d: Deck | undefined) =>
+  d?.el.src ? decodeURIComponent(d.el.src.split('/').pop() ?? '').replace(/\.mp3$/, '') : null;
+
+/** What the music is doing now. */
+export function musicState(): MusicState {
+  const cur = decks?.[live];
+  return { off, track: wanted, song: cur?.track ? songOf(cur) : null, started: unlocked };
+}
+
+const emit = () => {
+  const st = musicState();
+  for (const l of listeners) l(st);
+};
+
+/** Calls back whenever the song, the scene or the switch changes. Returns a function to stop. */
+export function watchMusic(cb: (s: MusicState) => void) {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
 
 function setup() {
   if (decks || typeof window === 'undefined') return;
@@ -68,7 +120,8 @@ function setup() {
     el.addEventListener('ended', () => {
       if (d.track !== 'city' || d !== decks![live]) return;
       el.src = fileFor('city');
-      void el.play().catch(() => {});
+      if (!off) void el.play().catch(() => {});
+      emit();
     });
     return d;
   });
@@ -93,6 +146,7 @@ function setup() {
       );
     }
     apply();
+    emit();
   };
   for (const ev of ['touchend', 'click', 'keydown'])
     window.addEventListener(ev, unlock, { capture: true, passive: true });
@@ -127,7 +181,7 @@ function route() {
   const ac = audioEngine();
   if (!ac || !decks || master) return;
   master = ac.createGain();
-  master.gain.value = muted ? 0 : VOLUME;
+  master.gain.value = off ? 0 : VOLUME;
   duck = ac.createGain();
   const low = ac.createBiquadFilter();
   low.type = 'lowshelf';
@@ -161,16 +215,17 @@ function apply() {
   const ac = audioEngine();
   const now = ac?.currentTime ?? 0;
   const cur = decks[live]!;
-  if (cur.track !== wanted) {
+  const playing = unlocked && !document.hidden && !off;
+  if (cur.track !== wanted || (skip && wanted)) {
     // The other player takes the new track and fades in; this one fades out.
     const next = decks[1 - live]!;
     if (wanted) {
-      if (next.track !== wanted) {
+      if (next.track !== wanted || skip) {
         next.el.src = fileFor(wanted);
         next.el.loop = wanted !== 'city';
         next.track = wanted;
       }
-      if (unlocked && !document.hidden) void next.el.play().catch(() => {});
+      if (playing) void next.el.play().catch(() => {});
       next.gain?.gain.cancelScheduledValues(now);
       next.gain?.gain.setTargetAtTime(1, now, FADE / 3);
     }
@@ -187,12 +242,14 @@ function apply() {
       FADE * 1000 + 300,
     );
     live = 1 - live;
-  } else if (wanted && unlocked && !document.hidden) {
+  } else if (wanted && playing) {
     // Already the right track: make sure it's playing and up (its fade may have been set before the engine
     // existed, the first time round).
     if (cur.el.paused) void cur.el.play().catch(() => {});
     if (cur.gain && cur.gain.gain.value < 0.99) cur.gain.gain.setTargetAtTime(1, now, FADE / 3);
   }
+  skip = false;
+  emit();
 }
 
 /** What should be playing now (null for silence). Safe to call every render. */
@@ -200,6 +257,14 @@ export function playMusic(track: Track | null) {
   setup();
   if (track === wanted) return;
   wanted = track;
+  apply();
+}
+
+/** The next city song now, faded across (the vault, the run home and Halloween have one track each). */
+export function nextSong() {
+  if (wanted !== 'city') return;
+  if (off) setMusicOff(false);
+  skip = true;
   apply();
 }
 
@@ -216,8 +281,15 @@ export function duckMusic() {
   duck.gain.setTargetAtTime(1, t + 0.12, 0.25);
 }
 
-/** The sound button: music goes quiet with everything else. */
-export function setMusicMuted(m: boolean) {
-  muted = m;
-  if (master) master.gain.value = m ? 0 : VOLUME;
+/** The music switch: off pauses it (and is kept for the next visit), on picks up where it was. */
+export function setMusicOff(o: boolean) {
+  off = o;
+  try {
+    localStorage.setItem('cw-music-off', o ? '1' : '0');
+  } catch {
+    /* no storage */
+  }
+  if (master) master.gain.value = o ? 0 : VOLUME;
+  if (o) for (const d of decks ?? []) d.el.pause();
+  apply();
 }

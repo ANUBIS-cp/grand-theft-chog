@@ -24,7 +24,8 @@ import { cn } from '@/lib/cn';
 import { chogImage } from '@/lib/images';
 import { Fx } from './fx';
 import { VaultRenderer, snapshot, type Prev } from './render';
-import { Sound } from './sound';
+import { setMusicOff } from './music';
+import { gameSoundsMuted, setGameMuted, Sound } from './sound';
 
 export interface HeistChog {
   id: number;
@@ -195,11 +196,7 @@ export function HeistGame({
     const stage = stageRef.current;
     if (!cv || !stage) return;
     sound.current ??= new Sound();
-    try {
-      const m = localStorage.getItem('heist-muted') === '1';
-      sound.current.setMuted(m);
-      setMuted(m);
-    } catch {}
+    setMuted(gameSoundsMuted());
     const load = (src: string) => {
       const img = new Image();
       img.decoding = 'async';
@@ -543,13 +540,12 @@ export function HeistGame({
     g.press = i;
   };
 
+  // The vault's speaker button: everything quiet, the music too (or everything back on).
   const toggleMute = () => {
     const m = !muted;
     setMuted(m);
-    sound.current?.setMuted(m);
-    try {
-      localStorage.setItem('heist-muted', m ? '1' : '0');
-    } catch {}
+    setGameMuted(m);
+    setMusicOff(m);
   };
 
   const phase = hud?.phase ?? 'play';

@@ -28,8 +28,16 @@ import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
 import { chogImage } from '@/lib/images';
 import { Fx } from '../heist/fx';
-import { setMusicMuted } from '../heist/music';
-import { prepareSound, Sound, soundOn, soundTap, watchSound } from '../heist/sound';
+import { setMusicOff } from '../heist/music';
+import {
+  gameSoundsMuted,
+  prepareSound,
+  setGameMuted,
+  Sound,
+  soundOn,
+  soundTap,
+  watchSound,
+} from '../heist/sound';
 import type { RaidLink, RaidResult } from './raid-link';
 import { powerHint } from './power-fx';
 import { stickPick } from './stick';
@@ -237,11 +245,7 @@ export function RushGame(props: RushGameProps) {
     if (!cv || !stage) return;
     prepareSound();
     sound.current ??= new Sound();
-    try {
-      const m = localStorage.getItem('heist-muted') === '1';
-      sound.current.setMuted(m);
-      setMuted(m);
-    } catch {}
+    setMuted(gameSoundsMuted());
     const load = (src: string) => {
       const img = new Image();
       img.decoding = 'async';
@@ -727,14 +731,12 @@ export function RushGame(props: RushGameProps) {
       stop();
     };
   }, []);
+  // The vault's speaker button: everything quiet, the music too (or everything back on).
   const toggleMute = () => {
     const m = !muted;
     setMuted(m);
-    sound.current?.setMuted(m);
-    setMusicMuted(m);
-    try {
-      localStorage.setItem('heist-muted', m ? '1' : '0');
-    } catch {}
+    setGameMuted(m);
+    setMusicOff(m);
   };
 
   const [, setLinkSeen] = useState(0);
