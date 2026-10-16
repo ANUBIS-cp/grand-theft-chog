@@ -1,0 +1,7 @@
+[Unit]
+Description=Chog World nightly backup (database + chat)
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/chog-city-backup

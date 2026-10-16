@@ -2,7 +2,8 @@
 # Installs the Caddy and systemd files from deploy/ on the server. Run on the server as root from a release dir.
 set -euo pipefail
 cd "$(dirname "$0")"
-for u in systemd/*.service; do install -m 0644 "$u" /etc/systemd/system/; done
+for u in systemd/*.service systemd/*.timer; do install -m 0644 "$u" /etc/systemd/system/; done
+install -m 0755 backup.sh /usr/local/bin/chog-city-backup
 # Non-secret settings. Secrets (db.env, keys) are created by hand and never come from the repo.
 touch /etc/chog-city/app.env
 grep -q '^PUBLIC_HOST=' /etc/chog-city/app.env || echo 'PUBLIC_HOST=chogcity.35-212-31-75.sslip.io' >> /etc/chog-city/app.env
@@ -25,5 +26,6 @@ grep -q '^CHAT_FILE=' /etc/chog-city/app.env || echo 'CHAT_FILE=/var/lib/chog-ci
 grep -q '^CITY_SECRET=' /etc/chog-city/app.env || echo "CITY_SECRET=$(openssl rand -hex 32)" >> /etc/chog-city/app.env
 chown root:chogcity /etc/chog-city/app.env && chmod 0640 /etc/chog-city/app.env
 systemctl daemon-reload
+systemctl enable --now chog-city-backup.timer
 systemctl reload caddy
 echo "config installed"
