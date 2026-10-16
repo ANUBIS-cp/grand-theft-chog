@@ -252,3 +252,25 @@ export const visits = pgTable(
   },
   (t) => [primaryKey({ columns: [t.day, t.who] })],
 );
+
+// ---------- sign-in by a send to yourself ----------
+
+/**
+ * Proving you hold a wallet without connecting it: the game names a small amount, you send exactly that much
+ * MON from the wallet to itself, and the game spots it on Monad. One row per try, tied to the browser by a cookie.
+ */
+export const walletProofs = pgTable('wallet_proofs', {
+  id: text('id').primaryKey(),
+  address: text('address').notNull(),
+  /** The amount to send, in wei (a decimal string). */
+  amountWei: text('amount_wei').notNull(),
+  /** The wallet's transaction count when the try started; it goes up when they send something. */
+  nonce: integer('nonce').notNull(),
+  /** The last block looked through. */
+  lastBlock: bigint('last_block', { mode: 'number' }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  /** The self-transfer that proved it, once found. */
+  tx: text('tx'),
+  doneAt: timestamp('done_at', { withTimezone: true }),
+});

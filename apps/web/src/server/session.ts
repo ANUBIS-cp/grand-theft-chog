@@ -5,7 +5,8 @@ import { cookies } from 'next/headers';
 import { db } from './db';
 
 const COOKIE = 'cc_session';
-const DAYS = 7;
+// A month: proving your wallet (or signing in) is something you do once, not every week.
+const DAYS = 30;
 const hash = (v: string) => createHash('sha256').update(v).digest('hex');
 
 export async function createSession(address: string): Promise<void> {

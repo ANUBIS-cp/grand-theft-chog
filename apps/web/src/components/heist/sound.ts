@@ -285,8 +285,9 @@ export class Sound {
   }
 
   /**
-   * Police on a getaway: a two-tone siren, held, as loud as the nearest car is close (`level` 0..1). Starts
-   * silent; call `policeLevel` every frame and `policeOff` when the run ends.
+   * Police on a getaway: an American police siren, held, as loud as the nearest car is close (`level` 0..1). A
+   * slow wail (the pitch sweeping up and down every few seconds) from a distance, a fast yelp when it's right on
+   * you. (A two-note hi-lo is an ambulance.) Starts silent; call `policeLevel` every frame, `policeOff` at the end.
    */
   policeLevel(level: number) {
     const ac = this.ac;
@@ -297,23 +298,26 @@ export class Sound {
       const lfoGain = ac.createGain();
       const gain = ac.createGain();
       const f = ac.createBiquadFilter();
-      osc.type = 'triangle';
-      osc.frequency.value = 820;
-      // A square wave on the pitch: it jumps between two notes, hi-lo, like a real siren.
-      lfo.type = 'square';
-      lfo.frequency.value = 1.5;
-      lfoGain.gain.value = 130;
+      osc.type = 'square';
+      osc.frequency.value = 1000;
+      lfo.type = 'sine';
+      lfo.frequency.value = 0.32;
+      lfoGain.gain.value = 430;
       lfo.connect(lfoGain).connect(osc.frequency);
+      // Square through a low-pass: the hard edge of an electronic siren without the fizz.
       f.type = 'lowpass';
-      f.frequency.value = 2400;
+      f.frequency.value = 2300;
+      f.Q.value = 0.7;
       gain.gain.value = 0.0001;
       osc.connect(f).connect(gain).connect(this.master);
       osc.start();
       lfo.start();
       this.police = { osc, lfo, gain };
     }
-    const v = Math.max(0.0001, Math.min(1, level) * 0.07);
-    this.police.gain.gain.setTargetAtTime(v, ac.currentTime, 0.15);
+    const close = level > 0.7;
+    const t = ac.currentTime;
+    this.police.lfo.frequency.setTargetAtTime(close ? 3.3 : 0.32, t, 0.25);
+    this.police.gain.gain.setTargetAtTime(Math.max(0.0001, Math.min(1, level) * 0.045), t, 0.15);
   }
 
   policeOff() {

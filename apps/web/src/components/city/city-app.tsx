@@ -19,7 +19,7 @@ import {
 } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ConnectPanel } from '@/components/connect-panel';
+import { ChogPass, type Peek as Pass } from '@/components/chog-pass';
 import type { RealResult } from '@/components/heist/heist-game';
 import { prepareSound, Sound } from '@/components/heist/sound';
 import { LockGame } from '@/components/lock/lock-game';
@@ -193,6 +193,27 @@ export function CityApp() {
     revenge: Record<string, GangId[]>;
   } | null>(null);
   const [city, setCity] = useState<CityData | null>(null);
+  // Walking as your Chog from its wallet address alone (read from Monad, nothing signed): practice only until
+  // the wallet is proved. Remembered in this browser.
+  const [pass, setPassState] = useState<Pass | null>(null);
+  const [verifyFirst, setVerifyFirst] = useState(false);
+  const setPass = useCallback((p: Pass | null) => {
+    setPassState(p);
+    try {
+      if (p) localStorage.setItem('cw-peek', JSON.stringify(p));
+      else localStorage.removeItem('cw-peek');
+    } catch {
+      /* no storage */
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('cw-peek');
+      if (raw) setPassState(JSON.parse(raw) as Pass);
+    } catch {
+      /* none */
+    }
+  }, []);
   // The Chog you play as, remembered in this browser so a reload keeps it.
   const [picked, setPickedState] = useState<number | null>(null);
   const setPicked = useCallback((id: number | null) => {
@@ -505,6 +526,8 @@ export function CityApp() {
   const chogs = me?.chogs ?? [];
   const chog = chogs.find((c) => c.id === picked) ?? chogs[0] ?? null;
   const revenge = chog?.gang ? (me?.revenge[chog.gang] ?? []) : [];
+  const peekChog =
+    !me?.address && pass ? (pass.chogs.find((c) => c.id === pass.picked) ?? pass.chogs[0] ?? null) : null;
   const jailedNow = !!chog?.jailedUntil && chog.jailedUntil > now;
   const myGang = useRef<GangId | null>(null);
   myGang.current = chog?.gang ?? null;
@@ -562,8 +585,10 @@ export function CityApp() {
             color: chog.gang ? GANG_COLOR[chog.gang].bg : GUEST.color,
             ink: chog.gang ? GANG_COLOR[chog.gang].fg : GUEST.ink,
           }
-        : { chog: null, name: 'Guest', jail: null, ...GUEST },
-    [chog],
+        : peekChog
+          ? { chog: peekChog.id, name: peekChog.name, jail: null, ...GUEST, unverified: true }
+          : { chog: null, name: 'Guest', jail: null, ...GUEST },
+    [chog, peekChog],
   );
 
   function closeWelcome() {
@@ -737,12 +762,25 @@ export function CityApp() {
   const myRank = myRow && board ? board.board.indexOf(myRow) + 1 : 0;
   const walk = (id: string) => () => view.current?.walkTo(id);
   const duties: Duty[] = [];
-  if (!me?.address) {
+  if (!me?.address && peekChog) {
+    duties.push(
+      {
+        key: 'verify',
+        label: 'Verify to rob for real',
+        sub: `Practising as ${peekChog.name}`,
+        onGo: () => {
+          setVerifyFirst(true);
+          setSheet('connect');
+        },
+      },
+      { key: 'practice', label: 'Try the practice vault', onGo: walk('training') },
+    );
+  } else if (!me?.address) {
     duties.push(
       {
         key: 'connect',
-        label: 'Connect your wallet',
-        sub: 'Walk in as your own Chog',
+        label: 'Play as your Chog',
+        sub: 'Just your wallet address, no signing',
         onGo: () => setSheet('connect'),
       },
       { key: 'practice', label: 'Try the practice vault', onGo: walk('training') },
@@ -1021,7 +1059,11 @@ export function CityApp() {
     }
 
     if (practice && city) {
-      const player = chog ? { id: chog.id, name: chog.name, powers: chog.powers } : city.practice;
+      const player = chog
+        ? { id: chog.id, name: chog.name, powers: chog.powers }
+        : peekChog
+          ? { id: peekChog.id, name: peekChog.name, powers: peekChog.powers as PowerId[] }
+          : city.practice;
       // The gang whose lock you just picked guards the practice vault too: its own faces.
       const own = board?.board.find((v) => v.gang === practice.gang)?.guards ?? [];
       const guards = own.length
@@ -1134,9 +1176,9 @@ export function CityApp() {
         )}
       >
         <RoleCard
-          chog={chog?.id ?? null}
-          name={chog?.name ?? 'Guest'}
-          gang={chog?.gang ? GANGS[chog.gang].name : null}
+          chog={chog?.id ?? peekChog?.id ?? null}
+          name={chog?.name ?? peekChog?.name ?? 'Guest'}
+          gang={chog?.gang ? GANGS[chog.gang].name : peekChog ? 'Practice only · not verified' : null}
           color={meLook.color}
           ink={meLook.ink}
           vault={myRow ? `Vault ${money(myRow.cash)} · #${myRank} of ${board?.board.length ?? 0}` : undefined}
@@ -1154,7 +1196,7 @@ export function CityApp() {
               onClick={() => setSheet('connect')}
               className={cn(btn, 'pointer-events-auto btn-sm btn-gold')}
             >
-              <span>Connect wallet</span>
+              <span>{peekChog ? 'Verify to rob' : 'Play as my Chog'}</span>
             </button>
           </div>
         )}
@@ -1408,12 +1450,14 @@ export function CityApp() {
           </p>
           <p className="mt-2 text-[14px] text-white/60">
             <span className="sm:hidden">Drag anywhere to walk. </span>
-            <span className="max-sm:hidden">Walk with the arrow keys or WASD, or tap where you want to go. </span>
+            <span className="max-sm:hidden">
+              Walk with the arrow keys or WASD, or tap where you want to go.{' '}
+            </span>
             No wallet? Follow the gold arrow to the practice vault.
           </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button onClick={() => setSheet('connect')} className={cn(btn, 'btn-gold whitespace-nowrap')}>
-              <span>Connect</span>
+              <span>Play as my Chog</span>
             </button>
             <button onClick={closeWelcome} className={cn(btn, 'btn-glass')}>
               <span>Look around</span>
@@ -1476,10 +1520,26 @@ export function CityApp() {
       )}
 
       {sheet === 'connect' && (
-        <Sheet title="Connect wallet" onClose={() => setSheet(null)}>
-          <ConnectPanel
+        <Sheet
+          title={verifyFirst ? 'Verify your wallet' : 'Play as your Chog'}
+          onClose={() => {
+            setSheet(null);
+            setVerifyFirst(false);
+          }}
+        >
+          <ChogPass
+            peek={pass}
+            verifyFirst={verifyFirst}
+            onPeek={(p) => {
+              setPass(p);
+              setSheet(null);
+              setVerifyFirst(false);
+              closeWelcome();
+            }}
             onLoggedIn={() => {
               setSheet(null);
+              setVerifyFirst(false);
+              setPass(null);
               closeWelcome();
               void loadMe();
             }}
@@ -2184,7 +2244,7 @@ function DoorCard(props: {
         </>
       ) : block === 'connect' ? (
         <button onClick={props.onConnect} className={cn(btn, 'mt-4 w-full btn-gold')}>
-          <span>Connect wallet to rob it</span>
+          <span>Verify your wallet to rob it</span>
         </button>
       ) : (
         <>

@@ -45,6 +45,8 @@ export interface Me {
   /** In jail until (ms): you walk round the jail yard until then. */
   jail: number | null;
   gang?: GangId | null;
+  /** Walking as a Chog from its address alone (not proved yet): shown here, a guest to everyone else. */
+  unverified?: boolean;
 }
 
 export interface Stroller {
@@ -273,7 +275,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
   // The live connection: a new one whenever you switch Chog or go in or out of jail (the ticket changes).
   useEffect(() => {
     const s = state.current;
-    const net = new LiveCity(props.me.chog, () => ({ x: s.x, y: s.y }), {
+    const net = new LiveCity(props.me.unverified ? null : props.me.chog, () => ({ x: s.x, y: s.y }), {
       fix: (x, y) => {
         s.x = x;
         s.y = y;
@@ -298,7 +300,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       net.stop();
       if (s.net === net) s.net = null;
     };
-  }, [props.me.chog, jailedNow]);
+  }, [props.me.chog, props.me.unverified, jailedNow]);
 
   useEffect(() => {
     const cv = canvasRef.current!;
