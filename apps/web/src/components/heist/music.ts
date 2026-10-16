@@ -12,7 +12,9 @@ import { audioEngine, wakeSound } from './sound';
 
 export type Track = 'city' | 'vault' | 'chase' | 'halloween';
 
-const VOLUME = 0.32;
+// Mixed under the game: quieter overall, a dip in the middle where the game's own sounds sit (coins, locks,
+// hits), the bass and the top left alone so it still has punch, and it ducks for a moment under each sound.
+const VOLUME = 0.19;
 const FADE = 1.4;
 
 interface Deck {
@@ -23,6 +25,8 @@ interface Deck {
 
 let decks: Deck[] | null = null;
 let master: GainNode | null = null;
+let duck: GainNode | null = null;
+let lastDuck = 0;
 let live = 0;
 let wanted: Track | null = null;
 let muted = false;
@@ -86,7 +90,21 @@ function route() {
   if (!ac || !decks || master) return;
   master = ac.createGain();
   master.gain.value = muted ? 0 : VOLUME;
-  master.connect(ac.destination);
+  duck = ac.createGain();
+  const low = ac.createBiquadFilter();
+  low.type = 'lowshelf';
+  low.frequency.value = 140;
+  low.gain.value = 3;
+  const mid = ac.createBiquadFilter();
+  mid.type = 'peaking';
+  mid.frequency.value = 1800;
+  mid.Q.value = 0.8;
+  mid.gain.value = -6;
+  const high = ac.createBiquadFilter();
+  high.type = 'highshelf';
+  high.frequency.value = 9000;
+  high.gain.value = 1.5;
+  master.connect(duck).connect(low).connect(mid).connect(high).connect(ac.destination);
   for (const d of decks) {
     try {
       const src = ac.createMediaElementSource(d.el);
@@ -144,6 +162,19 @@ export function playMusic(track: Track | null) {
   if (track === wanted) return;
   wanted = track;
   apply();
+}
+
+/** A game sound just played: the music dips under it for a moment, then comes back. */
+export function duckMusic() {
+  const ac = audioEngine();
+  if (!ac || !duck) return;
+  const t = ac.currentTime;
+  // Several sounds in a row hold the dip rather than pumping it.
+  if (t - lastDuck < 0.05) return;
+  lastDuck = t;
+  duck.gain.cancelScheduledValues(t);
+  duck.gain.setTargetAtTime(0.45, t, 0.015);
+  duck.gain.setTargetAtTime(1, t + 0.12, 0.25);
 }
 
 /** The sound button: music goes quiet with everything else. */

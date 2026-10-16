@@ -11,6 +11,8 @@
 // warm engine, so it starts at once (a fresh engine per screen started cold, which was the delay).
 // `soundOn()` says whether the engine is on, for a "tap for sound" button.
 
+import { duckMusic } from './music';
+
 let shared: AudioContext | null = null;
 let noiseBuf: AudioBuffer | null = null;
 const watchers = new Set<(on: boolean) => void>();
@@ -93,6 +95,28 @@ export class Sound {
   private masterNode: GainNode | null = null;
   private siren: { osc: OscillatorNode; lfo: OscillatorNode; gain: GainNode } | null = null;
   private police: { osc: OscillatorNode; lfo: OscillatorNode; gain: GainNode } | null = null;
+  /** Small, frequent sounds (footsteps, dial ticks) don't make the music dip. */
+  private quiet = false;
+  private hushed(fn: () => void) {
+    this.quiet = true;
+    try {
+      fn();
+    } finally {
+      this.quiet = false;
+    }
+  }
+  step(style: string) {
+    this.hushed(() => this.stepSound(style));
+  }
+  flick() {
+    this.hushed(() => this.flickSound());
+  }
+  dialTick() {
+    this.hushed(() => this.dialTickSound());
+  }
+  private get mutedNow() {
+    return this.muted;
+  }
   muted = false;
 
   constructor() {
@@ -139,6 +163,7 @@ export class Sound {
   private tone(freq: number, at: number, dur: number, type: OscillatorType, vol: number, slideTo?: number) {
     const ac = this.ac;
     if (!ac || !this.master || !this.live) return;
+    if (!this.quiet && !this.mutedNow) duckMusic();
     const t0 = ac.currentTime + at;
     const o = ac.createOscillator();
     const g = ac.createGain();
@@ -156,6 +181,7 @@ export class Sound {
   private noise(at: number, dur: number, vol: number, from: number, to: number) {
     const ac = this.ac;
     if (!ac || !this.master || !this.live) return;
+    if (!this.quiet && !this.mutedNow) duckMusic();
     const t0 = ac.currentTime + at;
     // One second of noise made once and reused (making a fresh buffer each time costs a frame on a phone).
     if (!noiseBuf || noiseBuf.sampleRate !== ac.sampleRate) {
@@ -350,7 +376,7 @@ export class Sound {
     this.tone(180, 0, 0.12, 'square', 0.08, 90);
     this.noise(0, 0.06, 0.15, 900, 300);
   }
-  dialTick() {
+  private dialTickSound() {
     this.noise(0, 0.02, 0.12, 3500, 3000);
   }
   slip() {
@@ -361,7 +387,7 @@ export class Sound {
   }
 
   /** A footstep in the city: soft and short; heavier for stompers, a springy tick for bouncers, none floating. */
-  step(style: string) {
+  private stepSound(style: string) {
     if (style === 'float') return;
     const v = 0.7 + Math.random() * 0.3;
     if (style === 'stomp') {
@@ -378,7 +404,7 @@ export class Sound {
   }
 
   /** The card spinning round: a quick paper flick. */
-  flick() {
+  private flickSound() {
     this.noise(0, 0.09, 0.07, 1200, 5000);
   }
 
