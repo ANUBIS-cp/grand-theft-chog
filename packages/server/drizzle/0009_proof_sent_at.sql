@@ -1,0 +1,1 @@
+ALTER TABLE "wallet_proofs" ADD COLUMN "sent_at" timestamp with time zone;

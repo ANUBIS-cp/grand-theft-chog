@@ -64,6 +64,13 @@
       "when": 1792145514014,
       "tag": "0008_wallet_proofs",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792147663211,
+      "tag": "0009_proof_sent_at",
+      "breakpoints": true
     }
   ]
 }

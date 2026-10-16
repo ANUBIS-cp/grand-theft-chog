@@ -268,6 +268,8 @@ export const walletProofs = pgTable('wallet_proofs', {
   nonce: integer('nonce').notNull(),
   /** The last block looked through. */
   lastBlock: bigint('last_block', { mode: 'number' }).notNull(),
+  /** When the wallet was first seen sending something (ms), to tell a slow block from a wrong transfer. */
+  sentAt: timestamp('sent_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   /** The self-transfer that proved it, once found. */

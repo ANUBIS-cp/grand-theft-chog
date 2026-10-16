@@ -19,6 +19,8 @@ export interface ProofRow {
   lastBlock: number;
   expiresAt: number;
   tx: string | null;
+  /** When the wallet was first seen sending something, or null. */
+  sentAt: number | null;
 }
 
 const toRow = (r: typeof walletProofs.$inferSelect): ProofRow => ({
@@ -29,6 +31,7 @@ const toRow = (r: typeof walletProofs.$inferSelect): ProofRow => ({
   lastBlock: r.lastBlock,
   expiresAt: r.expiresAt.getTime(),
   tx: r.tx,
+  sentAt: r.sentAt ? r.sentAt.getTime() : null,
 });
 
 /** "0.0347" for an amount in wei. */
@@ -81,9 +84,15 @@ export async function getProof(db: Db, id: string): Promise<ProofRow | null> {
   return r ? toRow(r) : null;
 }
 
-/** Looked through up to `block`; the wallet's count is now `nonce` (it sent something else). */
-export async function advanceProof(db: Db, id: string, block: number, nonce: number): Promise<void> {
-  await db.update(walletProofs).set({ lastBlock: block, nonce }).where(eq(walletProofs.id, id));
+/**
+ * Looked through every block up to `block` without finding it. `sentAt` notes when the wallet was first seen
+ * sending (its count goes up a moment before its block can be read, so a miss right then means nothing yet).
+ */
+export async function advanceProof(db: Db, id: string, block: number, sentAt: number | null): Promise<void> {
+  await db
+    .update(walletProofs)
+    .set({ lastBlock: block, ...(sentAt !== null ? { sentAt: new Date(sentAt) } : {}) })
+    .where(eq(walletProofs.id, id));
 }
 
 /** Found it: the try is done. Returns false if it was already done (by another check at the same time). */

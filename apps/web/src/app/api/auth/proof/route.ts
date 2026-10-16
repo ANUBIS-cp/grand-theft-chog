@@ -72,28 +72,40 @@ export async function GET(req: Request) {
   if (Date.now() > p.expiresAt) return json({ state: 'expired' });
   const chain = publicClient();
   const address = getAddress(p.address);
+  const waiting = (sentOther = false) =>
+    json({ state: 'waiting', amount: monAmount(p.amountWei), expiresAt: p.expiresAt, sentOther });
+  // Nothing sent from the wallet since the try started: nothing to look for yet.
   const nonce = await chain.getTransactionCount({ address });
-  // Nothing sent from the wallet since the last look: nothing to search.
-  if (nonce <= p.nonce)
-    return json({ state: 'waiting', amount: monAmount(p.amountWei), expiresAt: p.expiresAt });
+  if (nonce <= p.nonce) return waiting();
+  const sentAt = p.sentAt ?? Date.now();
+  // Look through every block since the last look, a batch at a time, never skipping one: a phone that sat in the
+  // wallet app for a few minutes catches up over the next checks.
   const latest = Number(await chain.getBlockNumber());
-  const from = Math.max(p.lastBlock + 1, latest - SCAN_MAX + 1);
-  const blocks: number[] = [];
-  for (let b = from; b <= latest; b++) blocks.push(b);
-  for (let i = 0; i < blocks.length; i += 10) {
+  const to = Math.min(latest, p.lastBlock + SCAN_MAX);
+  let reached = p.lastBlock;
+  for (let from = p.lastBlock + 1; from <= to; from += 10) {
+    const nums: number[] = [];
+    for (let n = from; n < from + 10 && n <= to; n++) nums.push(n);
     const got = await Promise.all(
-      blocks
-        .slice(i, i + 10)
-        .map((n) => chain.getBlock({ blockNumber: BigInt(n), includeTransactions: true }).catch(() => null)),
+      nums.map((n) =>
+        chain.getBlock({ blockNumber: BigInt(n), includeTransactions: true }).catch(() => null),
+      ),
     );
-    for (const b of got)
-      for (const tx of b?.transactions ?? [])
+    for (const [i, b] of got.entries()) {
+      // A block not readable yet: stop here and pick up from it next time.
+      if (!b) {
+        await advanceProof(d, p.id, reached, sentAt);
+        return waiting();
+      }
+      for (const tx of b.transactions)
         if (typeof tx !== 'string' && isProofTx(p, tx)) {
           await finishProof(d, p.id, tx.hash, Date.now());
           return done();
         }
+      reached = nums[i]!;
+    }
   }
-  // They sent something else: remember where we got to.
-  await advanceProof(d, p.id, latest, nonce);
-  return json({ state: 'waiting', amount: monAmount(p.amountWei), expiresAt: p.expiresAt, sentOther: true });
+  await advanceProof(d, p.id, reached, sentAt);
+  // Only say it looks wrong once its block has had plenty of time to show up and we've caught up.
+  return waiting(reached >= latest && Date.now() - sentAt > 20_000);
 }
