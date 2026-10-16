@@ -1,13 +1,15 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, JetBrains_Mono, Koulen, Nunito } from 'next/font/google';
+import { Inter, JetBrains_Mono, Koulen } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 
 const koulen = Koulen({ weight: '400', subsets: ['latin'], variable: '--font-koulen', display: 'swap' });
 // On Apple devices the interface uses San Francisco (system font); Inter and Nunito stand in elsewhere.
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
-const nunito = Nunito({
-  subsets: ['latin'],
-  weight: ['700', '800', '900'],
+// Nunito (SIL Open Font License), kept in the repo: Google's copy broke the server's build on 16 Oct.
+const nunito = localFont({
+  src: './fonts/nunito-latin.woff2',
+  weight: '700 900',
   variable: '--font-nunito',
   display: 'swap',
 });
