@@ -8,7 +8,7 @@ import { chogImage } from '@/lib/images';
 // Getting in as your own Chog without connecting a wallet to a site you've never seen:
 // 1. Type (or paste) your wallet address: your Chogs show up at once, read from Monad, and you can walk the city
 //    and try the practice vault as one straight away.
-// 2. To rob for real, prove the wallet is yours: send a small amount of MON from it to itself (it comes straight
+// 2. To rob for real, prove the wallet is yours: send yourself a small amount of MON (it comes straight
 //    back). The game watches Monad and signs you in the moment it lands, for 30 days.
 // Connecting a wallet the usual way is still there for anyone who prefers it.
 
@@ -106,8 +106,7 @@ export function ChogPass(props: {
     return (
       <div className="text-white">
         <p className="text-[15px] leading-snug text-label-2">
-          Your Chog is already on Monad. Tell us which wallet holds it, and it walks in. No connecting, no
-          signing.
+          Enter the wallet that holds your Chog and it walks straight in. No connecting, no signing.
         </p>
         <label className="mt-5 block text-[13px] font-semibold text-label-2" htmlFor="cw-address">
           Your wallet address
@@ -192,8 +191,8 @@ export function ChogPass(props: {
           <span className="min-w-0 flex-1">
             <span className="block text-[16px] font-semibold">Verify to rob for real</span>
             <span className="block text-[13px] leading-snug text-label-2">
-              One send to yourself, about a minute. Then your robberies move real gang cash and your record
-              stays with your Chog.
+              Send yourself a small amount of MON. It takes about a minute, and then your robberies count for
+              real.
             </span>
           </span>
         </button>
@@ -317,8 +316,8 @@ function Verify(props: { address: string; onBack: () => void; onDone: () => void
   return (
     <div className="text-white">
       <p className="text-[15px] leading-snug text-label-2">
-        Send this exact amount from your wallet <strong className="text-white">to itself</strong>. It lands
-        straight back in your wallet; only the network fee is spent.
+        Send yourself this exact amount of MON. It comes right back to you, so all it costs is the network
+        fee.
       </p>
 
       {/* The ticket: the amount, and where it goes (from you, back to you). */}
@@ -367,7 +366,7 @@ function Verify(props: { address: string; onBack: () => void; onDone: () => void
       <ol className="mt-4 space-y-2 text-[14px] leading-snug">
         {[
           `Open the wallet that holds your Chog (${short(props.address)}).`,
-          `Tap Send and paste your own address as the recipient: you're sending to yourself. Enter exactly ${amount ?? 'the amount'} MON.`,
+          `Send ${amount ?? 'the amount'} MON to your own address. Use the copy button below if your wallet asks for it.`,
           'Come back here. You’re signed in the moment it lands.',
         ].map((t, i) => (
           <li key={t} className="flex gap-3">
@@ -404,8 +403,8 @@ function Verify(props: { address: string; onBack: () => void; onDone: () => void
       )}
       {sentOther && !expired && (
         <p className="mt-2 text-[13px] text-[#ffd666]">
-          We saw a transaction from your wallet, but not this one. Check it was exactly {amount} MON, to your
-          own address.
+          We saw a transaction from your wallet, but not this one. Make sure it’s exactly {amount} MON, sent
+          to your own address.
         </p>
       )}
       <button
