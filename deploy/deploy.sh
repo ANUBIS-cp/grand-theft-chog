@@ -23,8 +23,8 @@ git archive --format=tar HEAD | "${SSH[@]}" "sudo install -d -o chogcity -g chog
   npm run db:migrate --silent -w @chog-city/server
   cd apps/web
   cp -r .next/static .next/standalone/apps/web/.next/
-  # Keep the last version's code files too: a page opened before this deploy (a tab left open, a Telegram
-  # preview) still asks for them, and gets a white screen if they're gone.
+  # Keep the last version code files too: a page opened before this deploy, such as a tab left open or a
+  # Telegram preview, still asks for them and shows a white screen without them. No quotes in this block.
   OLD=/opt/chog-city/current/apps/web/.next/standalone/apps/web/.next/static
   if [ -d \$OLD ]; then cp -rn \$OLD/. .next/standalone/apps/web/.next/static/; fi
   if [ -d public ]; then cp -r public .next/standalone/apps/web/; fi
