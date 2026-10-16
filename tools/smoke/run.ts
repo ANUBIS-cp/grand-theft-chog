@@ -8,14 +8,30 @@ import WebSocket from 'ws';
 const base = process.argv[2] ?? 'http://localhost:3000';
 const host = new URL(base).host;
 const account = privateKeyToAccount(generatePrivateKey());
-let cookie = '';
+// Every cookie the site set, like a browser keeps them (the login and the guest's visitor id).
+const jar = new Map<string, string>();
+const cookieHeader = () => [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
 const call = async (path: string, init: RequestInit = {}) => {
   const res = await fetch(base + path, {
     ...init,
-    headers: { 'content-type': 'application/json', cookie, ...(init.headers ?? {}) },
+    // x-smoke: these checks aren't counted as visits on the usage page.
+    headers: {
+      'content-type': 'application/json',
+      cookie: cookieHeader(),
+      'x-smoke': '1',
+      ...(init.headers ?? {}),
+    },
   });
   const set = res.headers.get('set-cookie');
-  if (set) cookie = set.split(';')[0]!;
+  for (const c of res.headers.getSetCookie?.() ?? (set ? [set] : [])) {
+    const [kv, ...attrs] = c.split(';');
+    const i = kv!.indexOf('=');
+    const name = kv!.slice(0, i).trim();
+    const gone =
+      attrs.some((a) => /max-age=0|expires=thu, 01 jan 1970/i.test(a.trim())) || kv!.slice(i + 1) === '';
+    if (gone) jar.delete(name);
+    else jar.set(name, kv!.slice(i + 1));
+  }
   return { status: res.status, body: await res.json().catch(() => null) };
 };
 const check = (name: string, ok: boolean, detail = '') =>

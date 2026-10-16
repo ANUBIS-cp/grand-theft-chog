@@ -15,15 +15,21 @@ export async function GET(req: Request) {
   const address = await currentAddress();
   const chog = Number.isInteger(asked) ? getChog(asked) : undefined;
   const d = await db();
+  // The site's own checks (tools/smoke) say so, and aren't counted as visits.
+  const counted = req.headers.get('x-smoke') !== '1';
   if (!address || !chog) {
-    await noteVisit(d, { who: `g:${await guestId()}`, holder: false, chogId: null, now: Date.now() }).catch(
-      () => undefined,
-    );
+    if (counted)
+      await noteVisit(d, { who: `g:${await guestId()}`, holder: false, chogId: null, now: Date.now() }).catch(
+        () => undefined,
+      );
     return json({ ticket: makeTicket({ chog: null, name: 'Guest', gang: null, jail: null }) });
   }
   if (!(await canControl(d, address, chog.id)))
     return json({ ok: false, error: 'not-yours' }, { status: 403 });
-  await noteVisit(d, { who: address, holder: true, chogId: chog.id, now: Date.now() }).catch(() => undefined);
+  if (counted)
+    await noteVisit(d, { who: address, holder: true, chogId: chog.id, now: Date.now() }).catch(
+      () => undefined,
+    );
   const r = await heistRecord(d, chog.id);
   const jail = r?.jailedUntil && r.jailedUntil.getTime() > Date.now() ? r.jailedUntil.getTime() : null;
   return json({
