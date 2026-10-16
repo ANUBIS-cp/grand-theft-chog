@@ -64,6 +64,14 @@ export function prepareSound() {
     );
 }
 
+/** The one audio engine, once a tap has made it (null before). For the music (music.ts). */
+export function audioEngine(): AudioContext | null {
+  return shared;
+}
+
+/** Makes or wakes the engine; only works from inside a tap, key or click. */
+export const wakeSound = () => wake();
+
 /** Whether sound is actually on right now. */
 export function soundOn() {
   return !!shared && shared.state === 'running';

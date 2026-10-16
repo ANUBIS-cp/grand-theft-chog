@@ -28,6 +28,7 @@ import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
 import { chogImage } from '@/lib/images';
 import { Fx } from '../heist/fx';
+import { setMusicMuted } from '../heist/music';
 import { prepareSound, Sound, soundOn, soundTap, watchSound } from '../heist/sound';
 import type { RaidLink, RaidResult } from './raid-link';
 import { powerHint } from './power-fx';
@@ -730,6 +731,7 @@ export function RushGame(props: RushGameProps) {
     const m = !muted;
     setMuted(m);
     sound.current?.setMuted(m);
+    setMusicMuted(m);
     try {
       localStorage.setItem('heist-muted', m ? '1' : '0');
     } catch {}

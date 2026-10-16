@@ -83,3 +83,15 @@ npx tsx tools/smoke/run.ts https://chogworld.duckdns.org   # 23 checks against t
 ```
 
 `packages/data/scripts/verify-onchain.ts` checks the trait data against the Chog contract.
+
+## Music
+
+Four tracks from [Pixabay](https://pixabay.com/service/license-summary/) under the Pixabay Content License (free, no
+credit required, allowed in a game), levelled to the same loudness in `apps/web/public/music`:
+
+| In the game | Track | Artist |
+| --- | --- | --- |
+| The city at night | [Atmospheric Phonk Synthwave (Password Infinity)](https://pixabay.com/music/beats-atmospheric-phonk-synthwave-password-infinity-123276/) | Evgeny Bardyuzha |
+| The lock and the vault | [Spinning Head](https://pixabay.com/music/trap-spinning-head-271171/) | Gvidon |
+| The run home | [Risk](https://pixabay.com/music/main-title-risk-136788/) | StudioKolomna |
+| Halloween week | [The Paranormal Is Real](https://pixabay.com/music/future-bass-leonell-cassio-the-paranormal-is-real-ft-carrie-163742/) | Leonell Cassio |

@@ -21,6 +21,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChogPass, type Peek as Pass } from '@/components/chog-pass';
 import type { RealResult } from '@/components/heist/heist-game';
+import { playMusic, setMusicMuted, type Track } from '@/components/heist/music';
 import { prepareSound, Sound } from '@/components/heist/sound';
 import { LockGame } from '@/components/lock/lock-game';
 import { RaidLink } from '@/components/rush/raid-link';
@@ -681,10 +682,7 @@ export function CityApp() {
   const chasesRef = useRef<Chase[]>([]);
   if (chases.length) chasesRef.current = chases;
   const myChase = chog ? chases.find((c) => c.chog === chog.id) : undefined;
-  useEffect(() => {
-    if (myChase) siren.current?.alarmOn();
-    else siren.current?.alarmOff();
-  }, [myChase]);
+  // The police cars bring their own siren now (city-view); the vault's alarm stays in the vault.
   useEffect(() => () => siren.current?.alarmOff(), []);
   const chaseEnded = (e: ChaseEnd) => {
     const c = chasesRef.current.find((x) => x.run === e.run);
@@ -1085,7 +1083,6 @@ export function CityApp() {
               const home = chog?.gang ? placeOf(chog.gang)!.door : { x: CITY.spawn.x, y: CITY.spawn.y - 2.2 };
               siren.current ??= new Sound();
               siren.current.unlock();
-              siren.current.alarmOn();
               const from = placeOf('training')!.door;
               setPracticeRun({
                 since: Date.now(),
@@ -1100,6 +1097,22 @@ export function CityApp() {
     }
     return null;
   })();
+  // The music follows the scene: the vault (and its lock), the run home, or the city at night.
+  const track: Track = heistScreen
+    ? 'vault'
+    : myChase || practiceRun
+      ? 'chase'
+      : haunt
+        ? 'halloween'
+        : 'city';
+  useEffect(() => playMusic(track), [track]);
+  useEffect(() => {
+    try {
+      setMusicMuted(localStorage.getItem('heist-muted') === '1');
+    } catch {
+      /* no storage */
+    }
+  }, []);
 
   const anyCard = !!(
     (door && doorOpen) ||

@@ -2,6 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { HeistGame, type HeistGameProps } from '@/components/heist/heist-game';
+import { playMusic } from '@/components/heist/music';
 import { soundTap } from '@/components/heist/sound';
 import { chogImage } from '@/lib/images';
 import { RushGame, type RushGameProps } from '@/components/rush/rush-game';
@@ -32,6 +33,7 @@ export function RushReplayView({
           <button
             onClick={() => {
               soundTap();
+              playMusic('vault');
               setStarted(true);
             }}
             className="btn press btn-gold mt-5 w-full"
@@ -42,12 +44,28 @@ export function RushReplayView({
         </div>
       </div>
     );
-  if (getaway && home) return <GetawayReplay {...getaway} onVault={() => setHome(false)} />;
+  if (getaway && home)
+    return (
+      <GetawayReplay
+        {...getaway}
+        onVault={() => {
+          playMusic('vault');
+          setHome(false);
+        }}
+      />
+    );
   return (
     <RushGame
       {...props}
       onLeave={() => router.push('/')}
-      onGetaway={getaway ? () => setHome(true) : undefined}
+      onGetaway={
+        getaway
+          ? () => {
+              playMusic('chase');
+              setHome(true);
+            }
+          : undefined
+      }
     />
   );
 }
