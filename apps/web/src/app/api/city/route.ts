@@ -2,7 +2,7 @@ import { displayName, getChog, tokenIdFor } from '@chog-city/data';
 import { chogInfo } from '@chog-city/game';
 import { powersFor } from '@chog-city/game/heist';
 import { strollers } from '@chog-city/game/city';
-import { BURN_PRICE, POSTER_LINES, burnsNow, jailed } from '@chog-city/server';
+import { BURN_PRICE, POSTER_LINES, burnsNow, eventText, eventsNow, jailed } from '@chog-city/server';
 import { db } from '@/server/db';
 import { json } from '@/server/http';
 
@@ -14,7 +14,11 @@ const PRACTICE = tokenIdFor(1595);
 /** Who's on the street besides the players: today's strollers, everyone in jail, posters and banners. */
 export async function GET() {
   const now = Date.now();
-  const [inJail, burns] = await Promise.all([jailed(await db(), now), burnsNow(await db(), now)]);
+  const [inJail, burns, events] = await Promise.all([
+    jailed(await db(), now),
+    burnsNow(await db(), now),
+    eventsNow(await db(), now),
+  ]);
   return json({
     strollers: strollers(now).map((s) => ({ ...s, name: name(s.id) })),
     jailed: inJail.map((j) => ({ ...j, name: name(j.id) })),
@@ -26,6 +30,8 @@ export async function GET() {
       prices: BURN_PRICE,
       lines: POSTER_LINES,
     },
+    // Judging-week events on now (packages/server/src/events.ts): a line for the big screen, a banner.
+    events: eventText(events),
     practice: { id: PRACTICE, name: name(PRACTICE), powers: powersFor(chogInfo(PRACTICE).skills) },
   });
 }

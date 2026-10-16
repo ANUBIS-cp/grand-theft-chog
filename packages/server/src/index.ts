@@ -10,3 +10,4 @@ export * from './heists.ts';
 export * from './burns.ts';
 export * from './usage.ts';
 export * from './recap.ts';
+export * from './events.ts';

@@ -209,6 +209,12 @@
       0 24px 70px rgb(0 0 0 / 0.55);
   }
   /* Springy press, like a tap on iOS. */
+  /* A bigger finger target than the button looks: 8 px all round (a 32 px button is a 48 px target). */
+  .hit::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
   .press {
     transition:
       transform 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.25),

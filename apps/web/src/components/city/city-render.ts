@@ -82,6 +82,8 @@ export interface Board {
   lines: { name: string; cash: number; color: string }[];
   /** All the $CHOG the city has burned (bail, posters, banners). */
   burned?: number;
+  /** An event on now (the election, Halloween): takes turns with the burned count on the bottom strip. */
+  events?: string[];
 }
 
 type Img = HTMLImageElement;
@@ -1456,7 +1458,11 @@ export class CityRenderer {
     g.textAlign = 'center';
     const flicker = 0.85 + 0.15 * Math.sin(now / 90) * Math.sin(now / 37);
     g.fillStyle = `rgba(255,122,26,${flicker})`;
-    g.fillText(`${(this.board.burned ?? 0).toLocaleString('en-US')} $CHOG BURNED`, x + w / 2, by + 1);
+    const strips = [
+      `${(this.board.burned ?? 0).toLocaleString('en-US')} $CHOG BURNED`,
+      ...(this.board.events ?? []),
+    ];
+    g.fillText(strips[Math.floor(now / 4000) % strips.length]!, x + w / 2, by + 1, w - t * 0.5);
     // Scan line.
     g.fillStyle = 'rgba(255,255,255,0.04)';
     const scan = ((now / 30) % (h - t * 0.3)) | 0;

@@ -76,7 +76,7 @@ export function RoleCard(props: {
           onClick={() => setOpen((o) => !o)}
           aria-label={open ? 'Hide jobs' : 'Show jobs'}
           aria-expanded={open}
-          className="press relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fill-2 text-label-2 hover:text-white max-sm:h-8 max-sm:w-8"
+          className="hit press relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fill-2 text-label-2 hover:text-white max-sm:h-8 max-sm:w-8"
         >
           <CaretDown
             size={15}

@@ -1,11 +1,4 @@
-import {
-  GANG_IDS,
-  canJoinGang,
-  getChog,
-  looksLike,
-  pickFaces,
-  type GangId,
-} from '@chog-city/data';
+import { GANG_IDS, canJoinGang, getChog, looksLike, pickFaces, type GangId } from '@chog-city/data';
 import { chogInfo, dayOf } from '@chog-city/game';
 import {
   JAIL_MS,
@@ -42,6 +35,7 @@ import {
 import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { chogBurns, gangVaults, heistChogs, heistRuns, type Db } from './db/index.ts';
+import { eventBonus } from './events.ts';
 import { canControl } from './ownership.ts';
 
 // The gang war on the server: vault balances, who may start a heist, and settling a finished one by
@@ -422,8 +416,17 @@ export async function finishRun(
     const breakout = run.prisoner !== null;
     const vaultHas = breakout ? 0 : (cash[run.target] ?? 0);
     const robberHas = breakout ? 0 : (cash[run.gang] ?? 0);
-    const { state, moved } = replayRun(run, text, vaultHas, robberHas, defenders);
+    const replayed = replayRun(run, text, vaultHas, robberHas, defenders);
+    const { state } = replayed;
     const escaped = state.phase === 'escaped';
+    // Judging-week events (events.ts): the election's winners and Halloween take a bigger haul.
+    const bonus =
+      escaped && !breakout
+        ? await eventBonus(tx as unknown as Db, run.chogId, run.gang, run.startedAt.getTime())
+        : 0;
+    const moved = bonus
+      ? Math.min(vaultHas, Math.floor((replayed.moved * (100 + bonus)) / 100))
+      : replayed.moved;
     // Out with cash: the bag leaves the vault now (it can't be spent twice) and reaches your gang's vault
     // only when you carry it home.
     const bagged = escaped && !breakout && moved > 0;

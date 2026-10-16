@@ -31,7 +31,7 @@ async function bot(i) {
     const c = { ws, timer: null };
     clients.push(c);
     ws.on('open', () => ws.send(JSON.stringify({ t: 'hi', ticket })));
-    ws.on('close', (code) => {
+    ws.on('close', () => {
       if (!me) refused++;
       resolve();
     });

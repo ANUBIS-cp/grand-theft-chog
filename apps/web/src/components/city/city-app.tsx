@@ -118,6 +118,7 @@ interface CityData {
   jailed: Jailed[];
   practice: { id: number; name: string; powers: PowerId[] };
   burns: Burns;
+  events?: { key: string; screen: string; title: string; line: string }[];
 }
 
 const POWER_ICON: Record<PowerId, Parameters<typeof SkillIcon>[0]['skill']> = {
@@ -426,6 +427,30 @@ export function CityApp() {
     const t = setTimeout(() => setBanner(null), 5000);
     return () => clearTimeout(t);
   }, [banner]);
+  // An event on now (the election, Halloween): its banner once a day, a moment after you arrive.
+  const eventKey = city?.events?.map((e) => e.key).join(',') ?? '';
+  useEffect(() => {
+    const events = city?.events ?? [];
+    const day = new Date().toISOString().slice(0, 10);
+    const fresh = events.find((e) => {
+      try {
+        return localStorage.getItem(`cw-event-${e.key}`) !== day;
+      } catch {
+        return false;
+      }
+    });
+    if (!fresh) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(`cw-event-${fresh.key}`, day);
+      } catch {
+        /* no storage */
+      }
+      setBanner({ id: `event-${fresh.key}`, title: fresh.title, line: fresh.line, tone: 'win' });
+    }, 2500);
+    return () => clearTimeout(t);
+    // Once per set of events, not on every city refresh.
+  }, [eventKey]);
 
   useEffect(() => {
     if (!raid) return;
@@ -475,8 +500,9 @@ export function CityApp() {
         .slice(0, 3)
         .map((v) => ({ name: GANGS[v.gang].name, cash: v.cash, color: GANG_COLOR[v.gang].bg })),
       burned: city?.burns.burned ?? 0,
+      events: city?.events?.map((e) => e.screen),
     }),
-    [board, city?.burns.burned],
+    [board, city?.burns.burned, city?.events],
   );
   const meLook = useMemo(
     () =>
@@ -1674,7 +1700,7 @@ function Card({ children, onClose }: { children: React.ReactNode; onClose?: () =
         {onClose && (
           <button
             onClick={onClose}
-            className="press absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-fill text-label-2 hover:text-white"
+            className="hit press absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-fill text-label-2 hover:text-white"
             aria-label="Close"
           >
             <X size={14} weight="bold" />
@@ -1704,7 +1730,7 @@ function Board({ children, onClose }: { children: React.ReactNode; onClose: () =
       >
         <button
           onClick={onClose}
-          className="press absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-fill text-label-2 hover:text-white"
+          className="hit press absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-fill text-label-2 hover:text-white"
           aria-label="Close"
         >
           <X size={14} weight="bold" />
@@ -1749,7 +1775,7 @@ function Sheet({
           <h2 className="font-display text-[26px] leading-none">{title}</h2>
           <button
             onClick={onClose}
-            className="press grid h-8 w-8 place-items-center rounded-full bg-fill text-label-2 hover:text-white"
+            className="hit press relative grid h-8 w-8 place-items-center rounded-full bg-fill text-label-2 hover:text-white"
             aria-label="Close"
           >
             <X size={14} weight="bold" />
