@@ -1,4 +1,4 @@
-import { CHOGS, gangOptions, type GangId } from '@chog-city/data';
+import { CHOGS, GANG_IDS, gangOptions, looksLike, type GangId } from '@chog-city/data';
 import { dayOf } from '../time.ts';
 import { CITY, Ground, groundAt, route, smooth, standable, type City } from './map.ts';
 
@@ -100,7 +100,8 @@ export function strollers(now: number, n = 36): { id: number; gang: GangId }[] {
   for (let tries = 0; out.length < n && tries < n * 20; tries++) {
     seed = (Math.imul(seed ^ (seed >>> 15), 2246822519) + 3266489917) >>> 0;
     const c = CHOGS[seed % CHOGS.length]!;
-    const gang = gangOptions(c).born[0];
+    // Walks for the gang it visibly wears, so its colour matches what you see on it.
+    const gang = GANG_IDS.find((g) => looksLike(c, g)) ?? gangOptions(c).born[0];
     if (gang && !out.some((o) => o.id === c.id)) out.push({ id: c.id, gang });
   }
   return out;

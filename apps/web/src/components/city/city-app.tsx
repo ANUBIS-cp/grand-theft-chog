@@ -238,7 +238,12 @@ export function CityApp() {
       stop: () => setPracticeRun(null),
       lock: () => startPracticeRef.current(),
       banner: () =>
-        setBanner({ id: `d${Date.now()}`, title: 'Got away!', line: 'You ran $420 home to your gang.', tone: 'win' }),
+        setBanner({
+          id: `d${Date.now()}`,
+          title: 'Got away!',
+          line: 'You ran $420 home to your gang.',
+          tone: 'win',
+        }),
     };
   }, []);
   const startPracticeRef = useRef(() => {});
@@ -944,7 +949,11 @@ export function CityApp() {
 
     if (practice && city) {
       const player = chog ? { id: chog.id, name: chog.name, powers: chog.powers } : city.practice;
-      const guards = city.strollers.slice(0, 4).map((s) => ({ id: s.id, name: s.name }));
+      // The gang whose lock you just picked guards the practice vault too: its own faces.
+      const own = board?.board.find((v) => v.gang === practice.gang)?.guards ?? [];
+      const guards = own.length
+        ? own.slice(0, 4).map((id) => ({ id, name: `Chog #${metadataIdFor(id)}` }))
+        : city.strollers.slice(0, 4).map((s) => ({ id: s.id, name: s.name }));
       return (
         <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0918]">
           <RushGame
@@ -1246,18 +1255,18 @@ export function CityApp() {
             />
           ) : (
             <>
-          <div className="relative flex items-end gap-2 sm:flex-col sm:items-center sm:gap-3">
-            <ChatButton
-              unread={chat.filter((m) => m.id > chatSeen && m.chog !== chog?.id).length}
-              onClick={() => setChatOpen((o) => !o)}
-            />
-            <EmoteButton onClick={() => setEmoteOpen((o) => !o)} />
-          </div>
-          <div className="flex items-end gap-2 sm:flex-col sm:items-center sm:gap-3">
-            <MapButton onClick={() => setMapOpen(true)} />
-            <GangsButton onClick={() => setSheet('gangs')} />
-          </div>
-          <RoundButton big {...useLook} hotkey="E" disabled={!door} lit={!!door} onClick={openDoor} />
+              <div className="relative flex items-end gap-2 sm:flex-col sm:items-center sm:gap-3">
+                <ChatButton
+                  unread={chat.filter((m) => m.id > chatSeen && m.chog !== chog?.id).length}
+                  onClick={() => setChatOpen((o) => !o)}
+                />
+                <EmoteButton onClick={() => setEmoteOpen((o) => !o)} />
+              </div>
+              <div className="flex items-end gap-2 sm:flex-col sm:items-center sm:gap-3">
+                <MapButton onClick={() => setMapOpen(true)} />
+                <GangsButton onClick={() => setSheet('gangs')} />
+              </div>
+              <RoundButton big {...useLook} hotkey="E" disabled={!door} lit={!!door} onClick={openDoor} />
             </>
           )}
         </div>
@@ -2334,14 +2343,21 @@ function ChaseBar(props: { c: Chase; ours: boolean; canChase: boolean; onChase: 
       )}
     >
       <span className="relative shrink-0">
-        <img src={chogImage(c.chog, 96)} alt="" className="h-11 w-11 rounded-[14px] object-cover max-sm:h-9 max-sm:w-9 max-sm:rounded-[11px]" />
+        <img
+          src={chogImage(c.chog, 96)}
+          alt=""
+          className="h-11 w-11 rounded-[14px] object-cover max-sm:h-9 max-sm:w-9 max-sm:rounded-[11px]"
+        />
         <span className="absolute -bottom-1 -right-1 rounded-full bg-sys-gold px-1.5 text-[10px] font-bold text-black">
           $
         </span>
       </span>
       <p className="min-w-0 flex-1 text-[13px] leading-snug text-label-2 max-sm:line-clamp-2 max-sm:text-[11px]">
         <span
-          className={cn('block font-display text-[16px] leading-tight max-sm:text-[14px]', ours ? 'text-sys-red' : 'text-white')}
+          className={cn(
+            'block font-display text-[16px] leading-tight max-sm:text-[14px]',
+            ours ? 'text-sys-red' : 'text-white',
+          )}
         >
           {ours ? 'Stop the robber!' : 'Getaway'}
         </span>

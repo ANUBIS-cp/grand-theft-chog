@@ -129,3 +129,16 @@ describe('game text', () => {
     expect(all).not.toMatch(/!/);
   });
 });
+
+describe('gang faces', () => {
+  it('every gang has faces that wear its look, and its guards wear it too', async () => {
+    const { GANG_IDS, gangFaces, pickFaces, looksLike, getChog } = await import('./index.ts');
+    for (const g of GANG_IDS) {
+      expect(gangFaces(g).length, g).toBeGreaterThanOrEqual(8);
+      for (const id of pickFaces(g, 4)) expect(looksLike(getChog(id)!, g), `${g} ${id}`).toBe(true);
+    }
+    // A Durag Gang face has a durag on; a Royals face a crown.
+    for (const id of pickFaces('durags', 6)) expect(getChog(id)!.traits.Head).toBe('Durag');
+    for (const id of pickFaces('royals', 6)) expect(getChog(id)!.traits.Head).toBe('Crown');
+  });
+});

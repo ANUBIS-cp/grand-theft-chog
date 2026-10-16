@@ -1,4 +1,11 @@
-import { CHOGS, GANG_IDS, canJoinGang, gangOptions, getChog, type GangId } from '@chog-city/data';
+import {
+  GANG_IDS,
+  canJoinGang,
+  getChog,
+  looksLike,
+  pickFaces,
+  type GangId,
+} from '@chog-city/data';
 import { chogInfo, dayOf } from '@chog-city/game';
 import {
   JAIL_MS,
@@ -119,21 +126,26 @@ export async function vaults(db: Db): Promise<Record<GangId, VaultState>> {
   ) as Record<GangId, VaultState>;
 }
 
-/** A gang's guards: its members who catch the most robbers, topped up with Chogs born into the gang. */
+/**
+ * A gang's guards: its members who catch the most robbers, topped up with Chogs that clearly wear the gang's
+ * look. Only Chogs that visibly wear it guard (a Durag Gang guard has a durag on), so a member who joined by a
+ * smaller trait doesn't stand guard.
+ */
 export async function guardsFor(db: Db, gang: GangId, n: number): Promise<number[]> {
   const members = await db
     .select({ id: heistChogs.id })
     .from(heistChogs)
     .where(eq(heistChogs.gang, gang))
     .orderBy(desc(heistChogs.catches), desc(heistChogs.escapes), heistChogs.id)
-    .limit(n);
-  const out = members.map((m) => m.id);
-  const born = CHOGS.filter((c) => gangOptions(c).born.includes(gang));
-  for (let i = 0; out.length < n && born.length && i < born.length; i++) {
-    const pick = born[Math.floor((i * born.length) / Math.max(n, 1)) % born.length]!.id;
-    if (!out.includes(pick)) out.push(pick);
-  }
-  return out;
+    .limit(n * 4);
+  const out = members
+    .filter((m) => {
+      const c = getChog(m.id);
+      return !!c && looksLike(c, gang);
+    })
+    .slice(0, n)
+    .map((m) => m.id);
+  return [...out, ...pickFaces(gang, n - out.length, out)];
 }
 
 export async function heistRecord(db: Db, chogId: number) {
@@ -826,10 +838,7 @@ async function jailGuards(db: Db, n: number): Promise<number[]> {
     .orderBy(desc(heistChogs.catches), heistChogs.id)
     .limit(n);
   const out = best.map((b) => b.id);
-  const birds = CHOGS.filter((c) => gangOptions(c).born.includes('jailbirds'));
-  for (let i = 0; out.length < n && i < birds.length; i += 7)
-    if (!out.includes(birds[i]!.id)) out.push(birds[i]!.id);
-  return out;
+  return [...out, ...pickFaces('jailbirds', n - out.length, out)];
 }
 
 /** Starts a break-out: sneak into the jail and free a gang-mate. Each Chog gets one try a day. */

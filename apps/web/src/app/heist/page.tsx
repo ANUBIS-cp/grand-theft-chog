@@ -5,6 +5,7 @@ import {
   displayName,
   gangOptions,
   getChog,
+  pickFaces,
   tokenIdFor,
   type GangId,
 } from '@chog-city/data';
@@ -38,11 +39,7 @@ export default async function HeistPage({
   const opts = gangOptions(chog);
   const mine: GangId | null = canJoinGang(chog, 'lazoor') ? 'lazoor' : (opts.born[0] ?? null);
   const owner: GangId = mine === 'lazoor' ? 'mcga' : 'lazoor';
-  const crew = CHOGS.filter((c) => c.id !== chog.id && gangOptions(c).born.includes(owner));
-  const guards = [0, 1, 2, 3]
-    .map((k) => crew[Math.floor((crew.length * k) / 4)])
-    .filter((c) => !!c)
-    .map((c) => ({ id: c.id, name: displayName(c) }));
+  const guards = pickFaces(owner, 4, [chog.id]).map((id) => ({ id, name: displayName(getChog(id)!) }));
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-[#0b0918]">

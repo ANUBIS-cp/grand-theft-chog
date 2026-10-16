@@ -258,3 +258,53 @@ export const GANGS: Record<GangId, GangDef> = {
     from: [['Base', '1:1']],
   },
 };
+
+/**
+ * What a gang looks like at a glance: the traits its pictures are picked by (guards, gang cards, the board, the
+ * Chogs walking the city), so every face shown for a gang visibly wears it. Narrower than `from` where some of
+ * a gang's traits are small or easy to miss (a knife, a cigar, a gold tooth). Gangs not listed use `from`.
+ */
+export const GANG_LOOK: Partial<Record<GangId, TraitMatch[]>> = {
+  gangstas: [
+    ['Body', 'Gangster suit'],
+    ['Body', 'Chug Life'],
+    ['Body', 'Blue Mafia'],
+    ['Head', 'Mafia Hat'],
+  ],
+  robbers: [
+    ['Head', 'Robber'],
+    ['Head', 'Red Bandana'],
+  ],
+  suits: [
+    ['Body', 'Tuxedo'],
+    ['Body', 'Red Tuxedo'],
+    ['Body', 'White tuxedo'],
+    ['Body', 'Cream Tuxedo'],
+    ['Body', 'Pink Tuxedo'],
+    ['Body', 'Aqua Tuxedo'],
+    ['Body', 'Blue tuxedo'],
+    ['Body', 'Cyan tuxedo'],
+  ],
+  royals: [['Head', 'Crown']],
+  wizards: [
+    ['Head', 'Wizard Hat'],
+    ['Head', 'Wizard Beanie'],
+  ],
+  clowns: [
+    ['Head', 'Rainbow Wig'],
+    ['Head', 'Clown Nose'],
+    ['Mouth', 'Clown Mouth'],
+  ],
+  'btc-maxis': [
+    ['Head', 'BTC Cap'],
+    ['Head', 'BTC Beanie'],
+    ['Head', 'Buttcoin Cap'],
+  ],
+  'mon-maxis': [
+    ['Head', 'Mon Cap'],
+    ['Head', 'Mon Beanie'],
+    ['Head', '10k TPS Cap'],
+    ['Body', 'Mon Hoodie'],
+  ],
+  durags: [['Head', 'Durag']],
+};
