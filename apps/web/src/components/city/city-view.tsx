@@ -112,6 +112,8 @@ interface Props {
   onChat?: (all: ChatMsg[], fresh: ChatMsg | null, refused?: string) => void;
   /** The practice getaway ended (nothing real moves). */
   onPracticeEnd?: (outcome: 'home' | 'caught' | 'time') => void;
+  /** First visit: the gold arrow points here (the practice warehouse) until you've tried it. */
+  guide?: { x: number; y: number } | null;
 }
 
 const KEYS: Record<string, [number, number]> = {
@@ -572,7 +574,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         const mineNow = !!mine?.bag || !!pr;
         steps.policeLevel(Math.max(mineNow ? 0.15 : 0, 1 - near / 14));
       } else steps.policeOff();
-      const home = mine ? placeOf(mine.home)?.door : pr ? pr.home : undefined;
+      const home = mine ? placeOf(mine.home)?.door : pr ? pr.home : (p.guide ?? undefined);
 
       r.places = p.places;
       r.board = p.board;

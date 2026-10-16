@@ -107,9 +107,14 @@ export default async function RecapPage({ params }: Props) {
         ) : (
           <span />
         )}
-        <Link href="/" className="underline underline-offset-2">
-          Into the city
-        </Link>
+        <span className="flex gap-4">
+          <Link href="/fair" className="underline underline-offset-2">
+            How it’s fair
+          </Link>
+          <Link href="/" className="underline underline-offset-2">
+            Into the city
+          </Link>
+        </span>
       </div>
     </PageShell>
   );

@@ -47,6 +47,8 @@ The total burned is shown on the big screen in the plaza.
 
 ## What makes it fair
 
+In the game: [chogworld.duckdns.org/fair](https://chogworld.duckdns.org/fair).
+
 - **The server replays every run.** The vault game runs the same way every time from the run's seed, so the browser sends only your key
   presses and the server plays them back to find out what really happened. A modified browser can't fake a result.
 - **The live server referees the getaway.** It moves the police, checks every step and signs the result it sends

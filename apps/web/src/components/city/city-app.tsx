@@ -258,6 +258,38 @@ export function CityApp() {
     });
   };
   startPracticeRef.current = startPractice;
+  // A first visit: a welcome, and the gold arrow to the practice warehouse until you've tried a robbery there.
+  const [practiced, setPracticed] = useState(true);
+  useEffect(() => {
+    let done = true;
+    try {
+      done = localStorage.getItem('cw-practiced') === '1';
+    } catch {
+      /* no storage: no guide */
+    }
+    setPracticed(done);
+    if (done) return;
+    const t = setTimeout(
+      () =>
+        setBanner({
+          id: 'welcome',
+          title: 'Try a practice robbery',
+          line: 'Follow the gold arrow to the practice vault. No wallet needed.',
+          tone: 'win',
+        }),
+      1500,
+    );
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(() => {
+    if (!practice || practiced) return;
+    setPracticed(true);
+    try {
+      localStorage.setItem('cw-practiced', '1');
+    } catch {
+      /* no storage */
+    }
+  }, [practice, practiced]);
   /** The door you're standing at, and whether its card is open. */
   const [door, setDoor] = useState<Place | null>(null);
   const [doorOpen, setDoorOpen] = useState(false);
@@ -1068,8 +1100,11 @@ export function CityApp() {
           setChatRefused(refused ?? null);
           if (fresh && chatOpenRef.current) setChatSeen(fresh.id);
         }}
+        guide={practiced ? null : placeOf('training')!.door}
         onPracticeEnd={(outcome) => {
           setPracticeRun(null);
+          // A guest who just got the bag home: now the real thing needs a Chog.
+          if (outcome === 'home' && !me?.address) setTimeout(() => setSheet('connect'), 3500);
           siren.current?.alarmOff();
           if (outcome === 'home') siren.current?.escaped();
           else siren.current?.busted();
@@ -1372,7 +1407,9 @@ export function CityApp() {
             and bring the cash home.
           </p>
           <p className="mt-2 text-[14px] text-white/60">
-            Walk with the arrow keys or WASD, or tap where you want to go.
+            <span className="sm:hidden">Drag anywhere to walk. </span>
+            <span className="max-sm:hidden">Walk with the arrow keys or WASD, or tap where you want to go. </span>
+            No wallet? Follow the gold arrow to the practice vault.
           </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button onClick={() => setSheet('connect')} className={cn(btn, 'btn-gold whitespace-nowrap')}>
