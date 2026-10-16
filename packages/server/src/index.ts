@@ -8,3 +8,4 @@ export * from './transfers.ts';
 export * from './queries.ts';
 export * from './heists.ts';
 export * from './burns.ts';
+export * from './usage.ts';

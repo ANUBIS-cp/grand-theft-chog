@@ -50,6 +50,13 @@
       "when": 1792075295240,
       "tag": "0006_getaway_track",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792125245514,
+      "tag": "0007_visits",
+      "breakpoints": true
     }
   ]
 }

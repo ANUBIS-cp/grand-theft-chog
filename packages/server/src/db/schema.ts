@@ -231,3 +231,24 @@ export const chogBurns = pgTable(
   },
   (t) => [index('chog_burns_kind_until').on(t.kind, t.until)],
 );
+
+// ---------- usage ----------
+
+/**
+ * Who came to the city each day, once per day: a holder by wallet, a guest by a random id kept in a cookie
+ * (nothing else about them). For the usage page: daily players, and how many come back.
+ */
+export const visits = pgTable(
+  'visits',
+  {
+    /** Game day (see dayOf). */
+    day: integer('day').notNull(),
+    /** A wallet (lower case) or 'g:' + a guest's random id. */
+    who: text('who').notNull(),
+    holder: boolean('holder').notNull(),
+    /** The Chog they walked in as (holders). */
+    chogId: integer('chog_id'),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.day, t.who] })],
+);
