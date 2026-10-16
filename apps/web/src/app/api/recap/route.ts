@@ -9,5 +9,13 @@ export async function GET(req: Request) {
   const day = new URL(req.url).searchParams.get('day') ?? String(dayOf(Date.now()) - 1);
   const r = await recapFor(day);
   if (!r) return json({ ok: false, error: 'not-found' }, { status: 404 });
-  return json({ ok: true, recap: r, lines: recapLines(r), url: `/recap/${r.day}` });
+  const base = `https://${(process.env.PUBLIC_HOST ?? 'chogworld.duckdns.org').split(',')[0]!.trim()}`;
+  return json({
+    ok: true,
+    recap: r,
+    lines: recapLines(r),
+    quiet: !r.robberies && !r.breakouts.tried,
+    url: `${base}/recap/${r.day}`,
+    image: `${base}/recap/${r.day}/opengraph-image`,
+  });
 }
