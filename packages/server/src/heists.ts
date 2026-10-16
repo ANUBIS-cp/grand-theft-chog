@@ -39,7 +39,7 @@ import {
   settleRush,
   type DefenderLog,
 } from '@chog-city/game/rush';
-import { and, desc, eq, gt, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { chogBurns, gangVaults, heistChogs, heistRuns, type Db } from './db/index.ts';
 import { canControl } from './ownership.ts';
@@ -627,7 +627,7 @@ export async function expireGetaways(db: Db, now: number): Promise<number> {
   const due = await db
     .select({ id: heistRuns.id })
     .from(heistRuns)
-    .where(and(eq(heistRuns.getaway, 'running'), sql`${heistRuns.bagUntil} < ${new Date(now)}`));
+    .where(and(eq(heistRuns.getaway, 'running'), lt(heistRuns.bagUntil, new Date(now))));
   for (const r of due)
     await finishGetaway(db, { runId: r.id, outcome: 'home', by: null, now }).catch(() => undefined);
   return due.length;

@@ -81,7 +81,7 @@ export async function usage(db: Db, now = Date.now(), last = 14): Promise<Usage>
              count(*) filter (where getaway = 'home') as home,
              count(*) filter (where getaway = 'caught') as caught,
              count(*) filter (where prisoner is not null) as breakouts
-      from heist_runs where started_at >= ${new Date(dayStart(from))} group by 1`),
+      from heist_runs where started_at >= ${new Date(dayStart(from)).toISOString()}::timestamptz group by 1`),
   );
   const totals = rows<{ runs: number; ganged: number }>(
     await db.execute(sql`

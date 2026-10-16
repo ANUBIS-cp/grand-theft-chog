@@ -63,7 +63,7 @@ export async function dayRecap(db: Db, day: number): Promise<DayRecap> {
   const [burn] = rows<{ chog: number }>(
     await db.execute(sql`
       select coalesce(sum(amount), 0)::int as chog from chog_burns
-      where at >= ${new Date(start)} and at < ${new Date(start + DAY)}`),
+      where at >= ${new Date(start).toISOString()}::timestamptz and at < ${new Date(start + DAY).toISOString()}::timestamptz`),
   );
   const v = await vaults(db);
   const top = [...GANG_IDS]
