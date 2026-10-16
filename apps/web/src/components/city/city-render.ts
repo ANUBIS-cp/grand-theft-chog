@@ -23,6 +23,7 @@ import {
   type WalkStyle,
 } from '../chog/walk';
 import { CityArt } from './art';
+import type { Halloween, HauntView } from './halloween';
 import { FACADE, LANDMARK_RISE, paintLandmark, paintWall, paintYard, treeOf } from './landmarks';
 
 // Draws the city at night in the same 3/4 view as the vaults: ground tiles, buildings (roof at the back, front
@@ -156,6 +157,19 @@ export class CityRenderer {
   board: Board = { lines: [] };
   /** Police cars on a getaway (packages/game/src/city/patrol.ts): drawn with their sirens going. */
   sirens: PatrolCar[] = [];
+  /** Halloween week's haunting (halloween.ts), or null the rest of the year. */
+  haunt: Halloween | null = null;
+  private hauntView(): HauntView {
+    return {
+      g: this.g,
+      t: this.t,
+      view: this.view,
+      cam: this.cam,
+      sx: this.sx,
+      sy: this.sy,
+      picture: (id) => this.image(id),
+    };
+  }
   private g: CanvasRenderingContext2D;
   private dark!: HTMLCanvasElement;
   private tiles: Record<string, HTMLCanvasElement> = {};
@@ -1865,9 +1879,18 @@ export class CityRenderer {
       g.stroke();
     }
 
+    const haunt = this.haunt;
+    const hv = haunt ? this.hauntView() : null;
+    if (haunt && hv) {
+      const mine = people.find((p) => p.me);
+      haunt.step(hv, now, mine ? { x: mine.x, y: mine.y } : null);
+      haunt.ground(g, hv, now);
+    }
+
     // Everything that stands up, drawn back to front.
     type Thing = { y: number; draw: () => void };
     const things: Thing[] = [];
+    if (haunt && hv) haunt.things(hv, now, (y, draw) => things.push({ y, draw }));
     const inView = (x: number, y: number, m: number) =>
       x >= x0 - m && x <= x1 + m && y >= y0 - m && y <= y1 + m;
     for (const p of CITY.places) {
@@ -1922,8 +1945,13 @@ export class CityRenderer {
     }
     for (const c of this.sirens)
       if (inView(c.x, c.y, 3)) lit.push({ x: this.sx(c.x), y: this.sy(c.y), r: t * 1.6 });
+    if (haunt && hv) lit.push(...haunt.lights(hv, now));
     this.drawNight(x0, y0, x1, y1, now, lit);
     this.drawSirenGlow(now, inView);
+    if (haunt && hv) {
+      haunt.glow(g, hv, now);
+      haunt.sky(g, hv);
+    }
 
     for (const p of CITY.places) {
       const look = this.places[p.id];

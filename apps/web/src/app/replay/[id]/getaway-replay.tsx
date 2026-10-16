@@ -12,6 +12,7 @@ import type { GangId } from '@chog-city/data';
 import { ArrowClockwise } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { CityRenderer, type Person, type PlaceLook } from '@/components/city/city-render';
+import { Sound } from '@/components/heist/sound';
 import { chogImage } from '@/lib/images';
 import { cn } from '@/lib/cn';
 
@@ -65,6 +66,15 @@ export function GetawayReplay(props: GetawayReplayProps) {
     const start = trackAt(track, 0).me;
     r.sirens = [spawnPatrol(start, rnd), spawnPatrol(start, rnd)];
     setOver(false);
+    // The run home sounds like the real one: the robber's footsteps, the sirens closing in, and how it ended.
+    const sound = new Sound();
+    try {
+      sound.setMuted(localStorage.getItem('heist-muted') === '1');
+    } catch {
+      /* no storage */
+    }
+    r.onStep = (what, style) => (what === 'step' ? sound.step(style) : sound.flick());
+    let ended = false;
     const frame = (now: number) => {
       const p = propsRef.current;
       const ms = Math.min(len, now - t0);
@@ -116,6 +126,19 @@ export function GetawayReplay(props: GetawayReplayProps) {
         shown = s;
         setLeft(s);
       }
+      if (ms < len) {
+        // The siren is as loud as the nearest police (a car or an officer on foot) is close.
+        const near = Math.min(
+          ...r.sirens.map((c) => Math.hypot(c.x - at.me.x, c.y - at.me.y)),
+          ...at.cops.map((k) => Math.hypot(k.x - at.me.x, k.y - at.me.y)),
+        );
+        sound.policeLevel(Math.max(0.15, 1 - near / 14));
+      } else if (!ended) {
+        ended = true;
+        sound.policeOff();
+        if (track.outcome === 'home') sound.escaped();
+        else sound.busted();
+      }
       if (ms >= len) setOver(true);
       raf = requestAnimationFrame(frame);
     };
@@ -123,6 +146,7 @@ export function GetawayReplay(props: GetawayReplayProps) {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', fit);
+      sound.policeOff();
     };
   }, [track, run]);
 

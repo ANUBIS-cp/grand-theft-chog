@@ -84,6 +84,7 @@ export class Sound {
   private masterOf: AudioContext | null = null;
   private masterNode: GainNode | null = null;
   private siren: { osc: OscillatorNode; lfo: OscillatorNode; gain: GainNode } | null = null;
+  private police: { osc: OscillatorNode; lfo: OscillatorNode; gain: GainNode } | null = null;
   muted = false;
 
   constructor() {
@@ -281,6 +282,47 @@ export class Sound {
     osc.stop(this.ac.currentTime + 0.25);
     lfo.stop(this.ac.currentTime + 0.25);
     this.siren = null;
+  }
+
+  /**
+   * Police on a getaway: a two-tone siren, held, as loud as the nearest car is close (`level` 0..1). Starts
+   * silent; call `policeLevel` every frame and `policeOff` when the run ends.
+   */
+  policeLevel(level: number) {
+    const ac = this.ac;
+    if (!ac || !this.master) return;
+    if (!this.police) {
+      const osc = ac.createOscillator();
+      const lfo = ac.createOscillator();
+      const lfoGain = ac.createGain();
+      const gain = ac.createGain();
+      const f = ac.createBiquadFilter();
+      osc.type = 'triangle';
+      osc.frequency.value = 820;
+      // A square wave on the pitch: it jumps between two notes, hi-lo, like a real siren.
+      lfo.type = 'square';
+      lfo.frequency.value = 1.5;
+      lfoGain.gain.value = 130;
+      lfo.connect(lfoGain).connect(osc.frequency);
+      f.type = 'lowpass';
+      f.frequency.value = 2400;
+      gain.gain.value = 0.0001;
+      osc.connect(f).connect(gain).connect(this.master);
+      osc.start();
+      lfo.start();
+      this.police = { osc, lfo, gain };
+    }
+    const v = Math.max(0.0001, Math.min(1, level) * 0.07);
+    this.police.gain.gain.setTargetAtTime(v, ac.currentTime, 0.15);
+  }
+
+  policeOff() {
+    if (!this.police || !this.ac) return;
+    const { osc, lfo, gain } = this.police;
+    gain.gain.setTargetAtTime(0.0001, this.ac.currentTime, 0.1);
+    osc.stop(this.ac.currentTime + 0.6);
+    lfo.stop(this.ac.currentTime + 0.6);
+    this.police = null;
   }
 
   /** Break-in locks: a pin sets, a wire is cut, a reel stops, the dial clicks, and the door gives. */

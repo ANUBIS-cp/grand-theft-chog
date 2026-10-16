@@ -33,6 +33,7 @@ import { Sound } from '@/components/heist/sound';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { GANG_COLOR } from '@/lib/theme';
 import { CityArt } from './art';
+import { Halloween } from './halloween';
 import { CityRenderer, type Board, type Emote, type Person, type PlaceLook } from './city-render';
 import { LiveCity, type Chase, type ChaseEnd, type ChatMsg, type LiveStatus } from './live-city';
 
@@ -88,6 +89,8 @@ interface Props {
   places: Record<string, PlaceLook>;
   /** Chogs with a Wanted poster on them ($CHOG). */
   wanted?: number[];
+  /** Halloween week (or ?halloween=1): the haunting is on, its ghosts wearing these Chogs. */
+  haunt?: number[] | null;
   /** Covered by a robbery: keep moving and connected, but don't draw. */
   hidden?: boolean;
   board: Board;
@@ -563,6 +566,12 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       while (s.patrol.length < want) s.patrol.push(spawnPatrol(bagged[s.patrol.length >> 1]!, s.rand));
       s.patrol.forEach((car, i) => stepPatrol([car], bagged[i >> 1]!, dt, s.rand));
       r.sirens = s.patrol;
+      // Sirens: as loud as the nearest police car is close; on your own run they never quite go away.
+      if (s.patrol.length && !p.hidden && !muted()) {
+        const near = Math.min(...s.patrol.map((c) => Math.hypot(c.x - s.x, c.y - s.y)));
+        const mineNow = !!mine?.bag || !!pr;
+        steps.policeLevel(Math.max(mineNow ? 0.15 : 0, 1 - near / 14));
+      } else steps.policeOff();
       const home = mine ? placeOf(mine.home)?.door : pr ? pr.home : undefined;
 
       r.places = p.places;
@@ -604,8 +613,18 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       window.removeEventListener('keydown', kd);
       window.removeEventListener('keyup', ku);
       window.removeEventListener('blur', blur);
+      steps.policeOff();
     };
   }, []);
+
+  // Halloween: the haunting goes on (and comes off) with the event.
+  const hauntKey = props.haunt?.join(',') ?? '';
+  useEffect(() => {
+    const r = state.current.r;
+    if (!r) return;
+    // Made again only when the ghosts change (hauntKey), not on every render.
+    r.haunt = props.haunt?.length ? new Halloween(props.haunt) : null;
+  }, [hauntKey]);
 
   // Pointer: a tap walks you there (or to a building's door); press and drag steers like a joystick.
   // On a touch screen the stick shows: a ring where your thumb landed and a knob under it. Past the rim the ring

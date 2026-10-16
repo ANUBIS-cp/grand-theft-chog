@@ -494,6 +494,21 @@ export function CityApp() {
     });
     return out;
   }, [board, chog?.gang, alarms, now, city?.burns]);
+  // Halloween week, or ?halloween=1 to see it early: the ghosts are the Skulls' and Radioactive's own faces.
+  const haunt = useMemo(() => {
+    let preview = false;
+    try {
+      preview = new URLSearchParams(window.location.search).get('halloween') === '1';
+    } catch {
+      /* not in a browser */
+    }
+    const on = preview || !!city?.events?.some((e) => e.key.startsWith('halloween'));
+    if (!on) return null;
+    const ids = (board?.board ?? [])
+      .filter((v) => v.gang === 'skulls' || v.gang === 'radioactive')
+      .flatMap((v) => v.guards);
+    return ids.length ? ids : null;
+  }, [city?.events, board]);
   const screen = useMemo(
     () => ({
       lines: (board?.board ?? [])
@@ -1032,6 +1047,7 @@ export function CityApp() {
         jailed={city?.jailed ?? []}
         places={looks}
         wanted={city?.burns.posters.map((p) => p.chog)}
+        haunt={haunt}
         board={screen}
         paused={!!heistScreen || !!sheet || !!peek || mapOpen || (!!chog && !chog.gang)}
         onDoor={(p, asked) => {
