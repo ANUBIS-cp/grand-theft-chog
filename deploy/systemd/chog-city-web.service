@@ -13,6 +13,9 @@ Environment=NODE_ENV=production PORT=3000 HOSTNAME=127.0.0.1 NEXT_TELEMETRY_DISA
 ExecStart=/usr/bin/node server.js
 Restart=always
 RestartSec=2
+# Open live-feed streams kept the old server alive for systemd's full 90 s on every deploy (the site was down
+# that long). Five seconds, then it's stopped.
+TimeoutStopSec=5
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true
