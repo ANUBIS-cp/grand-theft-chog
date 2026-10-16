@@ -246,8 +246,7 @@ export function drawWalker(
   const hover = f.hover ? H * f.hover + Math.sin(now / 420 + opts.seed * 5) * H * 0.04 : 0;
   lift += hover;
   const sx = 1 / sy;
-  // Turning round: the card spins a full turn on its base like a paper cut-out (its back and edge show for a
-  // moment), with a little pop up off the ground.
+  // Turning round: the card squeezes in and springs back, with a little pop up off the ground.
   const turned = now - w.turnedAt;
   const spin = turned < SPIN_MS ? turned / SPIN_MS : 0;
   if (spin) lift += Math.sin(spin * Math.PI) * H * 0.07;

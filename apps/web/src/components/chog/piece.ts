@@ -1,6 +1,6 @@
 // A Chog as a game piece: the whole picture, uncut, on a thick card that stands in a round base in the
-// owner's colour, like a board-game standee. The card is never mirrored (hats have words on them); turning
-// round is a quick spin instead. Walking is a hop with a squash on landing.
+// owner's colour, like a board-game standee. The card is never mirrored (hats have words on them) and never
+// shows its back: turning round is a quick squeeze and pop. Walking is a hop with a squash on landing.
 
 const INK = '#0d0b1a';
 
@@ -19,14 +19,11 @@ export interface PieceLook {
 export interface Piece {
   /** The whole piece in one picture. */
   c: HTMLCanvasElement;
-  /** The same piece in layers, so the card can spin while the base stays put: the base behind the card,
-   *  the card (front and back), and the base's front lip that the card stands in. All the size of `c`. */
+  /** The same piece in layers, so the card can squeeze on a turn while the base stays put: the base behind
+   *  the card, the card, and the base's front lip that the card stands in. All the size of `c`. */
   under: HTMLCanvasElement;
   card: HTMLCanvasElement;
-  back: HTMLCanvasElement;
   over: HTMLCanvasElement;
-  /** The card's box (CSS px, inside the canvas), for the thin edge you see mid-spin. */
-  cardBox: { x: number; y: number; w: number; h: number; edge: string };
   w: number;
   h: number;
   fx: number;
@@ -69,7 +66,6 @@ export function makePiece(img: HTMLImageElement | undefined, look: PieceLook, dp
   };
   const [under, gu] = layer();
   const [card, gc] = layer();
-  const [back, gb] = layer();
   const [over, go] = layer();
   let g = gu;
   const fx = w / 2;
@@ -200,57 +196,13 @@ export function makePiece(img: HTMLImageElement | undefined, look: PieceLook, dp
     g.lineWidth = 1.5;
     g.stroke();
   }
-  // The card's back, seen for a moment as it spins round: the owner's colour, an inset frame and a pale Chog.
-  {
-    const bg = gb;
-    const thick = look.gold ? '#a8761a' : '#2a2540';
-    bg.lineWidth = 2;
-    bg.strokeStyle = INK;
-    bg.fillStyle = thick;
-    bg.beginPath();
-    bg.roundRect(cx, cy + edge, cw, ch, r);
-    bg.fill();
-    bg.stroke();
-    const gr = bg.createLinearGradient(0, cy, 0, cy + ch);
-    gr.addColorStop(0, shade(base, 0.15));
-    gr.addColorStop(1, shade(base, -0.3));
-    bg.fillStyle = gr;
-    bg.beginPath();
-    bg.roundRect(cx, cy, cw, ch, r);
-    bg.fill();
-    bg.strokeStyle = 'rgba(255,255,255,0.55)';
-    bg.lineWidth = Math.max(1.5, s * 0.025);
-    bg.beginPath();
-    bg.roundRect(cx + border * 1.6, cy + border * 1.6, cw - border * 3.2, ch - border * 3.2, Math.max(2, r - border));
-    bg.stroke();
-    const hx = fx;
-    const hy = cy + ch * 0.6;
-    bg.fillStyle = 'rgba(255,255,255,0.42)';
-    bg.beginPath();
-    for (let i = 0; i <= 14; i++) {
-      const a = Math.PI + (i / 14) * Math.PI;
-      const rr = i % 2 ? s * 0.3 : s * 0.22;
-      bg.lineTo(hx + Math.cos(a) * rr, hy + Math.sin(a) * rr * 0.9);
-    }
-    bg.closePath();
-    bg.fill();
-    bg.lineWidth = Math.max(2, s * 0.04);
-    bg.strokeStyle = INK;
-    bg.beginPath();
-    bg.roundRect(cx, cy, cw, ch, r);
-    bg.stroke();
-    // The cap stays on, seen from behind.
-    if (look.cap) bg.drawImage(card, 0, 0, card.width, Math.max(1, Math.round(cy * dpr)), 0, 0, w, cy);
-  }
   const [c, gall] = layer();
   for (const l of [under, card, over]) gall.drawImage(l, 0, 0, w, h);
   return {
     c,
     under,
     card,
-    back,
     over,
-    cardBox: { x: cx, y: cy, w: cw, h: ch + edge, edge: look.gold ? '#a8761a' : '#2a2540' },
     w,
     h,
     fx,
@@ -259,13 +211,13 @@ export function makePiece(img: HTMLImageElement | undefined, look: PieceLook, dp
   };
 }
 
-/** The spin when a piece turns round (ms): a full turn, so the picture ends the right way up and unmirrored. */
-export const SPIN_MS = 260;
+/** How long the turn-round squeeze lasts (ms). */
+export const SPIN_MS = 220;
 
 /**
  * Draws a piece's layers with its feet at the origin (already translated, rotated and squashed by the caller):
- * the base steady, the card spinning round its middle by `spin` (0..1 of a full turn), showing its back halfway
- * and a sliver of its edge as it passes side-on, like a paper cut-out turning.
+ * the base steady, the card squeezed in from the sides by `spin` (0..1 through a turn) and back, so a turn reads
+ * at a glance without the picture ever going away.
  */
 export function drawLayers(g: CanvasRenderingContext2D, p: Piece, sx: number, sy: number, spin: number) {
   const x0 = -p.fx;
@@ -274,24 +226,10 @@ export function drawLayers(g: CanvasRenderingContext2D, p: Piece, sx: number, sy
   g.scale(sx, sy);
   g.drawImage(p.under, x0, y0, p.w, p.h);
   g.restore();
-  const cos = Math.cos(spin * Math.PI * 2);
-  const k = Math.abs(cos);
+  const k = 1 - Math.sin(spin * Math.PI) * 0.22;
   g.save();
-  g.scale(sx, sy);
-  if (k < 0.09) {
-    // Side-on: just the card's edge.
-    const b = p.cardBox;
-    g.fillStyle = b.edge;
-    g.strokeStyle = INK;
-    g.lineWidth = 1.5;
-    g.beginPath();
-    g.roundRect(-2.5, y0 + b.y, 5, b.h, 2.5);
-    g.fill();
-    g.stroke();
-  } else {
-    g.scale(k, 1);
-    g.drawImage(cos > 0 ? p.card : p.back, x0, y0, p.w, p.h);
-  }
+  g.scale(sx * k, sy * (2 - k));
+  g.drawImage(p.card, x0, y0, p.w, p.h);
   g.restore();
   g.save();
   g.scale(sx, sy);
