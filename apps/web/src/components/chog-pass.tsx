@@ -360,15 +360,15 @@ function Verify(props: { address: string; onBack: () => void; onDone: () => void
           className="press relative mt-3 flex w-full items-center justify-center gap-1.5 rounded-[12px] bg-white/[0.08] py-2 text-[13px] font-semibold"
         >
           {copied === 'address' ? <Check size={15} weight="bold" /> : <Copy size={15} weight="bold" />}
-          {copied === 'address' ? 'Address copied' : 'Copy your address to paste as the recipient'}
+          {copied === 'address' ? 'Copied' : 'Copy my address'}
         </button>
       </div>
 
       <ol className="mt-4 space-y-2 text-[14px] leading-snug">
         {[
           `Open the wallet that holds your Chog (${short(props.address)}).`,
-          'Send MON on Monad, with your own address as the recipient.',
-          'Come back here. We sign you in the moment it lands.',
+          `Tap Send and paste your own address as the recipient: you're sending to yourself. Enter exactly ${amount ?? 'the amount'} MON.`,
+          'Come back here. You’re signed in the moment it lands.',
         ].map((t, i) => (
           <li key={t} className="flex gap-3">
             <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/10 text-[12px] font-bold">
