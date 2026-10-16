@@ -163,6 +163,7 @@ export class CityRenderer {
     return {
       g: this.g,
       t: this.t,
+      dpr: this.dpr,
       view: this.view,
       cam: this.cam,
       sx: this.sx,

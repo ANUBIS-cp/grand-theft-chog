@@ -18,6 +18,8 @@ export interface HauntView {
   /** The renderer's canvas. */
   g: G;
   t: number;
+  /** Device pixels per CSS pixel, for sharp sprites. */
+  dpr: number;
   view: { w: number; h: number };
   cam: { x: number; y: number };
   sx: (x: number) => number;
@@ -83,7 +85,7 @@ function lanternSpots(): { x: number; y: number; flare: number }[] {
   if (f)
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2 + 0.3;
-      out.push({ x: f.x + Math.cos(a) * 2.9, y: f.y + Math.sin(a) * 2.1 + 0.3, flare: 0 });
+      out.push({ x: f.x + Math.cos(a) * 3.6, y: f.y + Math.sin(a) * 2.6 + 0.3, flare: 0 });
     }
   return out;
 }
@@ -491,33 +493,159 @@ export class Halloween {
 
   // ---------- pieces ----------
 
+  /**
+   * A jack-o'-lantern, the 🎃 kind but alive: a fat ribbed pumpkin (drawn once, sharp), an angry carved face
+   * with the candle blazing through it, flickering. Walk up and it laughs at you: the grin stretches, it
+   * shakes, embers spit out of its mouth, and the glints in its eyes turn to watch you.
+   */
   private drawLantern(v: HauntView, l: { x: number; y: number; flare: number }, now: number) {
+    const g = v.g;
     const t = v.t;
-    const sprite = this.lanternSprite(t);
+    const W = t * 1.5;
+    const H = t * 1.18;
     const x = v.sx(l.x);
     const y = v.sy(l.y);
-    const w = t * 1.35;
-    const h = t * 1.35;
-    // A little hop when it flares, like it noticed you.
-    const hop = l.flare * Math.abs(Math.sin(now / 160)) * t * 0.06;
-    {
-      const g = v.g;
-      g.fillStyle = 'rgba(0,0,0,0.35)';
-      g.beginPath();
-      g.ellipse(x, y + t * 0.05, w * 0.45, t * 0.12, 0, 0, Math.PI * 2);
-      g.fill();
-      g.drawImage(sprite, x - w / 2, y - h * 0.92 - hop, w, h);
-      // The candle inside, through the carved face.
-      const f = 0.7 + 0.3 * Math.sin(now / 55 + l.x * 5) * Math.sin(now / 31 + l.y * 3);
+    const near = l.flare;
+    const seed = l.x * 7.1 + l.y * 3.3;
+    // Laughing: a quick shake and a bounce.
+    const shake = near * Math.sin(now / 38 + seed) * 0.07;
+    const bounce = near * Math.abs(Math.sin(now / 120 + seed)) * t * 0.08;
+    // Shadow on the street.
+    g.fillStyle = 'rgba(0,0,0,0.42)';
+    g.beginPath();
+    g.ellipse(x, y + t * 0.04, W * 0.48, t * 0.15, 0, 0, Math.PI * 2);
+    g.fill();
+    g.save();
+    g.translate(x, y - bounce);
+    g.rotate(shake);
+    const body = this.pumpkinBody(t, v.dpr);
+    g.drawImage(body, -W * 0.62, -H * 1.42, W * 1.24, H * 1.5);
+    // The face, live: the candle's flicker, the grin, the eyes.
+    const flick = 0.78 + 0.22 * Math.sin(now / 57 + seed) * Math.sin(now / 31 + seed * 2);
+    const grin = 1 + near * (0.35 + 0.1 * Math.sin(now / 90));
+    const cy = -H * 0.52;
+    this.pumpkinFace(g, 0, cy, W, H, flick, grin, near, l, now);
+    g.restore();
+    // Embers spat out of the grin while it laughs.
+    if (near > 0.05) {
       g.save();
       g.globalCompositeOperation = 'lighter';
-      g.globalAlpha = (0.75 + l.flare * 0.25) * f;
-      g.drawImage(this.faceSprite(t), x - w / 2, y - h * 0.92 - hop, w, h);
-      // A soft bloom round the carving, so it reads from across the street.
-      g.globalAlpha = (0.18 + l.flare * 0.35) * f;
-      g.drawImage(this.faceSprite(t), x - w * 0.53, y - h * 0.95 - hop, w * 1.06, h * 1.06);
+      for (let i = 0; i < 7; i++) {
+        const life = (now / 700 + i / 7 + seed) % 1;
+        const ex = x + Math.sin(i * 2.3 + seed) * W * 0.25 * life + Math.sin(now / 200 + i) * 3;
+        const ey = y - bounce - H * 0.42 - life * t * 1.4;
+        const r = t * 0.07 * (1 - life);
+        g.globalAlpha = near * (1 - life);
+        g.drawImage(this.glowSprite('ember', 255, 150, 40), ex - r * 4, ey - r * 4, r * 8, r * 8);
+        g.fillStyle = '#ffe9a0';
+        g.beginPath();
+        g.arc(ex, ey, r, 0, Math.PI * 2);
+        g.fill();
+      }
       g.restore();
     }
+  }
+
+  /** The carved face: angry triangle eyes, a nose, a jagged grin with teeth, cut deep and lit from inside. */
+  private pumpkinFace(
+    g: G,
+    cx: number,
+    cy: number,
+    W: number,
+    H: number,
+    flick: number,
+    grin: number,
+    near: number,
+    l: { x: number; y: number },
+    now: number,
+  ) {
+    const eye = (side: number) => {
+      // Slanted down towards the nose: angry.
+      const ex = cx + side * W * 0.2;
+      const ey = cy - H * 0.12;
+      g.moveTo(ex - side * W * 0.11, ey - H * 0.02);
+      g.lineTo(ex + side * W * 0.12, ey - H * 0.17);
+      g.lineTo(ex + side * W * 0.1, ey + H * 0.1);
+      g.closePath();
+    };
+    const nose = () => {
+      g.moveTo(cx, cy + H * 0.0);
+      g.lineTo(cx - W * 0.055, cy + H * 0.12);
+      g.lineTo(cx + W * 0.055, cy + H * 0.12);
+      g.closePath();
+    };
+    const mouth = () => {
+      // A wide grin, its bottom edge dropping as it laughs, with two teeth up top and one below.
+      const mw = W * 0.36;
+      const top = cy + H * 0.2;
+      const drop = H * 0.2 * grin;
+      g.moveTo(cx - mw, top - H * 0.04);
+      g.quadraticCurveTo(cx - mw * 0.5, top + H * 0.05, cx - mw * 0.32, top + H * 0.03);
+      g.lineTo(cx - mw * 0.25, top + H * 0.1); // tooth
+      g.lineTo(cx - mw * 0.12, top + H * 0.035);
+      g.lineTo(cx + mw * 0.12, top + H * 0.035);
+      g.lineTo(cx + mw * 0.25, top + H * 0.1); // tooth
+      g.lineTo(cx + mw * 0.32, top + H * 0.03);
+      g.quadraticCurveTo(cx + mw * 0.5, top + H * 0.05, cx + mw, top - H * 0.04);
+      g.quadraticCurveTo(cx + mw * 0.75, top + drop, cx + mw * 0.15, top + drop * 1.02);
+      g.lineTo(cx + mw * 0.06, top + drop * 0.62); // bottom tooth
+      g.lineTo(cx - mw * 0.06, top + drop * 0.62);
+      g.lineTo(cx - mw * 0.15, top + drop * 1.02);
+      g.quadraticCurveTo(cx - mw * 0.75, top + drop, cx - mw, top - H * 0.04);
+      g.closePath();
+    };
+    const face = () => {
+      g.beginPath();
+      eye(-1);
+      eye(1);
+      nose();
+      mouth();
+    };
+    // The cut's depth: the pumpkin's flesh, a little below the hole.
+    g.save();
+    g.translate(0, H * 0.035);
+    face();
+    g.fillStyle = '#ffcf6a';
+    g.fill();
+    g.restore();
+    face();
+    g.fillStyle = '#5c1c00';
+    g.fill();
+    // The candle inside: white-hot in the middle, orange at the edges.
+    g.save();
+    face();
+    g.clip();
+    const gl = g.createRadialGradient(cx, cy + H * 0.12, 0, cx, cy + H * 0.12, W * 0.48);
+    gl.addColorStop(0, `rgba(255,255,230,${flick})`);
+    gl.addColorStop(0.35, `rgba(255,214,90,${flick})`);
+    gl.addColorStop(1, `rgba(255,110,20,${0.85 * flick})`);
+    g.fillStyle = gl;
+    g.fillRect(cx - W, cy - H, W * 2, H * 2);
+    g.restore();
+    // Light pouring out of the cuts.
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = (0.18 + near * 0.4) * flick;
+    g.drawImage(this.glowSprite('faceglow', 255, 170, 50), cx - W * 0.6, cy - H * 0.55, W * 1.2, H * 1.2);
+    g.restore();
+    // Glints in its eyes, turned to look at you.
+    const me = this.me;
+    let lx = 0;
+    let ly = 0;
+    if (me) {
+      const dx = me.x - l.x;
+      const dy = me.y - l.y;
+      const d = Math.hypot(dx, dy) || 1;
+      lx = (dx / d) * W * 0.03;
+      ly = (dy / d) * H * 0.02;
+    }
+    g.fillStyle = `rgba(255,255,255,${0.75 * flick})`;
+    for (const side of [-1, 1]) {
+      g.beginPath();
+      g.arc(cx + side * W * 0.23 + lx, cy - H * 0.11 + ly, W * 0.022, 0, Math.PI * 2);
+      g.fill();
+    }
+    void now;
   }
 
   private drawGhost(v: HauntView, gh: Ghost, now: number) {
@@ -833,94 +961,122 @@ export class Halloween {
     return c;
   }
 
-  /** The Chog-o'-lantern: a ribbed pumpkin, its stem, and a Chog's face carved in it (dark until lit). */
-  private lanternSprite(t: number) {
-    const k = `lantern:${t}`;
+  /** The pumpkin without its face, drawn once at the screen's full sharpness: ribs, creases, shine, stem. */
+  private pumpkinBody(t: number, dpr: number) {
+    const k = `pumpkin:${t}:${dpr}`;
     let c = this.sprites.get(k);
     if (c) return c;
-    const S = Math.round(t * 2);
+    const W = t * 1.5 * 1.24;
+    const H = t * 1.18 * 1.5;
     c = document.createElement('canvas');
-    c.width = c.height = S;
+    c.width = Math.round(W * dpr);
+    c.height = Math.round(H * dpr);
     const g = c.getContext('2d')!;
-    const cx = S / 2;
-    const cy = S * 0.58;
-    const R = S * 0.4;
-    // Ribs: overlapping lobes, darker at the sides.
+    g.scale(dpr, dpr);
+    const cx = W / 2;
+    const cy = H * 0.63;
+    const R = t * 0.75;
+    const RY = t * 0.56;
+    const ink = '#2a0d00';
+    // Lobes, back to front: the outer ones darker, the middle one brightest.
     const lobes = [
-      { dx: -0.55, w: 0.5, c: '#c4500f' },
-      { dx: 0.55, w: 0.5, c: '#c4500f' },
-      { dx: -0.25, w: 0.55, c: '#e8711c' },
-      { dx: 0.25, w: 0.55, c: '#e8711c' },
-      { dx: 0, w: 0.55, c: '#f78a2a' },
+      { dx: -0.62, w: 0.42, light: 0.55 },
+      { dx: 0.62, w: 0.42, light: 0.55 },
+      { dx: -0.36, w: 0.5, light: 0.8 },
+      { dx: 0.36, w: 0.5, light: 0.8 },
+      { dx: 0, w: 0.52, light: 1 },
     ];
+    // The outline first, thick, round the whole pumpkin.
+    g.lineWidth = Math.max(2.5, t * 0.07);
+    g.strokeStyle = ink;
     for (const l of lobes) {
-      g.fillStyle = l.c;
-      g.strokeStyle = '#3a1404';
-      g.lineWidth = S * 0.025;
       g.beginPath();
-      g.ellipse(cx + l.dx * R, cy, R * l.w, R * 0.82, 0, 0, Math.PI * 2);
-      g.fill();
+      g.ellipse(cx + l.dx * R, cy, R * l.w, RY, 0, 0, Math.PI * 2);
       g.stroke();
     }
-    // A sheen on top.
-    g.fillStyle = 'rgba(255,220,150,0.25)';
+    for (const l of lobes) {
+      const lx = cx + l.dx * R;
+      const gr = g.createRadialGradient(lx - R * l.w * 0.3, cy - RY * 0.45, 0, lx, cy, R * l.w * 1.2);
+      const a = l.light;
+      gr.addColorStop(0, `rgb(${Math.round(255)},${Math.round(150 + 50 * a)},${Math.round(40 + 40 * a)})`);
+      gr.addColorStop(
+        0.55,
+        `rgb(${Math.round(225 + 25 * a)},${Math.round(95 + 30 * a)},${Math.round(10 + 10 * a)})`,
+      );
+      gr.addColorStop(1, `rgb(${Math.round(140 + 20 * a)},${Math.round(45 + 10 * a)},0)`);
+      g.fillStyle = gr;
+      g.beginPath();
+      g.ellipse(lx, cy, R * l.w, RY, 0, 0, Math.PI * 2);
+      g.fill();
+      // The crease at each lobe's edge.
+      g.strokeStyle = 'rgba(90,25,0,0.75)';
+      g.lineWidth = Math.max(1.2, t * 0.025);
+      g.beginPath();
+      g.ellipse(lx, cy, R * l.w, RY * 0.98, 0, -Math.PI * 0.42, Math.PI * 0.42);
+      g.stroke();
+    }
+    // Shadow under the bottom and a rim of light on top.
+    const shade = g.createLinearGradient(0, cy - RY, 0, cy + RY);
+    shade.addColorStop(0, 'rgba(255,230,160,0.18)');
+    shade.addColorStop(0.55, 'rgba(0,0,0,0)');
+    shade.addColorStop(1, 'rgba(60,10,0,0.45)');
+    g.save();
+    g.globalCompositeOperation = 'source-atop';
+    g.fillStyle = shade;
+    g.fillRect(0, 0, W, H);
+    g.restore();
+    // Glossy streaks.
+    g.fillStyle = 'rgba(255,245,210,0.5)';
+    for (const [dx, w] of [
+      [-0.12, 0.09],
+      [-0.48, 0.06],
+    ] as const) {
+      g.beginPath();
+      g.ellipse(cx + dx * R, cy - RY * 0.55, R * w, RY * 0.16, -0.25, 0, Math.PI * 2);
+      g.fill();
+    }
+    // The stem: thick, bent, dark green, with a curling vine and a leaf.
+    const sx = cx + R * 0.04;
+    const sy = cy - RY * 0.88;
+    const sg = g.createLinearGradient(sx - t * 0.1, 0, sx + t * 0.12, 0);
+    sg.addColorStop(0, '#2f4a14');
+    sg.addColorStop(0.5, '#6b8f2a');
+    sg.addColorStop(1, '#2a3f10');
+    g.fillStyle = sg;
+    g.strokeStyle = ink;
+    g.lineWidth = Math.max(2, t * 0.05);
     g.beginPath();
-    g.ellipse(cx - R * 0.25, cy - R * 0.45, R * 0.3, R * 0.12, -0.3, 0, Math.PI * 2);
-    g.fill();
-    // Stem, curling.
-    g.fillStyle = '#4f6b22';
-    g.strokeStyle = '#1f2a0c';
-    g.beginPath();
-    g.moveTo(cx - R * 0.1, cy - R * 0.75);
-    g.quadraticCurveTo(cx - R * 0.05, cy - R * 1.1, cx + R * 0.22, cy - R * 1.12);
-    g.lineTo(cx + R * 0.15, cy - R * 0.98);
-    g.quadraticCurveTo(cx + R * 0.05, cy - R * 0.92, cx + R * 0.1, cy - R * 0.75);
+    g.moveTo(sx - t * 0.1, sy + t * 0.05);
+    g.quadraticCurveTo(sx - t * 0.12, sy - t * 0.22, sx + t * 0.08, sy - t * 0.36);
+    g.lineTo(sx + t * 0.2, sy - t * 0.3);
+    g.quadraticCurveTo(sx + t * 0.06, sy - t * 0.18, sx + t * 0.1, sy + t * 0.05);
     g.closePath();
     g.fill();
     g.stroke();
-    // The carved face, cut in dark: the candle lights it from inside (faceSprite, drawn on top).
-    this.carve(g, cx, cy, R, '#2a0c02');
-    this.sprites.set(k, c);
-    return c;
-  }
-
-  /** Just the carved face, in candle colour, to glow through the pumpkin. */
-  private faceSprite(t: number) {
-    const k = `face:${t}`;
-    let c = this.sprites.get(k);
-    if (c) return c;
-    const S = Math.round(t * 2);
-    c = document.createElement('canvas');
-    c.width = c.height = S;
-    const g = c.getContext('2d')!;
-    this.carve(g, S / 2, S * 0.58, S * 0.4, '#ffd66b');
-    this.sprites.set(k, c);
-    return c;
-  }
-
-  /** A Chog's face: two big round eyes with a crescent of pumpkin left in each (its look), and a small grin. */
-  private carve(g: G, cx: number, cy: number, R: number, fill: string) {
-    g.fillStyle = fill;
-    for (const side of [-1, 1]) {
-      const ex = cx + side * R * 0.32;
-      const ey = cy - R * 0.12;
-      g.beginPath();
-      g.arc(ex, ey, R * 0.22, 0, Math.PI * 2);
-      // The pupil is left uncut, looking to the side, so the eyes have the Chog's side-eye.
-      g.arc(ex + R * 0.06, ey - R * 0.02, R * 0.09, 0, Math.PI * 2, true);
-      g.fill('evenodd');
-    }
-    // The grin, with two little teeth left in.
+    // Vine: a little spiral off the stem.
+    g.strokeStyle = '#4f7a1e';
+    g.lineWidth = Math.max(1.5, t * 0.03);
     g.beginPath();
-    g.moveTo(cx - R * 0.32, cy + R * 0.28);
-    g.quadraticCurveTo(cx, cy + R * 0.66, cx + R * 0.32, cy + R * 0.28);
-    g.quadraticCurveTo(cx + R * 0.12, cy + R * 0.38, cx + R * 0.08, cy + R * 0.33);
-    g.lineTo(cx + R * 0.02, cy + R * 0.42);
-    g.lineTo(cx - R * 0.04, cy + R * 0.34);
-    g.lineTo(cx - R * 0.1, cy + R * 0.43);
-    g.lineTo(cx - R * 0.14, cy + R * 0.34);
-    g.quadraticCurveTo(cx - R * 0.2, cy + R * 0.38, cx - R * 0.32, cy + R * 0.28);
-    g.closePath();
+    for (let i = 0; i <= 30; i++) {
+      const a = i * 0.32;
+      const r = t * 0.16 * (1 - i / 34);
+      const px = sx + t * 0.2 + Math.cos(a) * r;
+      const py = sy - t * 0.12 + Math.sin(a) * r * 0.8;
+      if (i) g.lineTo(px, py);
+      else g.moveTo(px, py);
+    }
+    g.stroke();
+    // Leaf.
+    g.fillStyle = '#5e8c22';
+    g.strokeStyle = ink;
+    g.lineWidth = Math.max(1.5, t * 0.035);
+    g.beginPath();
+    g.moveTo(sx - t * 0.08, sy - t * 0.06);
+    g.quadraticCurveTo(sx - t * 0.42, sy - t * 0.28, sx - t * 0.48, sy - t * 0.02);
+    g.quadraticCurveTo(sx - t * 0.3, sy + t * 0.04, sx - t * 0.08, sy - t * 0.06);
     g.fill();
+    g.stroke();
+    this.sprites.set(k, c);
+    return c;
   }
 }
