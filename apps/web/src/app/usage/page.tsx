@@ -3,18 +3,12 @@ import { usage } from '@chog-city/server';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { PageShell } from '@/components/ui/page-shell';
+import { isAdmin } from '@/server/admin';
 import { db } from '@/server/db';
 import { currentAddress } from '@/server/session';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: 'Usage · Chog World', robots: { index: false } };
-
-/** Wallets allowed to see this page (ADMIN_WALLETS, comma-separated). Anyone else gets "not found". */
-const admins = () =>
-  (process.env.ADMIN_WALLETS ?? '')
-    .split(',')
-    .map((a) => a.trim().toLowerCase())
-    .filter(Boolean);
 
 const pct = (back: number, of: number) => (of ? `${Math.round((back / of) * 100)}%` : '–');
 const date = (ms: number) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -22,7 +16,8 @@ const date = (ms: number) => new Date(ms).toLocaleDateString('en-GB', { day: 'nu
 /** The owner's numbers: who plays, who comes back, what they do. */
 export default async function UsagePage() {
   const me = await currentAddress();
-  if (!me || !admins().includes(me)) notFound();
+  // Only the owner's wallets (ADMIN_WALLETS); anyone else gets "not found".
+  if (!isAdmin(me)) notFound();
   const u = await usage(await db());
   const tiles = [
     { label: 'Holders who came', value: u.holdersEver },

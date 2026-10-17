@@ -28,6 +28,7 @@ import { RaidLink } from '@/components/rush/raid-link';
 import { RushGame } from '@/components/rush/rush-game';
 import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
+import { possessive } from '@/lib/possessive';
 import { useDragClose } from '@/components/ui/use-drag-close';
 import { chogImage } from '@/lib/images';
 import { useLive } from '@/lib/live';
@@ -36,6 +37,7 @@ import { ago, formatLeft } from '@/lib/time';
 import { hasWalletConnectSession, logOut } from '@/lib/wallet';
 import { BurnButton, PosterPicker, type Burns } from './burn';
 import { ChatPanel } from './chat';
+import { Director } from './director';
 import { MusicButton } from './music-button';
 import type { PlaceLook } from './city-render';
 import { CityView, type CityHandle, type Jailed, type Stroller, type Tapped } from './city-view';
@@ -53,6 +55,9 @@ import {
   RoundButton,
 } from './hud';
 import type { Chase, ChaseEnd, ChatMsg, LiveStatus } from './live-city';
+
+/** "Legends’ door", "MCGA Gang’s door". */
+const doorOf = (name: string) => `${possessive(name)} door`;
 
 interface VaultRow {
   gang: GangId;
@@ -193,6 +198,8 @@ export function CityApp() {
     address: string | null;
     chogs: MyChog[];
     revenge: Record<string, GangId[]>;
+    /** The owner (for the demo controls). */
+    admin?: boolean;
   } | null>(null);
   const [city, setCity] = useState<CityData | null>(null);
   // Walking as your Chog from its wallet address alone (read from Monad, nothing signed): practice only until
@@ -246,30 +253,59 @@ export function CityApp() {
     seed: number;
     loud: boolean;
   } | null>(null);
-  const [practiceRun, setPracticeRun] = useState<{ since: number; until: number; to: string } | null>(null);
+  const [practiceRun, setPracticeRun] = useState<{
+    since: number;
+    until: number;
+    to: string;
+    /** The demo controls' chase reads like a real run home (the cash it's carrying). */
+    bag?: number;
+  } | null>(null);
   // Get the sound engine ready now, so the first tap anywhere switches sound on (see sound.ts).
   useEffect(() => prepareSound(), []);
-  // Local testing only: show the run bar and banners on demand (the test browser can't play a run quickly).
+  // Moments on demand, for filming (the owner's demo controls) and local testing: a practice chase home, the
+  // "Got away!" banner. Practice only; nothing real moves.
+  const chogRef = useRef<MyChog | null>(null);
+  const demo = useRef({
+    run: (bag?: number) => {
+      // The same as leaving the practice vault with cash: the run bar, the police and the arrow home.
+      const g = chogRef.current?.gang ?? 'mcga';
+      const home = placeOf(g)!.door;
+      setPracticeRun({ since: Date.now(), until: Date.now() + 40_000, to: doorOf(GANGS[g].name), bag });
+      requestAnimationFrame(() => requestAnimationFrame(() => view.current?.practiceChase(home)));
+    },
+    stop: () => setPracticeRun(null),
+    lock: () => startPracticeRef.current(),
+    banner: (cash = 420) =>
+      setBanner({
+        id: `d${Date.now()}`,
+        title: 'Got away!',
+        line: `You ran ${money(cash)} home to your gang.`,
+        tone: 'win',
+      }),
+  });
   useEffect(() => {
-    if (location.hostname !== 'localhost') return;
-    (window as unknown as { __chogDemo: object }).__chogDemo = {
-      run: () => {
-        // The same as leaving the practice vault with cash: the run bar, the police and the arrow home.
-        const home = placeOf('mcga')!.door;
-        setPracticeRun({ since: Date.now(), until: Date.now() + 40_000, to: 'MCGA Gang’s door' });
-        requestAnimationFrame(() => requestAnimationFrame(() => view.current?.practiceChase(home)));
-      },
-      stop: () => setPracticeRun(null),
-      lock: () => startPracticeRef.current(),
-      banner: () =>
-        setBanner({
-          id: `d${Date.now()}`,
-          title: 'Got away!',
-          line: 'You ran $420 home to your gang.',
-          tone: 'win',
-        }),
-    };
+    if (location.hostname === 'localhost')
+      (window as unknown as { __chogDemo: object }).__chogDemo = demo.current;
   }, []);
+  // ?film=1: the city without buttons, map or cards, for a video (H brings them back); the owner also gets
+  // the demo controls.
+  const [film, setFilm] = useState(false);
+  const [hudOff, setHudOff] = useState(true);
+  const [hauntDemo, setHauntDemo] = useState(false);
+  const [directorOff, setDirectorOff] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get('film') !== '1') return;
+    setFilm(true);
+    const key = (e: KeyboardEvent) => {
+      if (e.repeat || (e.target as HTMLElement)?.tagName === 'INPUT') return;
+      // H: the game's buttons and cards; B: the demo controls bar.
+      if (e.code === 'KeyH') setHudOff((h) => !h);
+      if (e.code === 'KeyB') setDirectorOff((d) => !d);
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, []);
+  const clean = film && hudOff;
   const startPracticeRef = useRef(() => {});
   const startPractice = () => {
     const pool = GANG_IDS.filter((g) => g !== chog?.gang);
@@ -527,6 +563,7 @@ export function CityApp() {
 
   const chogs = me?.chogs ?? [];
   const chog = chogs.find((c) => c.id === picked) ?? chogs[0] ?? null;
+  chogRef.current = chog;
   const revenge = chog?.gang ? (me?.revenge[chog.gang] ?? []) : [];
   const peekChog =
     !me?.address && pass ? (pass.chogs.find((c) => c.id === pass.picked) ?? pass.chogs[0] ?? null) : null;
@@ -559,13 +596,13 @@ export function CityApp() {
     } catch {
       /* not in a browser */
     }
-    const on = preview || !!city?.events?.some((e) => e.key.startsWith('halloween'));
+    const on = preview || hauntDemo || !!city?.events?.some((e) => e.key.startsWith('halloween'));
     if (!on) return null;
     const ids = (board?.board ?? [])
       .filter((v) => v.gang === 'skulls' || v.gang === 'radioactive')
       .flatMap((v) => v.guards);
     return ids.length ? ids : null;
-  }, [city?.events, board]);
+  }, [city?.events, board, hauntDemo]);
   const screen = useMemo(
     () => ({
       lines: (board?.board ?? [])
@@ -699,7 +736,7 @@ export function CityApp() {
           ? {
               id: `home${e.run}`,
               title: 'Home free!',
-              line: `${money(e.bag)} landed in ${myGang ? GANGS[myGang].name : 'your gang'}’s vault.`,
+              line: `${money(e.bag)} landed in ${myGang ? possessive(GANGS[myGang].name) : 'your gang’s'} vault.`,
               chog: e.chog,
               tone: 'win',
             }
@@ -1088,7 +1125,7 @@ export function CityApp() {
               setPracticeRun({
                 since: Date.now(),
                 until: Date.now() + getawayTime(from, home),
-                to: chog?.gang ? `${GANGS[chog.gang].name}’s door` : 'the fountain',
+                to: chog?.gang ? doorOf(GANGS[chog.gang].name) : 'the fountain',
               });
               requestAnimationFrame(() => requestAnimationFrame(() => view.current?.practiceChase(home)));
             }}
@@ -1118,8 +1155,19 @@ export function CityApp() {
   );
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-[#07060d] text-white">
+    <div className="fixed inset-0 overflow-hidden bg-[#07060d] text-white" data-film={clean ? '' : undefined}>
       {heistScreen && <div className="fixed inset-0 z-[70]">{heistScreen}</div>}
+      {film && me?.admin && !directorOff && (
+        <Director
+          chasing={!!practiceRun}
+          haunted={!!haunt}
+          onChase={(c) => demo.current.run(c)}
+          onStop={() => demo.current.stop()}
+          onLock={() => demo.current.lock()}
+          onBanner={(c) => demo.current.banner(c)}
+          onHaunt={() => setHauntDemo((h) => !h)}
+        />
+      )}
       <CityView
         ref={view}
         me={meLook}
@@ -1149,7 +1197,7 @@ export function CityApp() {
           setChatRefused(refused ?? null);
           if (fresh && chatOpenRef.current) setChatSeen(fresh.id);
         }}
-        guide={practiced ? null : placeOf('training')!.door}
+        guide={practiced || clean ? null : placeOf('training')!.door}
         onPracticeEnd={(outcome) => {
           setPracticeRun(null);
           // A guest who just got the bag home: now the real thing needs a Chog.
@@ -1178,7 +1226,7 @@ export function CityApp() {
       {/* Top left: who you are and today's jobs */}
       <div
         className={cn(
-          'pointer-events-none absolute left-3 top-3 z-20 flex flex-col items-start gap-2',
+          'film-hide pointer-events-none absolute left-3 top-3 z-20 flex flex-col items-start gap-2',
           (practiceRun || myChase) && 'max-sm:hidden',
         )}
       >
@@ -1196,7 +1244,7 @@ export function CityApp() {
       </div>
 
       {/* Top right: the minimap */}
-      <div className="pointer-events-none absolute right-3 top-3 z-20 flex items-start gap-2">
+      <div className="film-hide pointer-events-none absolute right-3 top-3 z-20 flex items-start gap-2">
         {!me?.address && (
           <div className="hidden sm:block">
             <button
@@ -1236,13 +1284,16 @@ export function CityApp() {
       {(() => {
         const run = practiceRun
           ? {
-              line: `Practice: get to ${practiceRun.to}. Dodge the police.`,
+              line:
+                practiceRun.bag !== undefined
+                  ? `${money(practiceRun.bag)} to ${practiceRun.to}. Dodge the police.`
+                  : `Practice: get to ${practiceRun.to}. Dodge the police.`,
               since: practiceRun.since,
               until: practiceRun.until,
             }
           : myChase
             ? {
-                line: `${money(myChase.bag)} to ${GANGS[myChase.home].name}’s door. Dodge the police.`,
+                line: `${money(myChase.bag)} to ${doorOf(GANGS[myChase.home].name)}. Dodge the police.`,
                 since: myChase.since,
                 until: myChase.until,
               }
@@ -1322,7 +1373,7 @@ export function CityApp() {
       {!anyCard && (
         <div
           className={cn(
-            'pointer-events-none absolute left-3 z-20 sm:bottom-5 sm:left-5',
+            'film-hide pointer-events-none absolute left-3 z-20 sm:bottom-5 sm:left-5',
             // On a phone: closed, the floating messages sit above the button row; open, it's a sheet.
             chatOpen
               ? 'bottom-[max(8px,env(safe-area-inset-bottom))] max-sm:right-3'
@@ -1348,7 +1399,7 @@ export function CityApp() {
 
       {/* Bottom right: action buttons */}
       {!anyCard && !(chatOpen && small) && (
-        <div className="pointer-events-none absolute bottom-[max(14px,env(safe-area-inset-bottom))] right-3 z-20 flex items-end gap-2.5 sm:bottom-5 sm:right-5 sm:gap-4">
+        <div className="film-hide pointer-events-none absolute bottom-[max(14px,env(safe-area-inset-bottom))] right-3 z-20 flex items-end gap-2.5 sm:bottom-5 sm:right-5 sm:gap-4">
           {emoteOpen && (
             <div className="glass-strong pointer-events-auto absolute bottom-[calc(100%+14px)] right-0 z-30 w-max origin-bottom-right max-sm:bottom-[178px] animate-[pop-in_340ms_cubic-bezier(.2,.9,.3,1.2)] rounded-[26px] p-2">
               <div className="grid grid-cols-4 gap-1">
@@ -1485,7 +1536,7 @@ export function CityApp() {
       {/* A Chog's gang is picked once */}
       {chog && !chog.gang && !sheet && (
         <Card>
-          <h2 className="font-display text-[21px] leading-none">Pick {chog.name}’s gang</h2>
+          <h2 className="font-display text-[21px] leading-none">Pick {possessive(chog.name)} gang</h2>
           <p className="mt-1.5 text-[14px] text-white/70">
             Its gang comes from what it wears. Pick carefully: a Chog reps one gang for good.
           </p>
@@ -2352,7 +2403,7 @@ function GangBanner(props: {
         {up && <div className="text-[12px] text-white/60">{formatLeft(up.until - props.now)} left</div>}
       </div>
       <p className="mt-1 text-[12px] leading-snug text-white/55">
-        A big flag over {GANGS[props.gang].name}’s building that the whole city sees.
+        A big flag over {possessive(GANGS[props.gang].name)} building that the whole city sees.
       </p>
       <BurnButton
         kind="banner"

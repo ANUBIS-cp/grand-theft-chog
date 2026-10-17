@@ -377,3 +377,8 @@ canvas {
     animation: none !important;
   }
 }
+
+/* Filming (?film=1): the game's buttons, map and cards hidden, so the city fills the frame. */
+[data-film] .film-hide {
+  display: none !important;
+}

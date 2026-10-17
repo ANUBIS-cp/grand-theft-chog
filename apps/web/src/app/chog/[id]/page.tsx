@@ -11,6 +11,7 @@ import { GANG_COLOR } from '@/lib/theme';
 import { chogImage } from '@/lib/images';
 import { ago, formatLeft } from '@/lib/time';
 import { db } from '@/server/db';
+import { possessive } from '@/lib/possessive';
 
 export const dynamic = 'force-dynamic';
 
@@ -155,7 +156,7 @@ export default async function ChogPage({ params }: Props) {
                           {h.revenge ? ' (revenge)' : ''}
                         </>
                       ) : (
-                        <>Got caught in {GANGS[h.target].name}’s vault</>
+                        <>Got caught in {possessive(GANGS[h.target].name)} vault</>
                       )}
                     </span>
                     <span className="shrink-0 text-right text-[12px] text-label-3">

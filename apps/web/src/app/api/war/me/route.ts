@@ -4,6 +4,7 @@ import { powersFor } from '@chog-city/game/heist';
 import { chogsFor, hitToday, revengeTargets } from '@chog-city/server';
 import { heistChogs } from '@chog-city/server/db';
 import { inArray } from 'drizzle-orm';
+import { isAdmin } from '@/server/admin';
 import { db } from '@/server/db';
 import { json } from '@/server/http';
 import { currentAddress } from '@/server/session';
@@ -27,6 +28,8 @@ export async function GET() {
   );
   return json({
     address,
+    // The owner sees the demo controls for filming (?film=1).
+    ...(isAdmin(address) ? { admin: true } : {}),
     revenge,
     chogs: mine.map((m) => {
       const chog = getChog(m.tokenId)!;

@@ -83,9 +83,28 @@ Use a screenshot of the city at night (the plaza or a gang's door), 1200×630. T
 
 ---
 
-# Demo video (3 minutes, record on a phone screen or a laptop)
+# Demo video (2–2½ minutes)
 
-Keep it moving; no talking needed if you add the captions on screen.
+Record on the laptop in full-screen Chrome (Cmd+Shift+5 records the screen on a Mac), each shot on its own with
+a few takes, then cut them together (CapCut is free). Keep it moving; captions on screen instead of talking.
+
+**Film mode:** open https://chogworld.duckdns.org/?film=1 signed in with your wallet. The buttons, map and cards
+are hidden so the city fills the frame. Keys: **H** shows or hides the game's buttons, **B** shows or hides the
+demo bar at the top. The demo bar (only your wallet sees it) calls up a shot on demand, all practice, nothing real
+moves:
+
+- **Police chase**: the run home with police cars and the arrow, carrying the cash typed in the $ box.
+- **Lock + vault**: a practice break-in, then the vault.
+- **Got away**: the "Got away! You ran $X home" banner, with the $ box's amount.
+- **Halloween**: the haunted city (ghosts, lanterns, the cauldron) on or off.
+
+**Music:** before recording, open the music button (by the map, press H to see it) and switch **Music off**,
+keep **Game sounds** on, and add one song in the editor: *No Sleep* (kontraa) or *Charming Phonk*
+(FreeMusicLab), both on Pixabay. The city's *Password Infinity* and the vault's *Spinning Head* are registered
+with YouTube's copyright system, so a YouTube upload with them would likely get a claim.
+
+**The shot nobody else has:** a live raid. A friend in a rival gang defends their vault (they jump in and steer a
+guard) while you rob it; record both screens and show them side by side.
 
 0:00–0:12 · The city. Open the site, the plaza at night, other Chogs walking. Caption: "Every Chog holder, one city."
 
