@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ALL_RUSH_MAPS, Cell, buildMap, cellAt, distanceMap, type Dir, type RushMapDef } from './map.ts';
-import { rushRules } from './rules.ts';
-import { DT, RUSH, TPS, startRush, stepRush, type RushInput, type RushState } from './sim.ts';
+import { SAFE_CORNERS_FROM, rushMap, rushRules } from './rules.ts';
+import { DT, RUSH, TPS, bySafe, startRush, stepRush, type RushInput, type RushState } from './sim.ts';
 
 const UP = 0 as Dir;
 const RIGHT = 1 as Dir;
@@ -263,5 +263,21 @@ describe('the robber’s screen in a live raid', () => {
     expect(t.s.guards.map((g) => [g.x, g.y, g.mode])).toEqual(truth.guards.map((g) => [g.x, g.y, g.mode]));
     expect(t.s.carried).toBe(truth.carried);
     void replayRush;
+  });
+});
+
+describe('cracking the safe', () => {
+  it('works from a corner tile too (the casino cage is walked into at a corner), but not for old runs', () => {
+    const m = rushMap('rush-casino')!;
+    const corner = { x: m.safe!.x + 1.5, y: m.safe!.y + 1.5 };
+    const beside = { x: m.safe!.x + 1.5, y: m.safe!.y + 0.5 };
+    const away = { x: m.safe!.x + 2.5, y: m.safe!.y + 0.5 };
+    expect(bySafe(m, corner)).toBe(true);
+    expect(bySafe(m, beside)).toBe(true);
+    expect(bySafe(m, away)).toBe(false);
+    expect(bySafe(m, corner, true)).toBe(false);
+    expect(rushRules(1, false, false, SAFE_CORNERS_FROM - 1).safeEdgesOnly).toBe(true);
+    expect(rushRules(1, false, false, SAFE_CORNERS_FROM).safeEdgesOnly).toBeUndefined();
+    expect(rushRules(1).safeEdgesOnly).toBeUndefined();
   });
 });

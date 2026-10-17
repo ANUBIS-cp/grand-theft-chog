@@ -171,6 +171,8 @@ export interface RushRules {
   needSafe?: boolean;
   /** The break-in was loud: the alarm is already ringing when you get in. */
   loud?: boolean;
+  /** An old run: the safe can only be cracked from straight above, below or beside it. */
+  safeEdgesOnly?: boolean;
 }
 
 const rand = (s: RushState) => {
@@ -182,6 +184,14 @@ const rand = (s: RushState) => {
 };
 
 const centre = (v: number) => Math.floor(v) + 0.5;
+
+/** Close enough to crack the safe: on any of the eight tiles round it (old runs: the four beside it). */
+export function bySafe(m: RushMap, me: { x: number; y: number }, edgesOnly = false): boolean {
+  if (!m.safe) return false;
+  const dx = Math.abs(me.x - (m.safe.x + 0.5));
+  const dy = Math.abs(me.y - (m.safe.y + 0.5));
+  return (edgesOnly ? dx + dy : Math.max(dx, dy)) <= 1.15;
+}
 
 export function startRush(
   map: RushMap,
@@ -482,16 +492,13 @@ export function stepRush(
     // A held key keeps moving; a tap is remembered just long enough to make a turn.
     const want = you.d !== -1 ? you.d : me.want;
     glide(m, me, want, (s.fx.sprint > 0 ? RUSH.sprint : RUSH.speed) * DT);
-    // Start cracking: Use next to the safe.
-    if (you.use && safe && !safe.open && m.safe) {
-      const d = Math.abs(me.x - (m.safe.x + 0.5)) + Math.abs(me.y - (m.safe.y + 0.5));
-      if (d <= 1.15) {
-        safe.dialing = true;
-        safe.at = s.tick;
-        safe.zone = Math.floor(rand(s) * 360);
-        me.dir = -1;
-        ev.push({ t: 'dial' });
-      }
+    // Start cracking: Use next to the safe, corners too (the casino's cage is walked into at a corner).
+    if (you.use && safe && !safe.open && bySafe(m, me, rules.safeEdgesOnly)) {
+      safe.dialing = true;
+      safe.at = s.tick;
+      safe.zone = Math.floor(rand(s) * 360);
+      me.dir = -1;
+      ev.push({ t: 'dial' });
     }
   }
 

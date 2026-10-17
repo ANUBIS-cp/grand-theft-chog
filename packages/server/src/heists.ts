@@ -342,6 +342,7 @@ function replayRun(
     revenge: boolean;
     loud: boolean;
     id: string;
+    startedAt: Date;
   },
   text: string,
   vaultHas: number,
@@ -353,7 +354,7 @@ function replayRun(
   if (map) {
     const inputs = decodeRushInputs(text);
     if (!inputs || inputs.length > rushMaxSteps(map)) throw new HeistRefused('bad-inputs');
-    const rules = rushRules(run.tier, run.prisoner !== null, run.loud);
+    const rules = rushRules(run.tier, run.prisoner !== null, run.loud, run.startedAt.getTime());
     return settleRush(
       map,
       rules,
@@ -828,6 +829,7 @@ export async function runForReplay(db: Db, id: string) {
     getaway: r.getaway,
     getawayTrack: r.getawayTrack ? (JSON.parse(r.getawayTrack) as GetawayTrack) : null,
     caughtBy: r.caughtBy,
+    startedAt: r.startedAt.getTime(),
     at: r.finishedAt!.getTime(),
   };
 }

@@ -3,6 +3,7 @@ import type { SkillId } from '@chog-city/data';
 import type { PowerId } from '@chog-city/game/heist';
 import {
   DT,
+  bySafe,
   RUSH,
   RUSH_POWERS,
   TPS,
@@ -767,12 +768,7 @@ export function RushGame(props: RushGameProps) {
       : null;
   const hurry = !!hud && hud.seconds <= RUSH.hurry && !over;
   const safeState = game.current?.s.safe;
-  const nearSafe =
-    !!map.safe &&
-    !!game.current &&
-    !safeState?.open &&
-    Math.abs(game.current.s.me.x - (map.safe.x + 0.5)) + Math.abs(game.current.s.me.y - (map.safe.y + 0.5)) <=
-      1.15;
+  const nearSafe = !!map.safe && !!game.current && !safeState?.open && bySafe(map, game.current.s.me, rules.safeEdgesOnly);
 
   return (
     <div className="flex h-full flex-col bg-[#0b0918] text-white">
