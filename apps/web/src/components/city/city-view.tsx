@@ -359,7 +359,16 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     let last = performance.now();
     let miniAt = 0;
     const gate = frameGate();
+    // One bad frame must never stop the game: if drawing throws, the next frame still comes.
     const frame = (now: number) => {
+      try {
+        step(now);
+      } catch (e) {
+        console.error(e);
+        raf = requestAnimationFrame(frame);
+      }
+    };
+    const step = (now: number) => {
       if (!gate(now)) {
         raf = requestAnimationFrame(frame);
         return;

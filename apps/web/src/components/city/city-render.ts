@@ -1601,7 +1601,7 @@ export class CityRenderer {
       y - piece.top < m.b;
     drawWalker(g, piece, x, y, w, style, now, {
       seed: keySeed(p.key),
-      emoted: p.emote ? now - p.emote.at : undefined,
+      emoted: p.emote ? Math.max(0, now - p.emote.at) : undefined,
       alpha: over ? (p.cop ? 0.55 : 0.3) : p.npc && !p.cop ? 0.92 : 1,
     });
     if (p.cop) {
@@ -1712,10 +1712,12 @@ export class CityRenderer {
       g.fill();
       g.restore();
     }
+    // Never a negative age: a frame's time can be a moment earlier than the tap that started the emote (Android
+    // Chrome), and a negative age drew a circle of negative size, which threw and froze the game.
     if (p.emote && now - p.emote.at < 3500)
-      this.drawEmote(p.emote.kind, x, ty - h / 2 - t * 0.5, now - p.emote.at);
+      this.drawEmote(p.emote.kind, x, ty - h / 2 - t * 0.5, Math.max(0, now - p.emote.at));
     else if (p.said && now - p.said.at < 6000)
-      this.drawSaid(p.said.text, x, ty - h / 2 - 6, now - p.said.at, p.me);
+      this.drawSaid(p.said.text, x, ty - h / 2 - 6, Math.max(0, now - p.said.at), p.me);
     g.globalAlpha = 1;
   }
 
