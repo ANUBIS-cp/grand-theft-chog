@@ -661,6 +661,8 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
   }, []);
   function onDown(e: React.PointerEvent) {
     if (live.current.paused) return;
+    // One finger walks; another landing on the street (or lifting off a button that just closed) leaves it be.
+    if (press.current && press.current.id !== e.pointerId) return;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     press.current = {
       x: e.clientX,
@@ -703,6 +705,9 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     }
   }
   function onUp(e: React.PointerEvent) {
+    // Only the walking finger's lift stops you: a phone sends another finger's lift here when the button it was
+    // on goes away (picking an emoji closes the panel under that finger).
+    if (press.current && press.current.id !== e.pointerId) return;
     const p = press.current;
     press.current = null;
     state.current.stick = null;

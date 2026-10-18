@@ -398,7 +398,9 @@ html:has(.game-root) body {
   width: 100%;
 }
 .game-root {
-  height: 100dvh;
+  /* What's really visible (set by lib/no-page-scroll.ts), or the dynamic screen height until then. */
+  height: var(--app-h, 100dvh) !important;
+  top: var(--app-top, 0px);
   touch-action: none;
 }
 /* Lists that really scroll keep their own scrolling (it stops at them, so the screen's "none" doesn't reach). */

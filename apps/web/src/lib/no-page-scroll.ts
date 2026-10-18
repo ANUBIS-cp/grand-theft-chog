@@ -23,9 +23,29 @@ export function useNoPageScroll() {
       if (e.touches.length > 1 || !scrollsInside(e.target as Element, root)) e.preventDefault();
     };
     const gesture = (e: Event) => e.preventDefault();
+    // Fit the game to what's really visible: the part of the page the browser's bars don't cover. Some phone
+    // browsers size a full-screen layer as if their bars were hidden, which put the top of the game under the
+    // address bar. The page is also put back to the top if it was moved (a restored scroll, a keyboard).
+    const vv = window.visualViewport;
+    const fit = () => {
+      if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+      const h = vv ? vv.height : window.innerHeight;
+      const top = vv ? vv.offsetTop : 0;
+      root.style.setProperty('--app-h', `${Math.round(h)}px`);
+      root.style.setProperty('--app-top', `${Math.round(top)}px`);
+    };
+    fit();
+    vv?.addEventListener('resize', fit);
+    vv?.addEventListener('scroll', fit);
+    window.addEventListener('resize', fit);
+    window.addEventListener('orientationchange', fit);
     document.addEventListener('touchmove', move, { passive: false });
     document.addEventListener('gesturestart', gesture);
     return () => {
+      vv?.removeEventListener('resize', fit);
+      vv?.removeEventListener('scroll', fit);
+      window.removeEventListener('resize', fit);
+      window.removeEventListener('orientationchange', fit);
       document.removeEventListener('touchmove', move);
       document.removeEventListener('gesturestart', gesture);
     };

@@ -57,6 +57,7 @@ import {
 } from './hud';
 import type { Chase, ChaseEnd, ChatMsg, LiveStatus } from './live-city';
 import { useNoPageScroll } from '@/lib/no-page-scroll';
+import { ViewportProbe } from './viewport-probe';
 
 /** "Legends’ door", "MCGA Gang’s door". */
 const doorOf = (name: string) => `${possessive(name)} door`;
@@ -309,6 +310,8 @@ export function CityApp() {
     return () => window.removeEventListener('keydown', key);
   }, []);
   const clean = film && hudOff;
+  const [probe, setProbe] = useState(false);
+  useEffect(() => setProbe(new URLSearchParams(location.search).get('vp') === '1'), []);
   // Filming: the owner's wallet pays 1 $CHOG for bail, a poster or a banner (the server checks it's the owner).
   const burnsShown = useMemo(
     () =>
@@ -1167,6 +1170,7 @@ export function CityApp() {
 
   return (
     <div className="game-root fixed inset-x-0 top-0 overflow-hidden bg-[#07060d] text-white" data-film={clean ? '' : undefined}>
+      {probe && <ViewportProbe />}
       {heistScreen && <div className="fixed inset-0 z-[70]">{heistScreen}</div>}
       {film && me?.admin && !directorOff && (
         <Director
@@ -1417,10 +1421,12 @@ export function CityApp() {
                 {EMOTES.map((k, i) => (
                   <button
                     key={k}
-                    {...tap(() => {
-                      view.current?.emote(k);
-                      setEmoteOpen(false);
-                    })}
+                    {...tap(() => view.current?.emote(k))}
+                    // The panel closes when the finger lifts, not under it (a phone would hand that finger's lift
+                    // to whatever is underneath).
+                    onPointerUp={() => setTimeout(() => setEmoteOpen(false), 0)}
+                    onPointerCancel={() => setTimeout(() => setEmoteOpen(false), 0)}
+                    onKeyUp={(e) => (e.key === 'Enter' || e.key === ' ') && setEmoteOpen(false)}
                     aria-label={EMOTE_LABEL[k]}
                     title={`${EMOTE_LABEL[k]} (${i + 1})`}
                     className="press group relative flex w-[66px] flex-col items-center gap-1 rounded-[18px] px-1 pb-1.5 pt-2 hover:bg-white/[0.08]"
