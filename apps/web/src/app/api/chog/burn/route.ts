@@ -9,6 +9,7 @@ import {
   readBurn,
 } from '@chog-city/server';
 import { z } from 'zod';
+import { isAdmin } from '@/server/admin';
 import { publicClient } from '@/server/chain';
 import { db } from '@/server/db';
 import { error, json } from '@/server/http';
@@ -21,6 +22,8 @@ const Body = z.object({
   kind: z.enum(BURN_KINDS),
   chogId: z.number().int().min(1).max(1969),
   line: z.number().int().min(0).max(20).optional(),
+  /** Film mode: the owner's wallets pay 1 $CHOG, to film it. Ignored for everyone else. */
+  film: z.boolean().optional(),
   /** Leave out to only check (and see your balance) before burning. */
   tx: z
     .string()
@@ -38,8 +41,8 @@ export async function POST(req: Request) {
   if (!allow(`burn:${address}`, 20, 0.2)) return error('slow-down', 429);
   const body = Body.safeParse(await req.json().catch(() => null));
   if (!body.success) return error('bad-request');
-  const { kind, chogId, line, tx } = body.data;
-  const price = BURN_PRICE[kind];
+  const { kind, chogId, line, tx, film } = body.data;
+  const price = film && isAdmin(address) ? 1 : BURN_PRICE[kind];
   const now = Date.now();
   try {
     if (!tx) {

@@ -898,6 +898,15 @@ export class Halloween {
     }
     const tile = this.fogTileSprite();
     const f = this.fog.getContext('2d')!;
+    // One repeating pattern, not tiles side by side: tiles at in-between pixel positions leave a faint dark
+    // seam along every edge, and the seams drift across the streets with the fog.
+    const tiled = (c: CanvasRenderingContext2D, ox: number, oy: number, size: number) => {
+      const pat = c.createPattern(tile, 'repeat');
+      if (!pat) return;
+      pat.setTransform(new DOMMatrix().translate(ox, oy).scale(size / tile.width));
+      c.fillStyle = pat;
+      c.fillRect(0, 0, fw, fh);
+    };
     f.globalCompositeOperation = 'source-over';
     f.clearRect(0, 0, fw, fh);
     const layer = (speed: number, tint: string, alpha: number, size: number) => {
@@ -905,7 +914,7 @@ export class Halloween {
       const ox = (((-v.cam.x * scale - (now / 1000) * speed * v.t * scale) % s) + s) % s;
       const oy = (((-v.cam.y * scale + (now / 1000) * speed * 0.3 * v.t * scale) % s) + s) % s;
       f.globalAlpha = alpha;
-      for (let x = ox - s; x < fw; x += s) for (let y = oy - s; y < fh; y += s) f.drawImage(tile, x, y, s, s);
+      tiled(f, ox, oy, s);
       f.globalAlpha = 1;
       f.globalCompositeOperation = 'source-atop';
       f.fillStyle = tint;
@@ -921,8 +930,7 @@ export class Halloween {
     const ox2 = (((-v.cam.x * scale + (now / 1000) * 0.5 * v.t * scale) % s2) + s2) % s2;
     const oy2 = (((-v.cam.y * scale - (now / 1000) * 0.2 * v.t * scale) % s2) + s2) % s2;
     m.globalAlpha = 0.4;
-    for (let x = ox2 - s2; x < fw; x += s2)
-      for (let y = oy2 - s2; y < fh; y += s2) m.drawImage(tile, x, y, s2, s2);
+    tiled(m, ox2, oy2, s2);
     m.globalAlpha = 1;
     m.globalCompositeOperation = 'source-atop';
     m.fillStyle = 'rgba(90,220,160,0.9)';

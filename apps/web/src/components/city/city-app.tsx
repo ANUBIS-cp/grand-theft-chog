@@ -306,6 +306,14 @@ export function CityApp() {
     return () => window.removeEventListener('keydown', key);
   }, []);
   const clean = film && hudOff;
+  // Filming: the owner's wallet pays 1 $CHOG for bail, a poster or a banner (the server checks it's the owner).
+  const burnsShown = useMemo(
+    () =>
+      city?.burns && film && me?.admin
+        ? { ...city.burns, prices: { bail: 1, poster: 1, banner: 1 } }
+        : city?.burns,
+    [city?.burns, film, me?.admin],
+  );
   const startPracticeRef = useRef(() => {});
   const startPractice = () => {
     const pool = GANG_IDS.filter((g) => g !== chog?.gang);
@@ -1494,7 +1502,7 @@ export function CityApp() {
             onDefendRaid={(r) => void defend(r)}
             info={gangInfo && gangInfo.gang === door.gang ? gangInfo.data : undefined}
             robbing={door.gang ? alarms[door.gang] : undefined}
-            burns={city?.burns}
+            burns={burnsShown}
             address={me?.address ?? null}
             onBurned={burned}
             onPoster={(who) => {
@@ -1578,7 +1586,7 @@ export function CityApp() {
             who={peek}
             jailed={city?.jailed ?? []}
             now={now}
-            burns={city?.burns}
+            burns={burnsShown}
             address={me?.address ?? null}
             mine={!!me?.chogs.some((c) => c.id === peek.chog)}
             onBurned={burned}
@@ -1645,7 +1653,7 @@ export function CityApp() {
               chog={chog}
               now={now}
               address={me?.address ?? null}
-              burns={city?.burns}
+              burns={burnsShown}
               onBurned={burned}
             />
           )}

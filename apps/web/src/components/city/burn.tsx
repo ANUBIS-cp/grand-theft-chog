@@ -60,7 +60,9 @@ export function BurnButton(props: {
   const go = async () => {
     setErr(null);
     if (!props.address) return setErr(SAY.login!);
-    const ask = { kind: props.kind, chogId: props.chogId, line: props.line };
+    // Film mode (?film=1): the owner's 1 $CHOG price; the server ignores it for anyone else.
+    const film = new URLSearchParams(location.search).get('film') === '1' || undefined;
+    const ask = { kind: props.kind, chogId: props.chogId, line: props.line, film };
     try {
       setStep('check');
       const c = await post(ask);
