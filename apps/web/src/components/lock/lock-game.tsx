@@ -31,6 +31,7 @@ import { useEffect, useRef, useState } from 'react';
 import { GANG_COLOR } from '@/lib/theme';
 import { Sound } from '@/components/heist/sound';
 import { cn } from '@/lib/cn';
+import { frameGate } from '@/lib/frames';
 
 // Stage 1 of a robbery: the lock on the vault door, a few seconds of timing or memory in the robbed gang's
 // look. The taps go to the server, which replays them (quiet or loud) before you're let in.
@@ -90,7 +91,12 @@ export function LockGame(props: {
     if (s.s.kind === 'wires') s.started = true;
     let raf = 0;
     let lastClick = -1;
+    const gate = frameGate();
     const loop = (now: number) => {
+      if (!gate(now)) {
+        raf = requestAnimationFrame(loop);
+        return;
+      }
       if (!s.last) s.last = now;
       s.acc += Math.min(200, now - s.last);
       s.last = now;

@@ -15,6 +15,7 @@ import { CityRenderer, type Person, type PlaceLook } from '@/components/city/cit
 import { Sound } from '@/components/heist/sound';
 import { chogImage } from '@/lib/images';
 import { cn } from '@/lib/cn';
+import { frameGate } from '@/lib/frames';
 
 // Stage 3 of a replay: the run home through the city, as the live server recorded it (five frames a second,
 // smoothed between). Drawn with the city's own renderer, the camera on the robber.
@@ -75,7 +76,12 @@ export function GetawayReplay(props: GetawayReplayProps) {
     }
     r.onStep = (what, style) => (what === 'step' ? sound.step(style) : sound.flick());
     let ended = false;
+    const gate = frameGate();
     const frame = (now: number) => {
+      if (!gate(now)) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
       const p = propsRef.current;
       const ms = Math.min(len, now - t0);
       const at = trackAt(track, ms);

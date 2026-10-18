@@ -26,6 +26,7 @@ import { Fx } from './fx';
 import { VaultRenderer, snapshot, type Prev } from './render';
 import { setMusicOff } from './music';
 import { gameSoundsMuted, setGameMuted, Sound } from './sound';
+import { frameGate } from '@/lib/frames';
 
 export interface HeistChog {
   id: number;
@@ -231,7 +232,12 @@ export function HeistGame({
     let crackTick = 0;
     let lastLock = 0;
     const DT = 1000 / TPS;
+    const gate = frameGate();
     const frame = (now: number) => {
+      if (!gate(now)) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
       const st = game.current!;
       const elapsed = Math.min(250, now - last);
       last = now;

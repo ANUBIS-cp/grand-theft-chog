@@ -36,6 +36,7 @@ import { CityArt } from './art';
 import { Halloween } from './halloween';
 import { CityRenderer, type Board, type Emote, type Person, type PlaceLook } from './city-render';
 import { LiveCity, type Chase, type ChaseEnd, type ChatMsg, type LiveStatus } from './live-city';
+import { frameGate } from '@/lib/frames';
 
 export interface Me {
   chog: number | null;
@@ -357,7 +358,12 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     let raf = 0;
     let last = performance.now();
     let miniAt = 0;
+    const gate = frameGate();
     const frame = (now: number) => {
+      if (!gate(now)) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       const p = live.current;

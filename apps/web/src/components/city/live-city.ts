@@ -175,7 +175,7 @@ export class LiveCity {
     setTimeout(() => void this.connect(), wait);
   }
 
-  private add(p: Info, now: number) {
+  private add(p: Info) {
     const have = this.people.get(p.id);
     if (have) Object.assign(have, { chog: p.chog, name: p.name, gang: p.gang, npc: p.npc });
     else
@@ -204,7 +204,7 @@ export class LiveCity {
         const c = m as unknown as Chase;
         this.chases.set(c.run, c);
         for (const k of c.cops)
-          this.add({ id: k.id, chog: k.chog, name: 'Police', gang: null, npc: true }, now);
+          this.add({ id: k.id, chog: k.chog, name: 'Police', gang: null, npc: true });
         for (const k of c.cops) this.people.get(k.id)!.cop = true;
         this.on.chase?.();
         break;
@@ -222,10 +222,10 @@ export class LiveCity {
       }
       case 'all':
         this.people.clear();
-        for (const p of m.people as Info[]) this.add(p, now);
+        for (const p of m.people as Info[]) this.add(p);
         break;
       case 'join':
-        this.add(m.p as Info, now);
+        this.add(m.p as Info);
         break;
       case 'leave':
         this.people.delete(m.id as number);

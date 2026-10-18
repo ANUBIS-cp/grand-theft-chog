@@ -99,7 +99,8 @@ export class VaultRenderer {
     const close = Math.floor(Math.min(boxW, boxH) / 11);
     this.t = Math.min(84, Math.max(34, close, fit));
     this.lift = Math.round(this.t * 0.34);
-    this.dpr = Math.min(3, window.devicePixelRatio || 1);
+    // 2x, like the city: a phone's 3x looks the same at arm's length and is 2.25 times the pixels to draw.
+    this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.view = { w: Math.round(boxW), h: Math.round(boxH) };
     this.cv.width = Math.round(this.view.w * this.dpr);
     this.cv.height = Math.round(this.view.h * this.dpr);

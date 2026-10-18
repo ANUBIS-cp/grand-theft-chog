@@ -44,6 +44,7 @@ import { powerHint } from './power-fx';
 import { stickPick } from './stick';
 import { ThumbStick } from './thumb-stick';
 import { RushRenderer, rushSnapshot, type RushPrev } from './rush-render';
+import { frameGate } from '@/lib/frames';
 
 // Cash Rush on screen: the maze, the controls (keys, a drag stick, buttons), the safe dial, and the cards at
 // the start and end. This file runs a practice run on its own; a real raid plugs a live connection in
@@ -278,7 +279,12 @@ export function RushGame(props: RushGameProps) {
     let fxAcc = 0;
     let lastKey = '';
     let lastSecond = 0;
+    const gate = frameGate();
     const frame = (now: number) => {
+      if (!gate(now)) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
       const st = game.current!;
       const elapsed = Math.min(250, now - last);
       last = now;
