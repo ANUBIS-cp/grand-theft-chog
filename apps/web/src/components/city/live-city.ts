@@ -10,12 +10,11 @@ export interface Remote {
   name: string;
   gang: GangId | null;
   npc: boolean;
-  /** Last two positions from the server and when the newer one arrived. */
-  px: number;
-  py: number;
+  /** The newest position from the server (NaN until the first). */
   nx: number;
   ny: number;
-  at: number;
+  /** The last second or so of positions, by when each arrived: drawn a moment behind, sliding between them. */
+  buf: Snap[];
   face: -1 | 1;
   moving: boolean;
   seen: number;
@@ -24,6 +23,14 @@ export interface Remote {
   said?: { text: string; at: number };
   /** Police in a getaway (not a player or a stroller). */
   cop?: boolean;
+}
+
+interface Snap {
+  t: number;
+  x: number;
+  y: number;
+  face: -1 | 1;
+  moving: boolean;
 }
 
 /** A getaway in the city: someone carrying a bag from a robbed gang's door to their own. */
@@ -76,6 +83,12 @@ interface Info {
 export type LiveStatus = 'connecting' | 'live' | 'offline' | 'elsewhere';
 
 const TICK = 100;
+// How far behind others are drawn, so there's always a next position to slide to. Players need more: their
+// phone sends on its own beat (every 100-117 ms, with the screen's frames), not the server's, so now and then a
+// tick has nothing new, and positions arrive a little uneven over the internet. The police and strollers are
+// moved by the server itself, every tick.
+const BEHIND_PLAYER = 230;
+const BEHIND_SERVER = 130;
 
 export function liveUrl() {
   const { protocol, hostname, host, port } = window.location;
@@ -97,6 +110,7 @@ export class LiveCity {
   private stopped = false;
   private retry = 0;
   private sent = { x: 0, y: 0, f: 1, m: 0, at: 0 };
+  private beat = -1e9;
 
   constructor(
     private chog: number | null,
@@ -167,11 +181,9 @@ export class LiveCity {
     else
       this.people.set(p.id, {
         ...p,
-        px: NaN,
-        py: NaN,
         nx: NaN,
         ny: NaN,
-        at: now,
+        buf: [],
         face: 1,
         moving: false,
         seen: 0,
@@ -228,22 +240,32 @@ export class LiveCity {
       }
       case 's': {
         this.online = m.n as number;
+        // The server sends these exactly every 100 ms, but they arrive a little uneven: time them on that
+        // steady beat (pulled gently toward when they really arrive), not on the arrival itself.
+        const due = this.beat + TICK;
+        this.beat = Math.abs(now - due) < 150 ? due + (now - due) * 0.1 : now;
+        const at = this.beat;
         const d = (m.d as number[]).concat((m.c as number[] | undefined) ?? []);
         for (let i = 0; i < d.length; i += 4) {
           const p = this.people.get(d[i]!);
           if (!p) continue;
           const x = d[i + 1]! / 100;
           const y = d[i + 2]! / 100;
-          // Start from wherever it's drawn now, so a late update doesn't make it jump back.
-          const cur = this.at(p, now);
-          p.px = Number.isNaN(cur.x) ? x : cur.x;
-          p.py = Number.isNaN(cur.y) ? y : cur.y;
+          const face = d[i + 3]! & 1 ? -1 : 1;
+          const moving = (d[i + 3]! & 2) !== 0;
+          p.seen = now;
+          const last = p.buf[p.buf.length - 1];
+          // Walking but no new position: their phone's update missed this tick. Skip it, so they slide on
+          // to the next one instead of stopping for a tick and then lurching.
+          if (last && moving && last.moving && last.x === x && last.y === y && at - last.t < 400) continue;
+          // After standing still for a while, the next step starts from now (not from long ago).
+          if (last && at - last.t > 400) p.buf.push({ ...last, t: at - TICK });
+          p.buf.push({ t: at, x, y, face, moving });
+          while (p.buf.length > 2 && p.buf[1]!.t < at - 1200) p.buf.shift();
           p.nx = x;
           p.ny = y;
-          p.at = now;
-          p.face = d[i + 3]! & 1 ? -1 : 1;
-          p.moving = (d[i + 3]! & 2) !== 0;
-          p.seen = now;
+          p.face = face;
+          p.moving = moving;
         }
         break;
       }
@@ -278,10 +300,22 @@ export class LiveCity {
     }
   }
 
-  /** Where someone is drawn right now: sliding from the last position to the newest over one tick. */
-  at(p: Remote, now: number) {
-    const k = Math.min(1, (now - p.at) / TICK);
-    return { x: p.px + (p.nx - p.px) * k, y: p.py + (p.ny - p.py) * k };
+  /** Where someone is drawn right now, a moment behind the newest position, and which way they face then. */
+  at(p: Remote, now: number): { x: number; y: number; face: -1 | 1; moving: boolean } {
+    const b = p.buf;
+    const t = now - (p.npc ? BEHIND_SERVER : BEHIND_PLAYER);
+    const first = b[0];
+    if (!first) return { x: p.nx, y: p.ny, face: p.face, moving: p.moving };
+    if (t <= first.t) return first;
+    for (let i = b.length - 1; i > 0; i--) {
+      const a = b[i - 1]!;
+      if (t < a.t) continue;
+      const n = b[i]!;
+      if (t >= n.t) return n;
+      const k = (t - a.t) / (n.t - a.t);
+      return { x: a.x + (n.x - a.x) * k, y: a.y + (n.y - a.y) * k, face: n.face, moving: a.moving || n.moving };
+    }
+    return b[b.length - 1]!;
   }
 
   /** Called every frame with your position; sends it at most ten times a second, and only when it changed. */
@@ -291,7 +325,8 @@ export class LiveCity {
     const s = this.sent;
     const m = moving ? 1 : 0;
     const changed = Math.abs(s.x - x) > 0.01 || Math.abs(s.y - y) > 0.01 || s.f !== face || s.m !== m;
-    if (now - s.at < TICK || (!changed && now - s.at < 2000)) return;
+    // A few ms early is fine: a 60 Hz screen then sends every 6th frame (100 ms) instead of every 7th.
+    if (now - s.at < TICK - 6 || (!changed && now - s.at < 2000)) return;
     ws.send(
       JSON.stringify({ t: 'mv', x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100, f: face, m }),
     );
