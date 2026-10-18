@@ -27,6 +27,7 @@ import { VaultRenderer, snapshot, type Prev } from './render';
 import { setMusicOff } from './music';
 import { gameSoundsMuted, setGameMuted, Sound } from './sound';
 import { frameGate } from '@/lib/frames';
+import { useNoPageScroll } from '@/lib/no-page-scroll';
 
 export interface HeistChog {
   id: number;
@@ -131,6 +132,7 @@ export function HeistGame({
   replay,
   rescue,
 }: HeistGameProps) {
+  useNoPageScroll();
   const script = useMemo(() => (replay ? (decodeInputs(replay.inputs) ?? []) : null), [replay]);
   const scriptRef = useRef(script);
   scriptRef.current = script;

@@ -16,6 +16,7 @@ import { Sound } from '@/components/heist/sound';
 import { chogImage } from '@/lib/images';
 import { cn } from '@/lib/cn';
 import { frameGate } from '@/lib/frames';
+import { useNoPageScroll } from '@/lib/no-page-scroll';
 
 // Stage 3 of a replay: the run home through the city, as the live server recorded it (five frames a second,
 // smoothed between). Drawn with the city's own renderer, the camera on the robber.
@@ -34,6 +35,7 @@ export interface GetawayReplayProps {
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
 
 export function GetawayReplay(props: GetawayReplayProps) {
+  useNoPageScroll();
   const { track } = props;
   const cv = useRef<HTMLCanvasElement>(null);
   const [run, setRun] = useState(0);

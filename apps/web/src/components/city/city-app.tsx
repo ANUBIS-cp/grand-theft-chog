@@ -56,6 +56,7 @@ import {
   RoundButton,
 } from './hud';
 import type { Chase, ChaseEnd, ChatMsg, LiveStatus } from './live-city';
+import { useNoPageScroll } from '@/lib/no-page-scroll';
 
 /** "Legends’ door", "MCGA Gang’s door". */
 const doorOf = (name: string) => `${possessive(name)} door`;
@@ -186,6 +187,7 @@ async function post<T>(url: string, body: unknown): Promise<T> {
 const btn = 'btn press';
 
 export function CityApp() {
+  useNoPageScroll();
   const [board, setBoard] = useState<{
     board: VaultRow[];
     hits: Hit[];

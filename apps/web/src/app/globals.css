@@ -399,4 +399,12 @@ html:has(.game-root) body {
 }
 .game-root {
   height: 100dvh;
+  touch-action: none;
+}
+/* Lists that really scroll keep their own scrolling (it stops at them, so the screen's "none" doesn't reach). */
+.game-root :is(.overflow-y-auto, .overflow-auto, .overflow-y-scroll) {
+  touch-action: pan-y;
+}
+.game-root .overflow-x-auto {
+  touch-action: pan-x;
 }
