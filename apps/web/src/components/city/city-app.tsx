@@ -47,6 +47,7 @@ import {
   type Duty,
   ChatButton,
   EmoteButton,
+  tap,
   GangsButton,
   MapButton,
   MiniMap,
@@ -1163,7 +1164,7 @@ export function CityApp() {
   );
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-[#07060d] text-white" data-film={clean ? '' : undefined}>
+    <div className="game-root fixed inset-x-0 top-0 overflow-hidden bg-[#07060d] text-white" data-film={clean ? '' : undefined}>
       {heistScreen && <div className="fixed inset-0 z-[70]">{heistScreen}</div>}
       {film && me?.admin && !directorOff && (
         <Director
@@ -1234,7 +1235,7 @@ export function CityApp() {
       {/* Top left: who you are and today's jobs */}
       <div
         className={cn(
-          'film-hide pointer-events-none absolute left-3 top-3 z-20 flex flex-col items-start gap-2',
+          'film-hide pointer-events-none absolute left-3 top-[max(0.75rem,env(safe-area-inset-top))] z-20 flex flex-col items-start gap-2',
           (practiceRun || myChase) && 'max-sm:hidden',
         )}
       >
@@ -1252,7 +1253,7 @@ export function CityApp() {
       </div>
 
       {/* Top right: the minimap */}
-      <div className="film-hide pointer-events-none absolute right-3 top-3 z-20 flex items-start gap-2">
+      <div className="film-hide pointer-events-none absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-20 flex items-start gap-2">
         {!me?.address && (
           <div className="hidden sm:block">
             <button
@@ -1414,10 +1415,10 @@ export function CityApp() {
                 {EMOTES.map((k, i) => (
                   <button
                     key={k}
-                    onClick={() => {
+                    {...tap(() => {
                       view.current?.emote(k);
                       setEmoteOpen(false);
-                    }}
+                    })}
                     aria-label={EMOTE_LABEL[k]}
                     title={`${EMOTE_LABEL[k]} (${i + 1})`}
                     className="press group relative flex w-[66px] flex-col items-center gap-1 rounded-[18px] px-1 pb-1.5 pt-2 hover:bg-white/[0.08]"

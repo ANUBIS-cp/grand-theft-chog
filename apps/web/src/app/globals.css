@@ -382,3 +382,21 @@ canvas {
 [data-film] .film-hide {
   display: none !important;
 }
+
+/* The city (and any full-screen game) is the whole page: the page itself never scrolls or bounces, sideways or
+   down, so a drag on a card or the map can't slide the game under the phone browser's address bar. On an
+   iPhone a fixed full-screen layer is sized as if the bars were hidden, which left room to drag the page. */
+html:has(.game-root),
+html:has(.game-root) body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  height: 100%;
+}
+html:has(.game-root) body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+}
+.game-root {
+  height: 100dvh;
+}

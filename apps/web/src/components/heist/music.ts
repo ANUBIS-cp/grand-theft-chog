@@ -113,9 +113,7 @@ function setup() {
   decks = [0, 1].map(() => {
     const el = new Audio();
     el.loop = true;
-    // Fetched only when it's about to play: not before the first tap (music can't start until then), and not
-    // with the music off. Saves a visitor who never taps, or keeps it off, a 2-3.5 MB song.
-    el.preload = 'none';
+    el.preload = 'auto';
     el.setAttribute('playsinline', '');
     const d: Deck = { el, gain: null, track: null };
     // The city's playlist: the next song as this one ends (the other tracks loop).
@@ -134,8 +132,7 @@ function setup() {
     wakeSound();
     route();
     for (const d of decks!) {
-      // A half-second of silence: enough for the phone to allow music from now on, without fetching a song.
-      if (!d.el.src) d.el.src = '/music/silence.mp3';
+      if (!d.el.src) d.el.src = '/music/city.mp3';
       d.el.muted = true;
       void d.el.play().then(
         () => {

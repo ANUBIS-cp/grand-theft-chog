@@ -80,7 +80,7 @@ export default async function ReplayPage({ params }: Props) {
     defenders: run.defenders,
   };
   return (
-    <main className="flex h-dvh flex-col overflow-hidden bg-[#0b0918]">
+    <main className="game-root flex h-dvh flex-col overflow-hidden bg-[#0b0918]">
       <header className="glass z-10 m-2 flex items-center justify-between gap-3 rounded-full px-4 py-2 text-[13px] text-label-2">
         <Link href="/" className="font-display text-[13px] leading-none text-white">
           Chog World

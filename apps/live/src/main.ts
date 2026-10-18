@@ -138,19 +138,9 @@ const http = createServer((req, res) => {
   res.end();
 });
 
-// Compressed (every browser supports it): the ten-a-second position list shrinks about 3.3 times, from ~380 KB
-// a minute of a player's phone data to ~115 KB, and the phone's radio has less to do. A small window keeps it to a
-// few KB of server memory a player; quick level-1 compression keeps the server's work low.
-const wss = new WebSocketServer({
-  server: http,
-  maxPayload: 2048,
-  perMessageDeflate: {
-    zlibDeflateOptions: { level: 1, memLevel: 7 },
-    serverMaxWindowBits: 10,
-    clientMaxWindowBits: 10,
-    threshold: 128,
-  },
-});
+// Not compressed: iPhones (Safari, and Chrome on iPhone, which runs on Safari's engine) stuck on "connecting"
+// with permessage-deflate on (18 Oct), while desktop Chrome was fine.
+const wss = new WebSocketServer({ server: http, maxPayload: 2048 });
 
 wss.on('connection', (ws, req) => {
   if (ORIGINS && !ORIGINS.includes(req.headers.origin ?? '')) return ws.close(1008, 'origin');

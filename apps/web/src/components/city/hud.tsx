@@ -1,9 +1,33 @@
 'use client';
 import type { Icon } from '@phosphor-icons/react';
 import { CaretDown, ChatCircleDots, Check, MapTrifold, Smiley, Trophy } from '@phosphor-icons/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent } from 'react';
 import { cn } from '@/lib/cn';
 import { chogImage } from '@/lib/images';
+
+let touchedAt = 0;
+/**
+ * A game button: a finger acts the moment it touches (a phone drops a tap while another finger holds the walk
+ * stick, so waiting for the tap missed it), a mouse click acts and lets go of focus (or Chrome rings the button in
+ * blue as soon as you walk with WASD), and the keyboard (Enter, Space) works as usual and keeps its ring.
+ */
+export function tap(fn: () => void) {
+  return {
+    onPointerDown: (e: RPointerEvent<HTMLElement>) => {
+      if (e.pointerType === 'mouse' || e.button !== 0) return;
+      if ((e.currentTarget as HTMLButtonElement).disabled) return;
+      e.preventDefault();
+      touchedAt = performance.now();
+      fn();
+    },
+    onClick: (e: RMouseEvent<HTMLElement>) => {
+      if (performance.now() - touchedAt < 700) return;
+      fn();
+      if (e.detail > 0) e.currentTarget.blur();
+    },
+  };
+}
+
 
 // The heads-up display over the city, in frosted glass: who you are and today's jobs top left, a round
 // minimap top right, round action buttons bottom right, and a toast that drops in for big moments.
@@ -192,7 +216,7 @@ export function RoundButton(props: {
   const solid = props.big && !props.disabled;
   return (
     <button
-      onClick={props.onClick}
+      {...(props.onClick ? tap(props.onClick) : {})}
       disabled={props.disabled}
       className="press pointer-events-auto flex flex-col items-center gap-1.5 disabled:opacity-50"
     >
@@ -287,7 +311,7 @@ export function PhoneControls(props: {
         return (
           <button
             key={b.label}
-            onClick={b.onClick}
+            {...tap(b.onClick)}
             aria-label={b.label}
             className="press glass pointer-events-auto absolute grid h-12 w-12 place-items-center rounded-full"
             style={{ right: p.right, bottom: p.bottom }}
@@ -302,7 +326,7 @@ export function PhoneControls(props: {
         );
       })}
       <button
-        onClick={props.onUse}
+        {...tap(props.onUse)}
         disabled={!props.use.ready}
         aria-label={props.use.label}
         className={cn(
