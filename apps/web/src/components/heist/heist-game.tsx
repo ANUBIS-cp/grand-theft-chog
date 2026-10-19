@@ -540,7 +540,7 @@ export function HeistGame({
     setJoy(null);
   };
 
-  const usePower = (i: number) => {
+  const firePower = (i: number) => {
     const g = game.current;
     if (!g) return;
     sound.current?.unlock();
@@ -707,8 +707,8 @@ export function HeistGame({
             return (
               <button
                 key={id}
-                onPointerDown={() => usePower(i)}
-                onClick={(e) => e.detail === 0 && usePower(i)}
+                onPointerDown={() => firePower(i)}
+                onClick={(e) => e.detail === 0 && firePower(i)}
                 disabled={off || over}
                 title={def.does}
                 className={cn(
