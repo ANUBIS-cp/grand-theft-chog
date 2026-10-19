@@ -960,53 +960,6 @@ export function CityApp() {
     requestAnimationFrame(() => view.current?.appearAt(place));
   };
 
-  if (raidView) {
-    const { link } = raidView;
-    const st = link.setup;
-    const leave = () => {
-      backTo(raidView.target);
-      void loadBoard();
-    };
-    if (!st)
-      return (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-[#0b0918] p-6 text-center text-white">
-          <div>
-            <p className="font-display text-[25px] leading-none">
-              {link.status === 'failed'
-                ? 'That raid is over'
-                : raidView.role === 'defend'
-                  ? 'Joining the raid…'
-                  : 'Finding the raid…'}
-            </p>
-            {link.status === 'failed' && (
-              <button onClick={leave} className={cn(btn, 'mt-5 btn-gold')}>
-                <span>Back to the city</span>
-              </button>
-            )}
-          </div>
-        </div>
-      );
-    const target = st.target as GangId;
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0918]">
-        <RushGame
-          mapId={st.map}
-          rules={st.rules}
-          seed={st.seed}
-          link={link}
-          robber={{ id: st.robber.chog, name: st.robber.name }}
-          player={{ id: st.robber.chog, name: st.robber.name, gang: null, powers: st.powers as PowerId[] }}
-          guards={st.guards.map((id) => ({ id, name: '' }))}
-          owner={{
-            name: GANGS[target]?.name ?? 'The jail',
-            color: GANG_COLOR[target]?.bg ?? '#ff5a4f',
-            ink: GANG_COLOR[target]?.fg ?? '#111111',
-          }}
-          onLeave={leave}
-        />
-      </div>
-    );
-  }
 
   // A robbery or practice runs over the city instead of replacing it, so the city stays connected and
   // drawn: coming out of the vault you're straight back on the street (no reconnect, no reloading).
@@ -1150,7 +1103,7 @@ export function CityApp() {
     return null;
   })();
   // The music follows the scene: the vault (and its lock), the run home, or the city at night.
-  const track: Track = heistScreen
+  const track: Track = heistScreen || raidView
     ? 'vault'
     : myChase || practiceRun
       ? 'chase'
@@ -1158,6 +1111,56 @@ export function CityApp() {
         ? 'halloween'
         : 'city';
   useEffect(() => playMusic(track), [track]);
+
+  // Defending or watching a raid: its own screen. Kept below every hook above, so the page runs the same hooks
+  // each time (returning before the music's hook crashed the whole page when you tapped Defend).
+  if (raidView) {
+    const { link } = raidView;
+    const st = link.setup;
+    const leave = () => {
+      backTo(raidView.target);
+      void loadBoard();
+    };
+    if (!st)
+      return (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[#0b0918] p-6 text-center text-white">
+          <div>
+            <p className="font-display text-[25px] leading-none">
+              {link.status === 'failed'
+                ? 'That raid is over'
+                : raidView.role === 'defend'
+                  ? 'Joining the raid…'
+                  : 'Finding the raid…'}
+            </p>
+            {link.status === 'failed' && (
+              <button onClick={leave} className={cn(btn, 'mt-5 btn-gold')}>
+                <span>Back to the city</span>
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    const target = st.target as GangId;
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0918]">
+        <RushGame
+          mapId={st.map}
+          rules={st.rules}
+          seed={st.seed}
+          link={link}
+          robber={{ id: st.robber.chog, name: st.robber.name }}
+          player={{ id: st.robber.chog, name: st.robber.name, gang: null, powers: st.powers as PowerId[] }}
+          guards={st.guards.map((id) => ({ id, name: '' }))}
+          owner={{
+            name: GANGS[target]?.name ?? 'The jail',
+            color: GANG_COLOR[target]?.bg ?? '#ff5a4f',
+            ink: GANG_COLOR[target]?.fg ?? '#111111',
+          }}
+          onLeave={leave}
+        />
+      </div>
+    );
+  }
 
   const anyCard = !!(
     (door && doorOpen) ||
