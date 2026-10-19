@@ -205,14 +205,28 @@ export interface StartedRun {
 
 export async function startRun(
   db: Db,
-  { address, chogId, target, now }: { address: string; chogId: number; target: GangId; now: number },
+  {
+    address,
+    chogId,
+    target,
+    now,
+    again = false,
+  }: {
+    address: string;
+    chogId: number;
+    target: GangId;
+    now: number;
+    /** The owner's wallets, filming: the same vault again the same day. Jail still counts. */
+    again?: boolean;
+  },
 ): Promise<StartedRun> {
   if (!(await canControl(db, address, chogId))) throw new HeistRefused('not-yours');
   const me = await heistRecord(db, chogId);
   if (!me?.gang) throw new HeistRefused('no-gang');
   if (me.jailedUntil && me.jailedUntil.getTime() > now) throw new HeistRefused('jailed');
   if (target === me.gang || !GANG_IDS.includes(target)) throw new HeistRefused('own-gang');
-  if ((await hitToday(db, [chogId], now)).get(chogId)?.includes(target)) throw new HeistRefused('done-today');
+  if (!again && (await hitToday(db, [chogId], now)).get(chogId)?.includes(target))
+    throw new HeistRefused('done-today');
   const v = (await vaults(db))[target];
   const tier = tierNow(v.cash, v, now);
   const run: StartedRun = {

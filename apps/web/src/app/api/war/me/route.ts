@@ -48,7 +48,8 @@ export async function GET() {
           }),
         ),
         jailedUntil: r?.jailedUntil && r.jailedUntil.getTime() > now ? r.jailedUntil.getTime() : null,
-        hitToday: hit.get(m.tokenId) ?? [],
+        // The owner's wallets can rob a vault again the same day (filming), so nothing shows as done.
+        hitToday: isAdmin(address) ? [] : (hit.get(m.tokenId) ?? []),
         powers: powersFor(chogInfo(m.tokenId).skills),
         record: {
           stolen: r?.stolen ?? 0,

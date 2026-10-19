@@ -5,6 +5,7 @@ import { db } from '@/server/db';
 import { error, json } from '@/server/http';
 import { allow } from '@/server/rate';
 import { currentAddress } from '@/server/session';
+import { isAdmin } from '@/server/admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,8 @@ export async function POST(req: Request) {
   const body = Body.safeParse(await req.json().catch(() => null));
   if (!body.success) return error('bad-request');
   try {
-    const run = await startRun(await db(), { address, ...body.data, now: Date.now() });
+    // The owner's wallets may rob the same vault again the same day, for filming (ADMIN_WALLETS).
+    const run = await startRun(await db(), { address, ...body.data, now: Date.now(), again: isAdmin(address) });
     return json({
       ok: true,
       run: { ...run, guards: run.guards.map((id) => ({ id, name: displayName(getChog(id)!) })) },

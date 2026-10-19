@@ -116,6 +116,11 @@ describe('the gang war', () => {
     expect(
       await refused(startRun(db, { address: A, chogId: lazoorChog, target: 'mcga', now: NOW + 120_000 })),
     ).toBe('done-today');
+    // ...except the owner's wallets, filming (again: true): the same vault the same day.
+    expect(
+      (await startRun(db, { address: A, chogId: lazoorChog, target: 'mcga', now: NOW + 120_000, again: true }))
+        .target,
+    ).toBe('mcga');
     // The robbed gang can hit back for a bonus.
     expect(await revengeTargets(db, 'mcga', NOW + 120_000)).toEqual(['lazoor']);
     const back = await startRun(db, { address: B, chogId: mcgaChog, target: 'lazoor', now: NOW + 120_000 });
