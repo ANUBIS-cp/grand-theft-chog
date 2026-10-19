@@ -289,7 +289,9 @@ export function RushGame(props: RushGameProps) {
       const elapsed = Math.min(250, now - last);
       last = now;
       const link = linkRef.current;
-      const viewing = link && link.role !== 'rob' && link.status !== 'failed';
+      // A defender or watcher stays one when the raid ends or the line drops (only the robber falls back to
+      // playing the run alone), so their screen shows the end instead of turning into the robber's.
+      const viewing = link && link.role !== null && link.role !== 'rob';
       if (viewing) {
         // Defending or watching: draw the server's picture, eased between its last two.
         st.started = true;
@@ -754,7 +756,7 @@ export function RushGame(props: RushGameProps) {
       stop();
     };
   }, [link]);
-  const role = link && link.status !== 'failed' ? link.role : null;
+  const role = link && (link.status !== 'failed' || link.role !== 'rob') ? link.role : null;
   const viewer = role === 'defend' || role === 'watch';
   const robberName = props.robber?.name ?? 'the robber';
 
@@ -773,6 +775,15 @@ export function RushGame(props: RushGameProps) {
       ? guards[hud.caughtBy % Math.max(1, guards.length)]
       : null;
   const hurry = !!hud && hud.seconds <= RUSH.hurry && !over;
+  // Defending or watching: the raid ended (or the line dropped) without a last picture of the end. Show the
+  // end card anyway, a moment later, so nobody is left standing in a frozen vault.
+  const [viewerGone, setViewerGone] = useState(false);
+  const linkDone = !!link && viewer && (link.status === 'over' || link.status === 'failed');
+  useEffect(() => {
+    if (!linkDone) return setViewerGone(false);
+    const t = setTimeout(() => setViewerGone(true), 1500);
+    return () => clearTimeout(t);
+  }, [linkDone]);
   const safeState = game.current?.s.safe;
   const nearSafe = !!map.safe && !!game.current && !safeState?.open && bySafe(map, game.current.s.me, rules.safeEdgesOnly);
 
@@ -907,9 +918,10 @@ export function RushGame(props: RushGameProps) {
         {hud && !hud.started && !over && (
           <StartCard player={player} rescue={rescue} safeValue={rules.safeValue} />
         )}
-        {over && showEnd && hud && viewer && (
+        {viewer && hud && ((over && showEnd) || viewerGone) && (
           <ViewerEnd
-            escaped={phase === 'escaped'}
+            escaped={phase === 'escaped' || link?.result?.result === 'escaped'}
+            gone={!over && !link?.result?.result}
             onLeave={onLeave}
             viewer={{ role: role!, robber: robberName, result: link?.result ?? null }}
           />
@@ -1323,6 +1335,8 @@ function StartCard({
 /** The end of a raid you defended or watched. */
 function ViewerEnd(props: {
   escaped: boolean;
+  /** The raid ended without word of how (the line dropped). */
+  gone?: boolean;
   onLeave?: () => void;
   viewer: { role: 'defend' | 'watch' | 'rob'; robber: string; result: RaidResult | null };
 }) {
@@ -1336,10 +1350,12 @@ function ViewerEnd(props: {
             escaped ? 'border-jail text-jail' : 'border-cash text-cash',
           )}
         >
-          {escaped ? 'Got away' : 'Caught!'}
+          {props.gone ? 'Raid over' : escaped ? 'Got away' : 'Caught!'}
         </div>
         <p className="mt-4 text-[15px] leading-snug">
-          {escaped
+          {props.gone
+            ? 'The raid ended.'
+            : escaped
             ? `${viewer.robber} got out${viewer.result?.moved ? ` with ${money(viewer.result.moved)}` : ''}.`
             : `${viewer.robber} is off to jail${viewer.result?.moved ? ` and their gang paid ${money(viewer.result.moved)}` : ''}.`}
         </p>

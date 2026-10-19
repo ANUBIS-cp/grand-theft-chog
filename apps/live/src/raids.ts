@@ -292,6 +292,10 @@ setInterval(
         stepRoom(r, { d: -1 });
       }
       if (r.s.phase !== 'play') {
+        // The last picture first (caught, or out), so defenders and watchers see the end, not a frozen vault.
+        const last = JSON.stringify({ t: 'st', s: r.s, ev: r.ev });
+        r.ev = [];
+        for (const v of viewers(r)) if (v.readyState === v.OPEN) v.send(last);
         void finish(r);
         continue;
       }

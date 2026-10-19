@@ -134,6 +134,28 @@ const GUEST = { bg: '#8d89a6', fg: '#111111' };
 const POLICE = { bg: '#2b59ff', fg: '#ffffff' };
 const color = (gang: GangId | null) => (gang ? GANG_COLOR[gang] : GUEST);
 
+
+// Where you were, kept for this tab while you look at another page (a Chog's record) and come back: the city
+// picks up there instead of at the plaza. Kept 15 minutes; a spot you can't stand on is ignored.
+const POS_KEY = 'cw-pos';
+function savedSpot(): { x: number; y: number } {
+  try {
+    const p = JSON.parse(sessionStorage.getItem(POS_KEY) ?? 'null') as { x: number; y: number; at: number } | null;
+    if (p && Date.now() - p.at < 15 * 60_000 && Number.isFinite(p.x) && Number.isFinite(p.y) && standable(p.x, p.y))
+      return { x: p.x, y: p.y };
+  } catch {
+    /* no storage */
+  }
+  return { ...CITY.spawn };
+}
+function saveSpot(x: number, y: number) {
+  try {
+    sessionStorage.setItem(POS_KEY, JSON.stringify({ x, y, at: Date.now() }));
+  } catch {
+    /* no storage */
+  }
+}
+
 export const CityView = forwardRef<CityHandle, Props>(function CityView(props, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bigRef = useRef<HTMLCanvasElement>(null);
@@ -151,9 +173,10 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
   }, [props.mapOpen]);
   const live = useRef(props);
   live.current = props;
+  const [startAt] = useState(savedSpot);
   const state = useRef({
-    x: CITY.spawn.x,
-    y: CITY.spawn.y,
+    x: startAt.x,
+    y: startAt.y,
     face: 1 as -1 | 1,
     moving: false,
     path: [] as { x: number; y: number }[],
@@ -358,6 +381,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     let raf = 0;
     let last = performance.now();
     let miniAt = 0;
+    let savedAt = 0;
     const gate = frameGate();
     // One bad frame must never stop the game: if drawing throws, the next frame still comes.
     const frame = (now: number) => {
@@ -613,6 +637,10 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
 
       if (!p.hidden && now - miniAt > 120) {
         miniAt = now;
+        if (now - savedAt > 1000) {
+          savedAt = now;
+          saveSpot(s.x, s.y);
+        }
         lastAt.x = s.x;
         lastAt.y = s.y;
         lastAt.people = people;
