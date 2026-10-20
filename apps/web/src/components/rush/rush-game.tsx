@@ -120,6 +120,7 @@ const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
 interface Hud {
   phase: RushState['phase'];
   started: boolean;
+  connecting: boolean;
   seconds: number;
   carried: number;
   mult: number;
@@ -309,6 +310,10 @@ export function RushGame(props: RushGameProps) {
           if (sn.s.phase !== 'play' && !st.endAt) st.endAt = now + 900;
         }
         acc = Math.min(1, (now - (st.snapAt || now)) / 66) * DT * 1000;
+      } else if (st.started && st.s.phase === 'play' && link?.status === 'connecting') {
+        // Not linked to the live server yet: wait (a second at most). Steps taken now would never reach it,
+        // and its copy of the run (the one that's saved) would play out differently from this screen's.
+        acc = 0;
       } else if (st.started && st.s.phase === 'play') {
         const live = !!link && link.status === 'live' && link.role === 'rob';
         if (live) {
@@ -431,6 +436,7 @@ export function RushGame(props: RushGameProps) {
       const next: Hud = {
         phase: s.phase,
         started: st.started,
+        connecting: linkRef.current?.status === 'connecting',
         seconds: sec,
         carried: s.carried,
         mult:
@@ -913,6 +919,11 @@ export function RushGame(props: RushGameProps) {
                 {d.who ?? 'A defender'} is guarding
               </span>
             ))}
+          </div>
+        )}
+        {hud?.started && hud.connecting && !over && (
+          <div className="pointer-events-none absolute inset-x-0 top-1/3 z-20 flex justify-center">
+            <span className="glass rounded-full px-4 py-2 text-[15px] font-semibold">Connecting…</span>
           </div>
         )}
         {hud && !hud.started && !over && (
