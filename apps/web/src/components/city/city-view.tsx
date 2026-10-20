@@ -839,7 +839,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
           >
             <div className="flex items-center justify-between gap-3 px-5 pb-3 pt-4">
               <div>
-                <h2 className="font-display text-[24px] leading-none">Chog World</h2>
+                <h2 className="font-display text-[24px] leading-none">Grand Theft Chog</h2>
                 <p className="mt-1 text-[13px] text-label-2">Tap anywhere to walk there.</p>
               </div>
               <div className="hidden items-center gap-3 text-[12px] font-medium text-label-2 sm:flex">
@@ -1354,7 +1354,7 @@ function PhoneMap(props: {
   return (
     <div className="fixed inset-0 z-30 flex animate-[fade-in_200ms] flex-col bg-[#0b0918] text-white">
       <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-[max(14px,env(safe-area-inset-top))]">
-        <h2 className="font-display text-[26px] leading-none">Chog World</h2>
+        <h2 className="font-display text-[26px] leading-none">Grand Theft Chog</h2>
         <button
           onClick={props.onClose}
           aria-label="Close the map"

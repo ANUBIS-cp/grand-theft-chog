@@ -224,7 +224,7 @@ export function ChogPass(props: {
       </div>
       <h3 className="mt-4 font-display text-[26px] leading-none">You’re verified</h3>
       <p className="mt-2 text-[15px] text-label-2">
-        Welcome to Chog World. You stay signed in on this device for 30 days.
+        Welcome to Grand Theft Chog. You stay signed in on this device for 30 days.
       </p>
     </div>
   );

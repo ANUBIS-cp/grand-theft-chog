@@ -18,13 +18,13 @@ const name = (id: number) => displayName(getChog(id)!);
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const run = await runForReplay(await db(), (await params).id);
-  if (!run) return { title: 'Replay not found · Chog World' };
+  if (!run) return { title: 'Replay not found · Grand Theft Chog' };
   const what = run.prisoner
     ? `${name(run.chogId)} ${run.result === 'escaped' ? 'broke' : 'tried to break'} ${name(run.prisoner)} out of jail`
     : run.result === 'escaped'
       ? `${name(run.chogId)} robbed ${GANGS[run.target].name} of ${money(run.moved)}`
       : `${name(run.chogId)} got caught robbing ${GANGS[run.target].name}`;
-  return { title: `${what} · Chog World`, description: 'Watch the robbery, move by move.' };
+  return { title: `${what} · Grand Theft Chog`, description: 'Watch the robbery, move by move.' };
 }
 
 /** Plays back a robbery exactly as it happened: the server keeps every run's key presses. */
@@ -83,7 +83,7 @@ export default async function ReplayPage({ params }: Props) {
     <main className="game-root flex h-dvh flex-col overflow-hidden bg-[#0b0918]">
       <header className="glass z-10 m-2 flex items-center justify-between gap-3 rounded-full px-4 py-2 text-[13px] text-label-2">
         <Link href="/" className="font-display text-[13px] leading-none text-white">
-          Chog World
+          Grand Theft Chog
         </Link>
         <p className="min-w-0 truncate">
           <Link href={`/chog/${run.chogId}`} className="font-semibold text-white hover:underline">

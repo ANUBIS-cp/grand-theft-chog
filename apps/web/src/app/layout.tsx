@@ -16,7 +16,7 @@ const nunito = localFont({
 const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains', display: 'swap' });
 
 export const metadata: Metadata = {
-  title: 'Chog World',
+  title: 'Grand Theft Chog',
   description:
     'Every gang has a vault full of cash. Sneak your Chog into a rival’s vault, grab what you can, get out.',
 };

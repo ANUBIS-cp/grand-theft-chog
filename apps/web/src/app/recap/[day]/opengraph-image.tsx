@@ -4,7 +4,7 @@ import { T, chogPng, ogFonts } from '@/lib/og';
 import { GANG_COLOR } from '@/lib/theme';
 import { dayLabel, recapFor } from './data';
 
-export const alt = 'A day in Chog World';
+export const alt = 'A day in Grand Theft Chog';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 export const dynamic = 'force-dynamic';
@@ -41,7 +41,7 @@ export default async function Image({ params }: { params: Promise<{ day: string 
       )}
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
         <div style={{ fontSize: 34, letterSpacing: 2, color: '#a59fc9' }}>
-          {`${dayLabel(r.start).toUpperCase()} IN CHOG WORLD`}
+          {`${dayLabel(r.start).toUpperCase()} IN GRAND THEFT CHOG`}
         </div>
         <T
           text={

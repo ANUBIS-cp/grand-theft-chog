@@ -30,7 +30,7 @@ const message = createSiweMessage({
   nonce,
   uri: base,
   version: '1',
-  statement: 'Log in to Chog World. This costs nothing and does not move any tokens.',
+  statement: 'Log in to Grand Theft Chog. This costs nothing and does not move any tokens.',
 });
 if (!(await call('/api/auth/verify', { message, signature: await account.signMessage({ message }) })).ok)
   throw new Error('login failed');

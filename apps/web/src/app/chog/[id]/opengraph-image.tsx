@@ -7,7 +7,7 @@ import { T, chogPng, ogFonts } from '@/lib/og';
 import { GANG_COLOR } from '@/lib/theme';
 import { db } from '@/server/db';
 
-export const alt = 'A Chog in Chog World';
+export const alt = 'A Chog in Grand Theft Chog';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 export const dynamic = 'force-dynamic';
@@ -44,7 +44,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
         style={{ border: '6px solid #111', borderRadius: 18, boxShadow: '10px 10px 0 #111' }}
       />
       <div style={{ display: 'flex', flexDirection: 'column', marginLeft: 56, flex: 1 }}>
-        <div style={{ fontSize: 34, letterSpacing: 2, color: '#a59fc9' }}>CHOG WORLD HEISTS</div>
+        <div style={{ fontSize: 34, letterSpacing: 2, color: '#a59fc9' }}>GRAND THEFT CHOG</div>
         <T text={name.toUpperCase()} style={{ fontSize: 104, lineHeight: 0.9, marginTop: 8 }} />
         <div style={{ display: 'flex', marginTop: 22, gap: 16, alignItems: 'center' }}>
           {gang && gangId && (

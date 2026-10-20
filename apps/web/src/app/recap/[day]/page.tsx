@@ -13,18 +13,18 @@ type Props = { params: Promise<{ day: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const r = await recapFor((await params).day);
-  if (!r) return { title: 'Recap not found · Chog World' };
-  return { title: `${dayLabel(r.start)} in Chog World`, description: recapLines(r).join(' ') };
+  if (!r) return { title: 'Recap not found · Grand Theft Chog' };
+  return { title: `${dayLabel(r.start)} in Grand Theft Chog`, description: recapLines(r).join(' ') };
 }
 
-/** "Yesterday in Chog World": the day's robberies, the biggest haul, the best guard and the richest gangs. */
+/** "Yesterday in Grand Theft Chog": the day's robberies, the biggest haul, the best guard and the richest gangs. */
 export default async function RecapPage({ params }: Props) {
   const r = await recapFor((await params).day);
   if (!r) notFound();
   const [first, ...rest] = recapLines(r);
   return (
     <PageShell>
-      <p className="text-[14px] font-semibold text-label-2">{dayLabel(r.start)} in Chog World</p>
+      <p className="text-[14px] font-semibold text-label-2">{dayLabel(r.start)} in Grand Theft Chog</p>
       <h1 className="mt-1 font-display text-[38px] leading-[1.05] sm:text-[48px]">{first}</h1>
 
       <div className="mt-5 grid grid-cols-3 gap-3">

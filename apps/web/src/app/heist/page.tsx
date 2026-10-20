@@ -18,7 +18,7 @@ import { RushGame } from '@/components/rush/rush-game';
 import { GANG_COLOR } from '@/lib/theme';
 
 export const metadata: Metadata = {
-  title: 'Heist · Chog World',
+  title: 'Heist · Grand Theft Chog',
   description: 'Rob a rival gang’s vault: grab the cash, crack the safe, dodge the guards, get out.',
 };
 
@@ -45,7 +45,7 @@ export default async function HeistPage({
     <main className="game-root flex h-dvh flex-col overflow-hidden bg-[#0b0918]">
       <header className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-1.5 text-[13px] text-white/70 sm:px-4">
         <Link href="/" className="font-display text-[13px] leading-none text-white">
-          Chog World
+          Grand Theft Chog
         </Link>
         <form action="/heist" className="flex items-center gap-1.5">
           <label htmlFor="chog" className="hidden sm:inline">

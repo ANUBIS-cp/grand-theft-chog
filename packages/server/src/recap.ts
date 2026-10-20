@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm';
 import type { Db } from './db/index.ts';
 import { vaults } from './heists.ts';
 
-// "Yesterday in Chog World": a game day in a few numbers, for the recap page, its share picture and the
+// "Yesterday in Grand Theft Chog": a game day in a few numbers, for the recap page, its share picture and the
 // Telegram post. Only facts from the day's runs; the words around them are written in the page.
 
 export interface DayRecap {

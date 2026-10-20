@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { PageShell } from '@/components/ui/page-shell';
 
 export const metadata: Metadata = {
-  title: 'How it’s fair · Chog World',
-  description: 'How Chog World checks every robbery, every getaway and every $CHOG burn.',
+  title: 'How it’s fair · Grand Theft Chog',
+  description: 'How Grand Theft Chog checks every robbery, every getaway and every $CHOG burn.',
 };
 
 const scan = (a: string) => `https://monadscan.com/address/${a}`;
@@ -77,7 +77,7 @@ export default function FairPage() {
     <PageShell>
       <h1 className="font-display text-[40px] leading-[1.05]">How it’s fair</h1>
       <p className="mt-2 max-w-[560px] text-[16px] text-label-2">
-        Chog World is a game about stealing, so it has to be hard to cheat. This is how every robbery, every
+        Grand Theft Chog is a game about stealing, so it has to be hard to cheat. This is how every robbery, every
         run home and every $CHOG burn is checked.
       </p>
       <ol className="mt-6 space-y-3">

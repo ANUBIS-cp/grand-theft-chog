@@ -8,7 +8,7 @@ import { db } from '@/server/db';
 import { currentAddress } from '@/server/session';
 
 export const dynamic = 'force-dynamic';
-export const metadata: Metadata = { title: 'Usage · Chog World', robots: { index: false } };
+export const metadata: Metadata = { title: 'Usage · Grand Theft Chog', robots: { index: false } };
 
 const pct = (back: number, of: number) => (of ? `${Math.round((back / of) * 100)}%` : '–');
 const date = (ms: number) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });

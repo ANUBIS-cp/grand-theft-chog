@@ -1530,7 +1530,7 @@ export function CityApp() {
       {/* First visit */}
       {welcome && me && !me.address && !(door && doorOpen) && !sheet && !peek && (
         <Card onClose={closeWelcome}>
-          <h1 className="font-display text-[24px] leading-[0.95]">Welcome to Chog World</h1>
+          <h1 className="font-display text-[24px] leading-[0.95]">Welcome to Grand Theft Chog</h1>
           <p className="mt-2 text-[15px] leading-snug text-white/80">
             Every gang has a building with a vault full of cash. Walk your Chog to a rival’s door to rob it,
             and bring the cash home.

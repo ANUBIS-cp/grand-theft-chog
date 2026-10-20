@@ -5,7 +5,7 @@ import { T, chogPng, ogFonts } from '@/lib/og';
 import { GANG_COLOR } from '@/lib/theme';
 import { db } from '@/server/db';
 
-export const alt = 'A robbery in Chog World';
+export const alt = 'A robbery in Grand Theft Chog';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 export const dynamic = 'force-dynamic';

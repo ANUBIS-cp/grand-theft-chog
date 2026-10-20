@@ -21,7 +21,7 @@ export function PageShell({ children, tint }: { children: React.ReactNode; tint?
             <ArrowLeft size={14} weight="bold" /> Back to the city
           </Link>
           <Link href="/" className="font-display text-[18px]">
-            Chog World
+            Grand Theft Chog
           </Link>
         </div>
       </header>

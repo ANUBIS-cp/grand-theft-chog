@@ -63,7 +63,7 @@ export function walletConnectOption(): WalletOption {
           showQrModal: true,
           rpcMap: { 143: 'https://rpc.monad.xyz' },
           metadata: {
-            name: 'Chog World',
+            name: 'Grand Theft Chog',
             description: 'Rob rival gangs with your Chog.',
             url: window.location.origin,
             icons: [`${window.location.origin}/icon.png`],
@@ -101,7 +101,7 @@ export async function prepareLogin(wallet: WalletOption): Promise<LoginPrep> {
   const address = accounts[0];
   if (!address) throw new LoginError('The wallet has no account unlocked.');
   const nonceRes = await fetch('/api/auth/nonce', { cache: 'no-store' });
-  if (!nonceRes.ok) throw new LoginError('Could not reach Chog World. Try again in a moment.');
+  if (!nonceRes.ok) throw new LoginError('Could not reach Grand Theft Chog. Try again in a moment.');
   const { nonce } = (await nonceRes.json()) as { nonce: string };
   const message = createSiweMessage({
     address: address as `0x${string}`,
@@ -110,7 +110,7 @@ export async function prepareLogin(wallet: WalletOption): Promise<LoginPrep> {
     nonce,
     uri: window.location.origin,
     version: '1',
-    statement: 'Log in to Chog World. This costs nothing and does not move any tokens.',
+    statement: 'Log in to Grand Theft Chog. This costs nothing and does not move any tokens.',
   });
   return { address, message };
 }

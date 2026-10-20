@@ -55,7 +55,7 @@ const message = createSiweMessage({
   nonce: n.nonce,
   uri: base,
   version: '1',
-  statement: 'Log in to Chog World.',
+  statement: 'Log in to Grand Theft Chog.',
 });
 const signature = await account.signMessage({ message });
 const login = await call('/api/auth/verify', {

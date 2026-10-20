@@ -5,7 +5,7 @@ import { chogBurns, heistChogs, type Db } from './db/index.ts';
 import { HeistRefused, heistRecord } from './heists.ts';
 import { canControl } from './ownership.ts';
 
-// $CHOG in Chog World: players burn it from their own wallet with $CHOG's own burn(), and the server reads the
+// $CHOG in Grand Theft Chog: players burn it from their own wallet with $CHOG's own burn(), and the server reads the
 // burn off the chain before it does anything. No contract of ours, no game wallet, and nothing is paid out.
 
 export const CHOG_TOKEN = '0x350035555E10d9AfAF1566AaebfCeD5BA6C27777' as const;

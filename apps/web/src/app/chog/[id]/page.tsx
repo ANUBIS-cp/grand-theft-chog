@@ -22,9 +22,9 @@ const money = (n: number) => `$${n.toLocaleString('en-US')}`;
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const id = Number((await params).id);
   const c = isChogId(id) ? getChog(id) : undefined;
-  if (!c) return { title: 'Chog not found · Chog World' };
+  if (!c) return { title: 'Chog not found · Grand Theft Chog' };
   const name = displayName(c);
-  return { title: `${name} · Chog World`, description: `${name}'s heists, powers and gang in Chog World.` };
+  return { title: `${name} · Grand Theft Chog`, description: `${name}'s heists, powers and gang in Grand Theft Chog.` };
 }
 
 export default async function ChogPage({ params }: Props) {
