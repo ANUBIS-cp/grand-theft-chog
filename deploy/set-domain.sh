@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Moves the site to a new address (e.g. a DuckDNS name), keeping the old one as a redirect.
-# Usage (from the repo root on the Mac): deploy/set-domain.sh chogworld.duckdns.org
+# Usage (from the repo root on the Mac): deploy/set-domain.sh grandtheftchog.duckdns.org
 # First point the name at the server (35.212.31.75). This checks it does before changing anything, then:
 # makes it the main name in PUBLIC_HOST, rebuilds Caddy's config (Caddy fetches the HTTPS certificate by
 # itself) and restarts the web app and live server so logins and the live city accept it.

@@ -1,11 +1,11 @@
-# Chog World
+# Grand Theft Chog
 
 A live city at night for the 1,969 Chog NFTs on Monad. You walk the streets as your own Chog, join the gang your
 traits allow, and rob other gangs' vaults in three stages: pick the lock on the door, grab the cash inside the
 vault, then carry the bag home through the city with the police after you. Every holder online is in the same city
 and can see you run. Built for Chogathon 2026.
 
-**Play:** https://chogworld.duckdns.org (works on a phone; no wallet needed to try it)
+**Play:** https://grandtheftchog.duckdns.org (works on a phone; no wallet needed to try it)
 
 ## For judges: try it in two minutes
 
@@ -47,7 +47,7 @@ The total burned is shown on the big screen in the plaza.
 
 ## What makes it fair
 
-In the game: [chogworld.duckdns.org/fair](https://chogworld.duckdns.org/fair).
+In the game: [grandtheftchog.duckdns.org/fair](https://grandtheftchog.duckdns.org/fair).
 
 - **The server replays every run.** The vault game runs the same way every time from the run's seed, so the browser sends only your key
   presses and the server plays them back to find out what really happened. A modified browser can't fake a result.
@@ -79,7 +79,7 @@ npm run typecheck
 npm run lint
 npm run dev         # web app on http://localhost:3000
 deploy/deploy.sh    # build and ship the current commit to the server
-npx tsx tools/smoke/run.ts https://chogworld.duckdns.org   # 23 checks against the live site
+npx tsx tools/smoke/run.ts https://grandtheftchog.duckdns.org   # 23 checks against the live site
 ```
 
 `packages/data/scripts/verify-onchain.ts` checks the trait data against the Chog contract.

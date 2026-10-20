@@ -1,5 +1,5 @@
 [Unit]
-Description=Chog World nightly backup
+Description=Grand Theft Chog nightly backup
 
 [Timer]
 OnCalendar=*-*-* 03:30:00 UTC

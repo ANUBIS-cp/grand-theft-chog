@@ -22,7 +22,7 @@ async function bot(i) {
   return new Promise((resolve) => {
     const ws = new WebSocket(LIVE, {
       headers: {
-        origin: process.env.ORIGIN ?? 'https://chogworld.duckdns.org',
+        origin: process.env.ORIGIN ?? 'https://grandtheftchog.duckdns.org',
         'x-forwarded-for': `10.9.${i >> 8}.${i & 255}`,
       },
     });

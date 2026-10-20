@@ -1,21 +1,21 @@
 # Chogathon submission (ready to paste)
 
 Each section is one field of the form at chogathon.chog.xyz → Submit project. Fill the usage numbers from
-https://chogworld.duckdns.org/usage (signed in with the owner's wallet) on the day you submit.
+https://grandtheftchog.duckdns.org/usage (signed in with the owner's wallet) on the day you submit.
 
 ---
 
 ## Project name
 
-Chog World
+Grand Theft Chog
 
 ## App link
 
-https://chogworld.duckdns.org
+https://grandtheftchog.duckdns.org
 
 ## GitHub repo
 
-https://github.com/ANUBIS-cp/chog-city (make it public before submitting)
+https://github.com/ANUBIS-cp/grand-theft-chog (make it public before submitting)
 
 ## Tech stack
 
@@ -23,7 +23,7 @@ Next.js 16, React, TypeScript, canvas 2D, WebSocket live server (Node), Postgres
 
 ## Description
 
-Chog World is a live city at night where every Chog Genesis holder walks the streets as their own Chog, at the same time. Your Chog's traits decide which gang it can rep (20 gangs, each with its own building, vault, walk and lock), and gangs rob each other's vaults.
+Grand Theft Chog is a live city at night where every Chog Genesis holder walks the streets as their own Chog, at the same time. Your Chog's traits decide which gang it can rep (20 gangs, each with its own building, vault, walk and lock), and gangs rob each other's vaults.
 
 A robbery has three stages:
 
@@ -39,7 +39,7 @@ What makes it new:
 - The record belongs to the token. Cash stolen, escapes, busts and catches stay with the Chog when it's sold.
 - Every robbery has a replay, from the break-in to the run home, made from the moves the server checked. Share the link and anyone can watch it.
 - $CHOG is burned from your own wallet for bail (30), a Wanted poster on a rival (60: an extra officer on its getaways and a bounty on it) and a gang banner over your building (150). The plaza's big screen counts every $CHOG burned.
-- The Chog Telegram bot posts the biggest robberies and a daily recap ("Yesterday in Chog World") to the community.
+- The Chog Telegram bot posts the biggest robberies and a daily recap ("Yesterday in Grand Theft Chog") to the community.
 - Judging week has events: a Left vs Right election (24–26 Oct) where every bag carried home scores for your Chog's Side trait, and Halloween week (27–31 Oct) when the city is haunted, Skulls and Radioactive take more, and every haul counts double on the 31st.
 - It's built for a phone first: a thumb stick, big buttons, a map you can pinch.
 
@@ -47,19 +47,19 @@ Why the Chog NFT is essential:
 
 Take the NFT out and there's no game. Your Chog is your character: its picture is the piece you move and the face everyone sees. Its traits pick its gang, its walk and its powers. The guards in a gang's vault are that gang's Chogs. The record is kept on the token, so it moves with the Chog when it changes hands. Ownership is read from the Chog Genesis contract and followed live, so a Chog sold walks out of your wallet and into the buyer's.
 
-How it stays fair: the vault plays the same way every time from each run's seed, your phone sends only your key presses, and the server replays them to find what really happened. The run home is refereed by the live server, which signs the result. $CHOG burns are read from Monad and counted once. More: https://chogworld.duckdns.org/fair
+How it stays fair: the vault plays the same way every time from each run's seed, your phone sends only your key presses, and the server replays them to find what really happened. The run home is refereed by the live server, which signs the result. $CHOG burns are read from Monad and counted once. More: https://grandtheftchog.duckdns.org/fair
 
 ## Judge access instructions
 
 No wallet needed to try it.
 
-1. Open https://chogworld.duckdns.org (a phone works best). You arrive in the plaza as a guest.
+1. Open https://grandtheftchog.duckdns.org (a phone works best). You arrive in the plaza as a guest.
 2. Walk: drag anywhere on a phone, arrow keys or WASD on a computer.
 3. Follow the gold arrow to the Practice warehouse and press Use. That runs a whole robbery with no real cash: the lock, the vault, then the run home past the police.
-4. Watch a real robbery: https://chogworld.duckdns.org/recap shows yesterday's biggest haul; tap it to watch the replay.
+4. Watch a real robbery: https://grandtheftchog.duckdns.org/recap shows yesterday's biggest haul; tap it to watch the replay.
 5. With a wallet that holds a Chog, press Connect wallet (WalletConnect works on phones): your Chog walks the city, its traits pick its gang, and robberies move real gang cash.
 
-How it's fair: https://chogworld.duckdns.org/fair
+How it's fair: https://grandtheftchog.duckdns.org/fair
 
 ## Plan
 
@@ -88,7 +88,7 @@ Use a screenshot of the city at night (the plaza or a gang's door), 1200×630. T
 Record on the laptop in full-screen Chrome (Cmd+Shift+5 records the screen on a Mac), each shot on its own with
 a few takes, then cut them together (CapCut is free). Keep it moving; captions on screen instead of talking.
 
-**Film mode:** open https://chogworld.duckdns.org/?film=1 signed in with your wallet. The buttons, map and cards
+**Film mode:** open https://grandtheftchog.duckdns.org/?film=1 signed in with your wallet. The buttons, map and cards
 are hidden so the city fills the frame. Keys: **H** shows or hides the game's buttons, **B** shows or hides the
 demo bar at the top. The demo bar (only your wallet sees it) calls up a shot on demand, all practice, nothing real
 moves:
@@ -122,4 +122,4 @@ guard) while you rob it; record both screens and show them side by side.
 
 2:30–2:45 · $CHOG. The plaza screen's burn counter, a Wanted poster or bail. Caption: "$CHOG burned from your own wallet."
 
-2:45–3:00 · Halloween preview (?halloween=1): the cauldron, ghosts, lanterns. End card: "Chog World · chogworld.duckdns.org".
+2:45–3:00 · Halloween preview (?halloween=1): the cauldron, ghosts, lanterns. End card: "Grand Theft Chog · grandtheftchog.duckdns.org".

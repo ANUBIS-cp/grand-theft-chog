@@ -401,7 +401,7 @@ You approve or veto at each one, and nothing moves past a veto.
 
 ### 4.2 Repo layout
 
-One repo (`ANUBIS-cp/chog-city`), using pnpm workspaces.
+One repo (`ANUBIS-cp/grand-theft-chog`), using pnpm workspaces.
 
 ```
 apps/web        Next.js app: pages, API, live feed, share images

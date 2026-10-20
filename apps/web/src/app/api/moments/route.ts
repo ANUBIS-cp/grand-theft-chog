@@ -35,7 +35,7 @@ export async function GET() {
     .orderBy(desc(heistRuns.finishedAt))
     .limit(20);
   // The site's real address (the first name in PUBLIC_HOST).
-  const base = `https://${(process.env.PUBLIC_HOST ?? 'chogworld.duckdns.org').split(',')[0]!.trim()}`;
+  const base = `https://${(process.env.PUBLIC_HOST ?? 'grandtheftchog.duckdns.org').split(',')[0]!.trim()}`;
   return json({
     ok: true,
     moments: rows.map((r) => ({

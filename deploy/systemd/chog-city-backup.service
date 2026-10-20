@@ -1,5 +1,5 @@
 [Unit]
-Description=Chog World nightly backup (database + chat)
+Description=Grand Theft Chog nightly backup (database + chat)
 After=postgresql.service
 
 [Service]

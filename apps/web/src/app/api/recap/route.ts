@@ -9,7 +9,7 @@ export async function GET(req: Request) {
   const day = new URL(req.url).searchParams.get('day') ?? String(dayOf(Date.now()) - 1);
   const r = await recapFor(day);
   if (!r) return json({ ok: false, error: 'not-found' }, { status: 404 });
-  const base = `https://${(process.env.PUBLIC_HOST ?? 'chogworld.duckdns.org').split(',')[0]!.trim()}`;
+  const base = `https://${(process.env.PUBLIC_HOST ?? 'grandtheftchog.duckdns.org').split(',')[0]!.trim()}`;
   return json({
     ok: true,
     recap: r,

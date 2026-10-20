@@ -1,4 +1,4 @@
-# Chog World. install-config.sh puts the first name from PUBLIC_HOST here (/etc/chog-city/app.env)
+# Grand Theft Chog. install-config.sh puts the first name from PUBLIC_HOST here (/etc/chog-city/app.env)
 # and adds a redirect from every other name to it, so an old address keeps working after a move.
 __MAIN__ {
 	encode zstd gzip
@@ -33,9 +33,9 @@ __MAIN__ {
 		header Retry-After "3"
 		respond <<HTML
 			<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-			<title>Chog World</title><meta http-equiv="refresh" content="3">
+			<title>Grand Theft Chog</title><meta http-equiv="refresh" content="3">
 			<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0918;color:#fff;font:600 17px -apple-system,system-ui,sans-serif;text-align:center}p{color:#a59fc9;font-weight:500;font-size:15px}</style></head>
-			<body><div><div style="font-size:26px;font-weight:800">Chog World is updating</div><p>Back in a few seconds. This page tries again by itself.</p></div></body></html>
+			<body><div><div style="font-size:26px;font-weight:800">Grand Theft Chog is updating</div><p>Back in a few seconds. This page tries again by itself.</p></div></body></html>
 			HTML 503
 	}
 }
