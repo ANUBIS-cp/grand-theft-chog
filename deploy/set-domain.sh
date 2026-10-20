@@ -9,7 +9,7 @@ NEW=${1:?usage: deploy/set-domain.sh new.host.name}
 IP=35.212.31.75
 SSH=(ssh -i "$HOME/.ssh/flipper_gcp" -o ConnectTimeout=15 ubuntu@$IP)
 
-GOT=$(dig +short "$NEW" A | tail -n1)
+GOT=$(dig +short "$NEW" A @1.1.1.1 | tail -n1)
 [ "$GOT" = "$IP" ] || { echo "$NEW points at '${GOT:-nothing}', not $IP. Set it on duckdns.org first."; exit 1; }
 
 "${SSH[@]}" "
