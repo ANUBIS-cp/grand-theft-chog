@@ -373,7 +373,21 @@ export function CityApp() {
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatRefused, setChatRefused] = useState<string | null>(null);
-  const [chatSeen, setChatSeen] = useState(0);
+  // The last message read, kept on this device so a reload doesn't show old messages as new.
+  const [chatSeen, setChatSeen] = useState(() => {
+    try {
+      return Number(localStorage.getItem('cw-chat-seen')) || 0;
+    } catch {
+      return 0;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('cw-chat-seen', String(chatSeen));
+    } catch {
+      /* private window: only this visit remembers */
+    }
+  }, [chatSeen]);
   // Back from a phone wallet with it connected but the login not signed yet: pick up where it stopped.
   useEffect(() => {
     if (me && !me.address && hasWalletConnectSession()) setSheet((s) => s ?? 'connect');
@@ -390,7 +404,10 @@ export function CityApp() {
   }, []);
   chatOpenRef.current = chatOpen;
   useEffect(() => {
-    if (chatOpen) setChatSeen((s) => Math.max(s, chat.at(-1)?.id ?? 0));
+    const last = chat.at(-1)?.id ?? 0;
+    if (chatOpen) setChatSeen((s) => Math.max(s, last));
+    // The chat was cleared since (its numbers start again from 1): what's there now is all new.
+    else if (chat.length) setChatSeen((s) => (s > last ? 0 : s));
   }, [chatOpen, chat]);
   const [banner, setBanner] = useState<BannerData | null>(null);
   const [boardTab, setBoardTab] = useState<'gangs' | 'hits'>('gangs');
