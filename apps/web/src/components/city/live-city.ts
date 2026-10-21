@@ -46,6 +46,8 @@ export interface Chase {
   /** When it started, and when time runs out (ms). */
   since: number;
   until: number;
+  /** When the police start running (ms); null until the robber's first step. */
+  go?: number | null;
   cops: { id: number; chog: number }[];
 }
 

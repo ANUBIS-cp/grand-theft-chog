@@ -1331,6 +1331,7 @@ export function CityApp() {
                 line: `${money(myChase.bag)} to ${doorOf(GANGS[myChase.home].name)}. Dodge the police.`,
                 since: myChase.since,
                 until: myChase.until,
+                go: myChase.go ?? null,
               }
             : null;
         const others = chases
@@ -2619,7 +2620,7 @@ function ChaseBar(props: { c: Chase; ours: boolean; canChase: boolean; onChase: 
 }
 
 /** Your getaway (or the practice one): where to go, the head start, and the time left in a ring. */
-function RunBar({ line, since, until }: { line: string; since: number; until: number }) {
+function RunBar({ line, since, until, go }: { line: string; since: number; until: number; go?: number | null }) {
   const left = Math.max(0, (until - Date.now()) / 1000);
   const total = Math.max(1, (until - since) / 1000);
   const k = left / total;
@@ -2632,7 +2633,7 @@ function RunBar({ line, since, until }: { line: string; since: number; until: nu
             Run it home!
           </p>
           <p className="text-[14px] leading-snug text-label-2 max-sm:truncate max-sm:text-[12px]">{line}</p>
-          <PoliceIn since={since} />
+          <PoliceIn go={go === undefined ? since + HEAD_START * 1000 : go} />
         </div>
         <span className="relative grid h-[58px] w-[58px] shrink-0 place-items-center max-sm:h-[46px] max-sm:w-[46px]">
           <svg className="absolute inset-0 -rotate-90" viewBox="0 0 100 100">
@@ -2658,9 +2659,9 @@ function RunBar({ line, since, until }: { line: string; since: number; until: nu
   );
 }
 
-/** The head start out of the door: "Police in 3… 2… 1", then "Run!". */
-function PoliceIn({ since }: { since: number }) {
-  const left = Math.ceil(HEAD_START - (Date.now() - since) / 1000);
+/** The head start out of the door: "Police in 3… 2… 1", then "Run!". It starts with your first step. */
+function PoliceIn({ go }: { go: number | null }) {
+  const left = go === null ? HEAD_START : Math.ceil((go - Date.now()) / 1000);
   if (left < -1) return null;
   return (
     <p className="mt-1 font-display text-[15px] leading-none text-sys-red">

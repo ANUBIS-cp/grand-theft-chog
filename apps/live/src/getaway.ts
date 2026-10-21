@@ -43,6 +43,8 @@ interface Chase {
   until: number;
   cops: Cop[];
   goneAt: number | null;
+  /** When the robber first stepped away from the door: the head start counts from then (see stepChases). */
+  movedAt: number | null;
   over: boolean;
   /** The route so far, for the replay (see packages/game/src/city/track.ts). */
   frames: number[][];
@@ -50,6 +52,8 @@ interface Chase {
 }
 
 const chases = new Map<string, Chase>();
+/** The longest the head start waits for the robber's first step (ms). */
+const WAIT_MAX = 4000;
 /** Ids for police start far below the strollers' (which are minus a Chog's token ID). */
 let nextCop = -100_000;
 
@@ -64,6 +68,8 @@ const chaseInfo = (c: Chase) => ({
   home: c.pass.home,
   since: c.started,
   until: c.until,
+  /** When the police start running: unknown (null) until the robber's first step. */
+  go: c.movedAt === null ? null : c.movedAt + HEAD_START * 1000,
   cops: c.cops.map((k) => ({ id: k.id, chog: k.chog })),
 });
 
@@ -113,6 +119,7 @@ export function startChase(
     until: now + getawayTime(from.door, home.door),
     cops,
     goneAt: null,
+    movedAt: null,
     over: false,
     frames: [],
     framedAt: 0,
@@ -203,8 +210,18 @@ export function stepChases(
       end(c, 'caught', { chog: null, who: 'time' }, broadcast);
       continue;
     }
-    // Nobody can touch you in the first moments out of the door (no camping it).
-    if (now - c.started < HEAD_START * 1000) continue;
+    // Nobody can touch you in the first moments out of the door (no camping it). The head start counts from
+    // your first step, not from the server's start: the city has to load again after the vault, and on a slow
+    // phone that ate the whole head start while you couldn't move yet. Standing still doesn't stop it for long.
+    if (c.movedAt === null) {
+      const away = Math.hypot(me.x - c.from.door.x, me.y - (c.from.door.y + 0.6)) > 0.3;
+      if (away || now - c.started > WAIT_MAX) {
+        c.movedAt = now;
+        broadcast({ t: 'chase', ...chaseInfo(c) });
+      }
+      continue;
+    }
+    if (now - c.movedAt < HEAD_START * 1000) continue;
     // A Chog of the robbed gang that reaches you takes the bag back.
     let tagged: number | null = null;
     for (const r of runners.values())
