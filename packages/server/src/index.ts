@@ -12,3 +12,4 @@ export * from './usage.ts';
 export * from './recap.ts';
 export * from './events.ts';
 export * from './proofs.ts';
+export * from './hunts.ts';

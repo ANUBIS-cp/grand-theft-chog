@@ -74,3 +74,11 @@ Cash only moves between gangs, so without these a busy robber stacks for ever an
 2. The practice game in the browser: renderer, controls, sound, screen layout.
 3. Real raids on the live server: start, run, report, settle, replay tracks.
 4. Defending and watching from the city.
+
+## Haunted vaults (Halloween)
+
+A run is haunted when it starts in Halloween week on a Skulls or Radioactive vault, or on any vault while the Blood Moon is up (`hauntedVault` in packages/game/src/season.ts). The flag is stored on the run (`heist_runs.haunted`) and carried in the raid pass, so the browser, the live server, the server's replay check and the replay page all play the same rules.
+
+- **Lights out.** You see a lantern circle round you; past it the vault is near-black. Guards' eyes glow red, cash glints now and then, and the lasers, the exit, the safe and the loudspeakers give off their own light (drawing only: apps/web/src/components/rush/haunt-fx.ts).
+- **The phantom** (`stepPhantom` in sim.ts): rises 3 s in at the corner farthest from you and drifts straight at you through the walls at 2.3 tiles/s (you run 5.2). Its touch costs a heart and 30% of your cash like a guard's tag, no bribe works on it, then it sinks and rises again far off 5 s later. Hide loses it; a flip or Scare makes it flee and touching it then banishes it for 6 s; so does a tackle or Laser eyes.
+- Practice is haunted in Halloween week once you've done your first practice run; `/heist?haunted=1` opens one any time.

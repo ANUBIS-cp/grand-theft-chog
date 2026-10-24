@@ -97,7 +97,7 @@ export default async function ReplayPage({ params }: Props) {
         {rush ? (
           <RushReplayView
             mapId={rush.id}
-            rules={rushRules(run.tier, !!run.prisoner, run.loud, run.startedAt)}
+            rules={rushRules(run.tier, !!run.prisoner, run.loud, run.startedAt, run.haunted)}
             seed={rushSeed(run.id)}
             player={player}
             guards={guards}

@@ -1,5 +1,6 @@
 import { Tile, type Level } from '@chog-city/game/heist';
 import { Cell, hunting, laserOn, type RushMap, type RushState } from '@chog-city/game/rush';
+import { HauntFx, type Light } from './haunt-fx';
 import { PowerFx } from './power-fx';
 import { drawPiece } from '../chog/piece';
 import type { Fx } from '../heist/fx';
@@ -49,16 +50,20 @@ export function asLevel(m: RushMap): Level {
 export interface RushPrev {
   me: { x: number; y: number };
   guards: { x: number; y: number }[];
+  phantom?: { x: number; y: number };
 }
 export const rushSnapshot = (s: RushState): RushPrev => ({
   me: { x: s.me.x, y: s.me.y },
   guards: s.guards.map((g) => ({ x: g.x, y: g.y })),
+  ...(s.phantom ? { phantom: { x: s.phantom.x, y: s.phantom.y } } : {}),
 });
 
 export class RushRenderer {
   readonly v: VaultRenderer;
   /** Each power's own look: beams, the box, after-images, streaks. */
   readonly pfx = new PowerFx();
+  /** Haunted vaults: the dark, the lantern and the phantom. */
+  readonly haunt = new HauntFx();
   private g: CanvasRenderingContext2D;
   private cam = { x: 0, y: 0, ready: false };
   private view = { w: 0, h: 0 };
@@ -241,46 +246,7 @@ export class RushRenderer {
     });
 
     // Laser gates.
-    map.lasers.forEach((l, i) => {
-      const on = laserOn(s, i);
-      const x = this.X(l.x);
-      const y = this.Y(l.y);
-      g.save();
-      if (on) {
-        const flick = 0.75 + 0.25 * Math.sin(now / 40 + i);
-        g.strokeStyle = `rgba(255, 45, 85, ${flick})`;
-        g.lineWidth = t * 0.12;
-        g.shadowColor = '#ff2d55';
-        g.shadowBlur = t * 0.4;
-        g.beginPath();
-        if (l.across) {
-          g.moveTo(x, y + t / 2);
-          g.lineTo(x + t, y + t / 2);
-        } else {
-          g.moveTo(x + t / 2, y);
-          g.lineTo(x + t / 2, y + t);
-        }
-        g.stroke();
-        g.shadowBlur = 0;
-        g.strokeStyle = '#ffffff';
-        g.lineWidth = t * 0.035;
-        g.stroke();
-      } else {
-        g.strokeStyle = 'rgba(255, 45, 85, 0.18)';
-        g.setLineDash([3, 5]);
-        g.lineWidth = 2;
-        g.beginPath();
-        if (l.across) {
-          g.moveTo(x, y + t / 2);
-          g.lineTo(x + t, y + t / 2);
-        } else {
-          g.moveTo(x + t / 2, y);
-          g.lineTo(x + t / 2, y + t);
-        }
-        g.stroke();
-      }
-      g.restore();
-    });
+    this.lasers(s, now);
 
     // The safe, with a bouncing marker until it's open.
     if (map.safe && s.safe) {
@@ -332,6 +298,8 @@ export class RushRenderer {
     for (const p of people) p.draw();
 
     fx.draw(g, t, v.font);
+    let hintAt: { x: number; y: number } | null = null;
+    let phantomAt: { x: number; y: number } | null = null;
     {
       // Your eyes, for laser beams: a little above the middle of your card.
       const feet = my + t * 0.3;
@@ -351,8 +319,46 @@ export class RushRenderer {
         now,
         { x: this.cam.x, y: this.cam.y, w: SW, h: SH },
       );
-      if (opts.hint) this.hintBubble(mx, feet - top - t * 0.45, opts.hint, now);
+      hintAt = { x: mx, y: feet - top - t * 0.45 };
     }
+
+    // Haunted: lights out. The dark goes over everything, then what shines through it.
+    if (s.phantom) {
+      const ph = prev.phantom ?? s.phantom;
+      const php = { x: this.X(lerp(ph.x, s.phantom.x)), y: this.Y(lerp(ph.y, s.phantom.y)) };
+      const d = { g, t, dpr, now, view: { w: SW, h: SH }, cam: this.cam, X: this.X, Y: this.Y };
+      const lights: Light[] = [
+        { x: this.X(map.exit.x + 0.5), y: this.Y(map.exit.y + 0.5), r: 1.5, strength: 0.8 },
+      ];
+      if (map.safe && s.safe && !s.safe.open)
+        lights.push({ x: this.X(map.safe.x + 0.5), y: this.Y(map.safe.y + 0.5), r: 1.2, strength: 0.5 });
+      map.lasers.forEach((l, i) => {
+        if (laserOn(s, i)) lights.push({ x: this.X(l.x + 0.5), y: this.Y(l.y + 0.5), r: 1, strength: 0.55 });
+      });
+      map.flips.forEach((f, i) => {
+        if (!s.flips[i]) lights.push({ x: this.X(f.x + 0.5), y: this.Y(f.y + 0.5), r: 0.9, strength: 0.45 });
+      });
+      this.haunt.darkness(d, s, { x: fx0 - this.cam.x, y: fy0 - this.cam.y }, lights);
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.translate(ox, oy);
+      this.lasers(s, now);
+      this.haunt.glints(d, [
+        ...map.coins.flatMap((c, i) =>
+          s.coins[i] ? [] : [{ x: this.X(c.x + 0.5), y: this.Y(c.y + 0.5), big: false }],
+        ),
+        ...map.stacks.flatMap((c, i) =>
+          s.stacks[i] ? [] : [{ x: this.X(c.x + 0.5), y: this.Y(c.y + 0.5), big: true }],
+        ),
+      ]);
+      this.haunt.eyes(d, s, (i) => {
+        const gd = s.guards[i]!;
+        const p = prev.guards[i] ?? gd;
+        return { x: this.X(lerp(p.x, gd.x)), y: this.Y(lerp(p.y, gd.y)) };
+      });
+      this.haunt.phantom(d, s, php);
+      phantomAt = php;
+    }
+    if (opts.hint && hintAt) this.hintBubble(hintAt.x, hintAt.y, opts.hint, now);
 
     // Screen-space: a soft dark edge, red when the alarm rings, blue in a flip.
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -372,6 +378,12 @@ export class RushRenderer {
     g.fillRect(0, 0, SW, SH);
     // Guards off screen (a phone shows only part of the vault): their face at the edge, pointing at them.
     this.guardMarks(s, prev, alpha, SW, SH, now);
+    if (s.phantom)
+      this.haunt.mark(
+        { g, t, dpr, now, view: { w: SW, h: SH }, cam: this.cam, X: this.X, Y: this.Y },
+        s,
+        phantomAt,
+      );
     // When the exit is off screen and you're carrying, an arrow at the edge points to it.
     if (s.carried > 0 && s.phase === 'play') this.exitArrow(SW, SH, now);
     if (fx.flash) {
@@ -380,6 +392,51 @@ export class RushRenderer {
       g.fillRect(0, 0, SW, SH);
       g.globalAlpha = 1;
     }
+  }
+
+  private lasers(s: RushState, now: number) {
+    const { g, map } = this;
+    const t = this.v.t;
+    map.lasers.forEach((l, i) => {
+      const on = laserOn(s, i);
+      const x = this.X(l.x);
+      const y = this.Y(l.y);
+      g.save();
+      if (on) {
+        const flick = 0.75 + 0.25 * Math.sin(now / 40 + i);
+        g.strokeStyle = `rgba(255, 45, 85, ${flick})`;
+        g.lineWidth = t * 0.12;
+        g.shadowColor = '#ff2d55';
+        g.shadowBlur = t * 0.4;
+        g.beginPath();
+        if (l.across) {
+          g.moveTo(x, y + t / 2);
+          g.lineTo(x + t, y + t / 2);
+        } else {
+          g.moveTo(x + t / 2, y);
+          g.lineTo(x + t / 2, y + t);
+        }
+        g.stroke();
+        g.shadowBlur = 0;
+        g.strokeStyle = '#ffffff';
+        g.lineWidth = t * 0.035;
+        g.stroke();
+      } else {
+        g.strokeStyle = 'rgba(255, 45, 85, 0.18)';
+        g.setLineDash([3, 5]);
+        g.lineWidth = 2;
+        g.beginPath();
+        if (l.across) {
+          g.moveTo(x, y + t / 2);
+          g.lineTo(x + t, y + t / 2);
+        } else {
+          g.moveTo(x + t / 2, y);
+          g.lineTo(x + t / 2, y + t);
+        }
+        g.stroke();
+      }
+      g.restore();
+    });
   }
 
   private speaker(x: number, y: number, now: number) {

@@ -1,5 +1,5 @@
 import { GANG_IDS, canJoinGang, getChog, looksLike, pickFaces, type GangId } from '@chog-city/data';
-import { chogInfo, dayOf } from '@chog-city/game';
+import { chogInfo, dayOf, hauntedVault } from '@chog-city/game';
 import {
   JAIL_MS,
   JAIL_TIER,
@@ -230,6 +230,8 @@ export interface StartedRun {
   tier: number;
   target: GangId;
   revenge: boolean;
+  /** Halloween: lights out and a phantom in the vault. */
+  haunted: boolean;
   powers: PowerId[];
   guards: number[];
 }
@@ -266,6 +268,7 @@ export async function startRun(
     tier,
     target,
     revenge: (await revengeTargets(db, me.gang, now)).includes(target),
+    haunted: hauntedVault(target, now),
     powers: powersFor(chogInfo(chogId).skills),
     guards: await guardsFor(db, target, rushRules(tier).guards),
   };
@@ -279,6 +282,7 @@ export async function startRun(
     vault: run.vault,
     tier,
     revenge: run.revenge,
+    haunted: run.haunted,
     powers: run.powers,
     guards: run.guards,
     startedAt: new Date(now),
@@ -324,6 +328,7 @@ export async function lockRun(
       tier: run.tier,
       target: run.target as GangId,
       revenge: run.revenge,
+      haunted: run.haunted,
       powers: run.powers as PowerId[],
       guards: run.guards as number[],
     },
@@ -386,6 +391,7 @@ function replayRun(
     prisoner: number | null;
     revenge: boolean;
     loud: boolean;
+    haunted: boolean;
     id: string;
     startedAt: Date;
   },
@@ -399,7 +405,7 @@ function replayRun(
   if (map) {
     const inputs = decodeRushInputs(text);
     if (!inputs || inputs.length > rushMaxSteps(map)) throw new HeistRefused('bad-inputs');
-    const rules = rushRules(run.tier, run.prisoner !== null, run.loud, run.startedAt.getTime());
+    const rules = rushRules(run.tier, run.prisoner !== null, run.loud, run.startedAt.getTime(), run.haunted);
     return settleRush(
       map,
       rules,
@@ -879,6 +885,7 @@ export async function runForReplay(db: Db, id: string) {
     revenge: r.revenge,
     prisoner: r.prisoner,
     loud: r.loud,
+    haunted: r.haunted,
     getaway: r.getaway,
     getawayTrack: r.getawayTrack ? (JSON.parse(r.getawayTrack) as GetawayTrack) : null,
     caughtBy: r.caughtBy,
@@ -923,6 +930,7 @@ export async function startBreakout(
     tier: JAIL_TIER,
     target: me.gang as GangId,
     revenge: false,
+    haunted: false,
     powers: powersFor(chogInfo(chogId).skills),
     guards: await jailGuards(db, rushRules(JAIL_TIER, true).guards),
     prisoner,

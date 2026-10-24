@@ -54,6 +54,14 @@ export const RUSH = {
   noise: 4,
   sweepPercent: 80,
   sweepBonus: 25,
+  /** Haunted vaults: the phantom drifts through walls at this speed (tiles a second), slower than you. */
+  phantom: 2.3,
+  phantomFlee: 2.9,
+  /** Seconds before it first appears, and before it comes back after it touched you or was knocked out. */
+  phantomRise: 3,
+  phantomGone: 5,
+  phantomOut: 6,
+  phantomTouch: 0.55,
 } as const;
 
 export type GuardKind = 'bruiser' | 'cutter' | 'flanker' | 'drifter';
@@ -131,6 +139,8 @@ export interface RushState {
   swept: boolean;
   score: number;
   caughtBy: number | null;
+  /** Haunted vaults: the phantom, drifting through the walls; `out` counts down while it's gone. */
+  phantom: { x: number; y: number; face: -1 | 1; out: number } | null;
 }
 
 export type RushEvent =
@@ -157,6 +167,10 @@ export type RushEvent =
     }
   | { t: 'paid'; lost: number }
   | { t: 'tag'; i: number; lost: number; hearts: number }
+  /** The phantom touched you (a heart and some cash), was knocked out, or rose again. */
+  | { t: 'haunt'; lost: number; hearts: number }
+  | { t: 'banish' }
+  | { t: 'rise'; x: number; y: number }
   | { t: 'escaped'; score: number }
   | { t: 'busted'; by: number | null };
 
@@ -173,6 +187,8 @@ export interface RushRules {
   loud?: boolean;
   /** An old run: the safe can only be cracked from straight above, below or beside it. */
   safeEdgesOnly?: boolean;
+  /** Halloween: lights out, and a phantom that drifts through the walls after you. */
+  haunted?: boolean;
 }
 
 const rand = (s: RushState) => {
@@ -240,7 +256,82 @@ export function startRush(
     swept: false,
     score: 0,
     caughtBy: null,
+    phantom: rules.haunted ? { ...phantomSpot(map, at(map.start)), face: 1, out: RUSH.phantomRise } : null,
   };
+}
+
+/** Where the phantom rises: the maze corner farthest from `from`. */
+function phantomSpot(m: RushMap, from: { x: number; y: number }) {
+  let best = m.corners[0]!;
+  let far = -1;
+  for (const c of m.corners) {
+    const d = (c.x + 0.5 - from.x) ** 2 + (c.y + 0.5 - from.y) ** 2;
+    if (d > far) {
+      far = d;
+      best = c;
+    }
+  }
+  return { x: best.x + 0.5, y: best.y + 0.5 };
+}
+
+/**
+ * The phantom: it ignores the walls and comes straight at you, slowly. Hide loses it (it drifts off), a flip or
+ * Scare sends it fleeing, and a tackle or the flip's touch banishes it for a while. Touching you costs a heart
+ * and some cash like a guard's tag, but no bribe works on it. Then it sinks away and rises somewhere far off.
+ */
+function stepPhantom(s: RushState, m: RushMap, ev: RushEvent[]) {
+  const ph = s.phantom;
+  if (!ph || s.phase !== 'play') return;
+  const me = s.me;
+  if (ph.out > 0) {
+    ph.out -= DT;
+    if (ph.out <= 0) {
+      ph.out = 0;
+      Object.assign(ph, phantomSpot(m, me));
+      ev.push({ t: 'rise', x: ph.x, y: ph.y });
+    }
+    return;
+  }
+  const flee = s.flip > 0;
+  const lost = s.fx.hide > 0;
+  const target = lost ? phantomSpot(m, me) : me;
+  let dx = target.x - ph.x;
+  let dy = target.y - ph.y;
+  if (flee) {
+    dx = -(me.x - ph.x);
+    dy = -(me.y - ph.y);
+  }
+  const len = Math.hypot(dx, dy);
+  if (len > 1e-6) {
+    const v = (flee ? RUSH.phantomFlee : RUSH.phantom) * DT;
+    const k = Math.min(1, v / len);
+    ph.x = Math.max(0.5, Math.min(m.w - 0.5, ph.x + dx * k));
+    ph.y = Math.max(0.5, Math.min(m.h - 0.5, ph.y + dy * k));
+    if (Math.abs(dx) > 1e-3) ph.face = dx < 0 ? -1 : 1;
+  }
+  if ((ph.x - me.x) ** 2 + (ph.y - me.y) ** 2 > RUSH.phantomTouch ** 2) return;
+  if (flee || s.fx.tackle > 0) {
+    ph.out = RUSH.phantomOut;
+    ev.push({ t: 'banish' });
+    return;
+  }
+  if (s.safeTime > 0 || lost) return;
+  ph.out = RUSH.phantomGone;
+  if (s.safe) s.safe.dialing = false;
+  if (s.hearts > 1) {
+    s.hearts--;
+    const lostCash = Math.floor(s.carried * RUSH.tagLoss);
+    s.carried -= lostCash;
+    s.safeTime = RUSH.safeTime;
+    s.chain = 0;
+    ev.push({ t: 'haunt', lost: lostCash, hearts: s.hearts });
+    return;
+  }
+  s.hearts = 0;
+  s.phase = 'busted';
+  s.caughtBy = null;
+  ev.push({ t: 'haunt', lost: 0, hearts: 0 });
+  ev.push({ t: 'busted', by: null });
 }
 
 /** Hunting or patrolling right now, from the wave clock. */
@@ -654,6 +745,7 @@ export function stepRush(
     s.caughtBy = i;
     ev.push({ t: 'busted', by: i });
   });
+  stepPhantom(s, m, ev);
   if (s.phase === 'play' && s.timeLeft <= 0) {
     s.phase = 'busted';
     s.caughtBy = null;
@@ -736,6 +828,12 @@ function usePower(s: RushState, m: RushMap, slot: number, ev: RushEvent[]) {
           bd = d;
         }
       });
+      const ph = s.phantom;
+      if (ph && ph.out === 0 && (ph.x - me.x) ** 2 + (ph.y - me.y) ** 2 < bd) {
+        ph.out = RUSH.phantomOut;
+        ev.push({ t: 'banish' });
+        break;
+      }
       if (best < 0) return;
       const g = s.guards[best]!;
       g.mode = 'out';

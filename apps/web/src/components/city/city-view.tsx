@@ -35,7 +35,16 @@ import { GANG_COLOR } from '@/lib/theme';
 import { CityArt } from './art';
 import { Halloween } from './halloween';
 import { CityRenderer, type Board, type Emote, type Person, type PlaceLook } from './city-render';
-import { LiveCity, type Chase, type ChaseEnd, type ChatMsg, type LiveStatus } from './live-city';
+import {
+  LiveCity,
+  type Chase,
+  type ChaseEnd,
+  type ChatMsg,
+  type LiveStatus,
+  type PumpkinGot,
+  type Wanted,
+  type WantedGot,
+} from './live-city';
 import { frameGate } from '@/lib/frames';
 
 export interface Me {
@@ -94,6 +103,12 @@ interface Props {
   wanted?: number[];
   /** Halloween week (or ?halloween=1): the haunting is on, its ghosts wearing these Chogs. */
   haunt?: number[] | null;
+  /** The Blood Moon is up: the city goes red. */
+  moon?: boolean;
+  /** Someone reached a pumpkin first. */
+  onPumpkin?: (e: PumpkinGot) => void;
+  /** Today's Most Wanted changed, or a rival claimed the bounty. */
+  onWanted?: (w: Wanted | null, got?: WantedGot) => void;
   /** Covered by a robbery: keep moving and connected, but don't draw. */
   hidden?: boolean;
   board: Board;
@@ -316,8 +331,15 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       said: (text) => {
         s.said = { text, at: performance.now() };
       },
+      pumpkin: (e) => {
+        s.r?.hunts.grabbed(e, performance.now());
+        live.current.onPumpkin?.(e);
+      },
+      wanted: (w, got) => live.current.onWanted?.(w, got),
     });
     s.net = net;
+    // Local testing only: the city's state, to walk somewhere and look.
+    if (location.hostname === 'localhost') (window as unknown as { __city: unknown }).__city = s;
     const t = setInterval(() => live.current.onLive(net.status, net.online), 2000);
     return () => {
       clearInterval(t);
@@ -574,6 +596,12 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         const wanted = new Set(p.wanted);
         for (const x of people) if (x.chog !== null && !x.cop && wanted.has(x.chog)) x.wanted = true;
       }
+      // The live hunts: pumpkins on the street, and today's Most Wanted with the bounty on their head.
+      r.hunts.pumpkins = s.net?.pumpkins ?? [];
+      r.hunts.moon = !!p.moon;
+      const most = s.net?.wanted;
+      if (most && !most.claimed)
+        for (const x of people) if (x.chog === most.chog && !x.cop && !x.npc) x.hunted = most.bounty;
       // The practice getaway: step its police, and end it at the goal, on a catch or when time's up.
       const pr = s.practice;
       if (pr) {

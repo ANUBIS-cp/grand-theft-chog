@@ -300,6 +300,25 @@ export class Sound {
     this.tone(523, 0.05, 0.12, 'square', 0.06, 262);
   }
 
+  /** Haunted vault: the phantom touched you, a falling moan with breath in it. */
+  wail() {
+    this.tone(520, 0, 0.9, 'sine', 0.11, 190);
+    this.tone(523, 0.04, 0.85, 'triangle', 0.05, 200);
+    this.noise(0, 0.7, 0.12, 900, 300);
+  }
+
+  /** The phantom banished: a rising shimmer. */
+  banish() {
+    this.tone(660, 0, 0.35, 'sine', 0.08, 1760);
+    this.tone(990, 0.06, 0.3, 'sine', 0.05, 2640);
+    this.noise(0, 0.3, 0.08, 2000, 7000);
+  }
+
+  /** The phantom rises again somewhere: a breath of wind. */
+  rise() {
+    this.noise(0, 0.9, 0.05, 250, 900);
+  }
+
   suspect() {
     this.tone(660, 0, 0.09, 'sine', 0.08, 880);
   }

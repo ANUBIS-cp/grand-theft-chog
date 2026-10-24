@@ -17,6 +17,7 @@ export function robberPass(run: StartedRun & { prisoner?: number }, chogId: numb
       guards: run.guards,
       target: run.target,
       ...(loud ? { loud: true } : {}),
+      ...(run.haunted ? { haunted: true } : {}),
     },
   });
 }

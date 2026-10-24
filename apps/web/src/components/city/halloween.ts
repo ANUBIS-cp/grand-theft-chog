@@ -556,7 +556,7 @@ export class Halloween {
   }
 
   /** The carved face: angry triangle eyes, a nose, a jagged grin with teeth, cut deep and lit from inside. */
-  private pumpkinFace(
+  pumpkinFace(
     g: G,
     cx: number,
     cy: number,
@@ -997,7 +997,7 @@ export class Halloween {
   }
 
   /** A soft round glow of one colour. */
-  private glowSprite(key: string, r: number, g: number, b: number) {
+  glowSprite(key: string, r: number, g: number, b: number) {
     const k = `glow:${key}`;
     let c = this.sprites.get(k);
     if (!c) {
@@ -1016,7 +1016,7 @@ export class Halloween {
   }
 
   /** The pumpkin without its face, drawn once at the screen's full sharpness: ribs, creases, shine, stem. */
-  private pumpkinBody(t: number, dpr: number) {
+  pumpkinBody(t: number, dpr: number) {
     const k = `pumpkin:${t}:${dpr}`;
     let c = this.sprites.get(k);
     if (c) return c;

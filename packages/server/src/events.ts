@@ -1,6 +1,15 @@
 import { getChog, type GangId } from '@chog-city/data';
+import {
+  BLOOD_MOON_BONUS,
+  HALLOWEEN_NIGHT,
+  HALLOWEEN_WEEK,
+  SPOOKY_GANGS,
+  bloodMoon,
+  nextBloodMoon,
+} from '@chog-city/game';
 import { and, gte, isNotNull, lt } from 'drizzle-orm';
 import { heistRuns, type Db } from './db/index.ts';
+import { wantedBonus } from './hunts.ts';
 
 // Judging-week events, on fixed dates (UTC). EVENTS=off in the server's settings turns them all off.
 //
@@ -10,17 +19,17 @@ import { heistRuns, type Db } from './db/index.ts';
 // worth 20% more.
 //
 // Halloween week (27-31 Oct): the undead and the toxic, Skulls and Radioactive, take 25% more; on Halloween
-// itself (31 Oct) every haul counts double.
+// itself (31 Oct) every haul counts double. Every night at 18:00 the Blood Moon rises for an hour: hauls take
+// half as much again (the dates are in packages/game/src/season.ts, shared with the live server).
 
 export const ELECTION = { from: Date.UTC(2026, 9, 24), to: Date.UTC(2026, 9, 27) };
 export const WINNERS_UNTIL = Date.UTC(2026, 9, 30);
-export const HALLOWEEN_WEEK = { from: Date.UTC(2026, 9, 27), to: Date.UTC(2026, 10, 1) };
-export const HALLOWEEN_NIGHT = { from: Date.UTC(2026, 9, 31), to: Date.UTC(2026, 10, 1) };
+export { HALLOWEEN_NIGHT, HALLOWEEN_WEEK };
 
 export const WINNERS_BONUS = 20;
 export const SPOOKY_BONUS = 25;
 export const HALLOWEEN_NIGHT_BONUS = 100;
-const SPOOKY: GangId[] = ['skulls', 'radioactive'];
+export { BLOOD_MOON_BONUS };
 
 export type Side = 'Left' | 'Right';
 
@@ -92,14 +101,17 @@ export async function election(db: Db, now: number): Promise<Election> {
 
 /** Extra percent on a haul for a run that started at `at`: the election's winners, Halloween. */
 export async function eventBonus(db: Db, chogId: number, gang: GangId, at: number): Promise<number> {
-  if (!eventsOn()) return 0;
-  let bonus = 0;
+  // Most Wanted is every day, not a judging-week event.
+  const wanted = await wantedBonus(db, chogId, at);
+  if (!eventsOn()) return wanted;
+  let bonus = wanted;
   if (at >= ELECTION.to && at < WINNERS_UNTIL) {
     const side = sideOf(chogId);
     if (side && (await election(db, ELECTION.to)).leader === side) bonus += WINNERS_BONUS;
   }
-  if (within(at, HALLOWEEN_WEEK) && SPOOKY.includes(gang)) bonus += SPOOKY_BONUS;
+  if (within(at, HALLOWEEN_WEEK) && SPOOKY_GANGS.includes(gang)) bonus += SPOOKY_BONUS;
   if (within(at, HALLOWEEN_NIGHT)) bonus += HALLOWEEN_NIGHT_BONUS;
+  if (bloodMoon(at)) bonus += BLOOD_MOON_BONUS;
   return bonus;
 }
 
@@ -112,6 +124,8 @@ export interface EventsNow {
   /** The election, or its winners' days after it. */
   side: EventNow;
   halloween: { until: number; night: boolean } | null;
+  /** The Blood Moon up now, or the next one (Halloween week only). */
+  moon: { from: number; to: number; up: boolean } | null;
 }
 
 /** What's on now in a few words: the big screen's line, and the banner shown once a day. */
@@ -134,6 +148,13 @@ export function eventText(e: EventsNow): { key: string; screen: string; title: s
       line: `${s.side} Chogs take ${WINNERS_BONUS}% more on every haul until 30 Oct.`,
     });
   }
+  if (e.moon?.up)
+    out.push({
+      key: `blood-moon-${e.moon.from}`,
+      screen: `BLOOD MOON · +${BLOOD_MOON_BONUS}% HAULS · PUMPKINS OUT`,
+      title: 'The Blood Moon is up',
+      line: `For one hour every vault is haunted, hauls pay ${BLOOD_MOON_BONUS}% more, and pumpkins full of cash are all over the city. First Chog to one keeps it.`,
+    });
   if (e.halloween)
     out.push(
       e.halloween.night
@@ -155,7 +176,7 @@ export function eventText(e: EventsNow): { key: string; screen: string; title: s
 
 /** What's on now, for the city's big screen and banner. */
 export async function eventsNow(db: Db, now: number): Promise<EventsNow> {
-  if (!eventsOn()) return { side: null, halloween: null };
+  if (!eventsOn()) return { side: null, halloween: null, moon: null };
   let side: EventNow = null;
   if (within(now, ELECTION))
     side = { kind: 'election', until: ELECTION.to, election: await election(db, now) };
@@ -164,5 +185,7 @@ export async function eventsNow(db: Db, now: number): Promise<EventsNow> {
   const halloween = within(now, HALLOWEEN_WEEK)
     ? { until: HALLOWEEN_WEEK.to, night: within(now, HALLOWEEN_NIGHT) }
     : null;
-  return { side, halloween };
+  const next = nextBloodMoon(now);
+  const moon = next ? { ...next, up: now >= next.from } : null;
+  return { side, halloween, moon };
 }

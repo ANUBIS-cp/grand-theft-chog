@@ -281,3 +281,70 @@ describe('cracking the safe', () => {
     expect(rushRules(1).safeEdgesOnly).toBeUndefined();
   });
 });
+
+describe('haunted vaults', () => {
+  const haunted = { ...NO_GUARDS, haunted: true };
+  const still: RushInput = { d: -1 };
+  const vault = () => rushMap('rush-bank')!;
+  const near = (s: RushState) => Math.hypot(s.phantom!.x - s.me.x, s.phantom!.y - s.me.y);
+
+  it('only a haunted vault has a phantom, and it rises from the corner farthest away after a moment', () => {
+    const m = vault();
+    expect(startRush(m, NO_GUARDS, [], 1).phantom).toBeNull();
+    const s = startRush(m, haunted, [], 1);
+    expect(s.phantom!.out).toBe(RUSH.phantomRise);
+    const ev = run(s, m, haunted, still, Math.ceil(RUSH.phantomRise * TPS) + 1);
+    expect(ev.some((e) => e.t === 'rise')).toBe(true);
+    expect(near(s)).toBeGreaterThan(4);
+  });
+
+  it('drifts straight through the walls at you, slower than you run, and its touch costs a heart and cash', () => {
+    const m = vault();
+    const s = startRush(m, haunted, [], 1);
+    s.carried = 100;
+    run(s, m, haunted, still, Math.ceil(RUSH.phantomRise * TPS) + 1);
+    const d0 = near(s);
+    run(s, m, haunted, still, TPS);
+    expect(d0 - near(s)).toBeCloseTo(RUSH.phantom, 1);
+    let ev: ReturnType<typeof run> = [];
+    for (let i = 0; i < 60 * TPS && !ev.some((e) => e.t === 'haunt'); i++) ev = stepRush(s, m, haunted, still);
+    expect(ev.find((e) => e.t === 'haunt')).toMatchObject({ hearts: RUSH.hearts - 1, lost: 30 });
+    expect(s.carried).toBe(70);
+    expect(s.phantom!.out).toBe(RUSH.phantomGone);
+  });
+
+  it('loses you while you hide, and a flip banishes it', () => {
+    const m = vault();
+    const s = startRush(m, haunted, [], 1);
+    run(s, m, haunted, still, Math.ceil(RUSH.phantomRise * TPS) + 1);
+    // Hiding: it drifts away instead of closer.
+    const before = near(s);
+    s.fx.hide = 2;
+    run(s, m, haunted, still, TPS);
+    expect(near(s)).toBeGreaterThanOrEqual(before - 0.01);
+    // Scared (a flip): it flees, and touching it now sends it away.
+    s.flip = 5;
+    s.phantom!.x = s.me.x + 0.3;
+    s.phantom!.y = s.me.y;
+    const ev = stepRush(s, m, haunted, still);
+    expect(ev.some((e) => e.t === 'banish')).toBe(true);
+    expect(s.phantom!.out).toBe(RUSH.phantomOut);
+    expect(s.hearts).toBe(RUSH.hearts);
+  });
+
+  it('busts you on your last heart, with nobody to blame', () => {
+    const m = vault();
+    const s = startRush(m, haunted, [], 1);
+    s.hearts = 1;
+    run(s, m, haunted, still, Math.ceil(RUSH.phantomRise * TPS) + 1);
+    for (let i = 0; i < 60 * TPS && s.phase === 'play'; i++) stepRush(s, m, haunted, still);
+    expect(s.phase).toBe('busted');
+    expect(s.caughtBy).toBeNull();
+    expect(s.timeLeft).toBeGreaterThan(0);
+  });
+
+  it('the rules carry the flag', () => {
+    expect(rushRules(1, false, false, undefined, true).haunted).toBe(true);
+    expect(rushRules(1).haunted).toBeUndefined();
+  });
+});

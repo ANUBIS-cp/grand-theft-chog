@@ -59,6 +59,8 @@ export interface RaidPass {
     target: string;
     /** The break-in was loud: the alarm is ringing from the start. */
     loud?: boolean;
+    /** Halloween: lights out and a phantom in the vault. */
+    haunted?: boolean;
   };
   exp: number;
 }

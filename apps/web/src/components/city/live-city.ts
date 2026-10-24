@@ -62,6 +62,47 @@ export interface ChaseEnd {
   bag: number;
 }
 
+/** Pumpkin Rush: a pumpkin full of cash on the street, until someone reaches it. */
+export interface Pumpkin {
+  id: string;
+  x: number;
+  y: number;
+  cash: number;
+  gold: boolean;
+  until: number;
+}
+
+export interface PumpkinGot {
+  id: string;
+  chog: number;
+  name: string;
+  gang: GangId;
+  cash: number;
+  gold: boolean;
+  x: number;
+  y: number;
+}
+
+/** Today's Most Wanted: yesterday's best robber, with a bounty on their head. */
+export interface Wanted {
+  day: number;
+  chog: number;
+  name: string;
+  gang: GangId;
+  bounty: number;
+  claimed: boolean;
+}
+
+export interface WantedGot {
+  chog: number;
+  name: string;
+  gang: GangId;
+  by: number;
+  byName: string;
+  byGang: GangId;
+  bounty: number;
+}
+
 /** A chat message: the city room, or your gang's. */
 export interface ChatMsg {
   id: number;
@@ -106,6 +147,8 @@ export class LiveCity {
   people = new Map<number, Remote>();
   chases = new Map<string, Chase>();
   chat: ChatMsg[] = [];
+  pumpkins: Pumpkin[] = [];
+  wanted: Wanted | null = null;
   /** Your own getaway pass, sent again after a reconnect so the run carries on. */
   private myRun: string | null = null;
   private ws: WebSocket | null = null;
@@ -126,6 +169,10 @@ export class LiveCity {
       chat?: (fresh: ChatMsg | null, refused?: string) => void;
       /** Your own last city-room message, for the bubble over your head. */
       said?: (text: string) => void;
+      /** Someone reached a pumpkin first. */
+      pumpkin?: (e: PumpkinGot) => void;
+      /** Today's Most Wanted changed, or a rival claimed the bounty. */
+      wanted?: (w: Wanted | null, got?: WantedGot) => void;
     },
   ) {
     queueMicrotask(() => void this.connect());
@@ -292,6 +339,21 @@ export class LiveCity {
         this.on.chat?.(c);
         break;
       }
+      case 'pk':
+        this.pumpkins = m.list as Pumpkin[];
+        break;
+      case 'pk-got':
+        this.pumpkins = this.pumpkins.filter((p) => p.id !== m.id);
+        this.on.pumpkin?.(m as unknown as PumpkinGot);
+        break;
+      case 'wanted':
+        this.wanted = (m.w as Wanted | null) ?? null;
+        this.on.wanted?.(this.wanted);
+        break;
+      case 'wanted-got':
+        if (this.wanted) this.wanted = { ...this.wanted, claimed: true };
+        this.on.wanted?.(this.wanted, m as unknown as WantedGot);
+        break;
       case 'say-no':
         this.on.chat?.(null, m.why as string);
         break;

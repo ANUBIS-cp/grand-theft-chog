@@ -17,6 +17,7 @@ import {
 import { readTicket } from '@chog-city/server/ticket';
 import { chatHistory, say } from './chat.ts';
 import { chasesNow, copPositions, startChase, stepChases } from './getaway.ts';
+import { pollWanted, pumpkinsNow, stepPumpkins, stepWanted, wantedNow } from './hunts.ts';
 import { raidCount, raidHello, type RaidHandler } from './raids.ts';
 import { createServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -52,6 +53,8 @@ interface Player {
   /** Messages in the current second, to cut off floods. */
   burst: number;
   alive: boolean;
+  /** When they walked into the city (Most Wanted can't be tagged the moment they arrive). */
+  joined: number;
 }
 
 interface Stroller {
@@ -204,6 +207,7 @@ wss.on('connection', (ws, req) => {
         lastEmote: 0,
         burst: 0,
         alive: true,
+        joined: now,
       };
       Object.assign(p, spawnFor(p, msg.x, msg.y, now));
       me = p;
@@ -212,6 +216,8 @@ wss.on('connection', (ws, req) => {
       send(ws, { t: 'all', people: everyone() });
       // Getaways already running, so a newcomer sees the chase too.
       for (const c of chasesNow()) send(ws, { t: 'chase', ...c });
+      send(ws, { t: 'pk', list: pumpkinsNow() });
+      send(ws, { t: 'wanted', w: wantedNow() });
       send(ws, { t: 'chat', msgs: chatHistory(p.gang) });
       if (p.chog !== null) broadcast({ t: 'join', p: info(p) }, p.id);
       // A stroller that is now being played leaves the street.
@@ -297,8 +303,22 @@ setInterval(() => {
     d.push(p.id, Math.round(p.x * 100), Math.round(p.y * 100), (p.face < 0 ? 1 : 0) | (p.moving ? 2 : 0));
   }
   stepChases(TICK_MS / 1000, now, players, broadcast);
+  const hunters = [...players.values()].filter((p) => p.chog !== null);
+  stepPumpkins(now, hunters, broadcast, rand);
+  stepWanted(now, hunters, broadcast, (p, until) => {
+    // Tagged: off to the jail yard, like any other Chog that's caught.
+    const me = players.get(p.id);
+    if (!me) return;
+    me.jail = until;
+    Object.assign(me, spawnFor(me, null, null, Date.now()));
+    send(me.ws, { t: 'fix', x: me.x, y: me.y });
+  });
   if (players.size) broadcast({ t: 's', n: seen().length, d, c: copPositions() });
 }, TICK_MS);
+
+// Today's Most Wanted, from the web app.
+void pollWanted(broadcast);
+setInterval(() => void pollWanted(broadcast), 20_000);
 
 // Drop connections that stopped answering.
 setInterval(() => {

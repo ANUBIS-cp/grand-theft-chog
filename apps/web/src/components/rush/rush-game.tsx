@@ -23,7 +23,16 @@ import {
   type RushRules,
   type RushState,
 } from '@chog-city/game/rush';
-import { ArrowClockwise, Heart, SpeakerHigh, SpeakerSlash, Star, Vault, X } from '@phosphor-icons/react';
+import {
+  ArrowClockwise,
+  Ghost,
+  Heart,
+  SpeakerHigh,
+  SpeakerSlash,
+  Star,
+  Vault,
+  X,
+} from '@phosphor-icons/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
@@ -141,6 +150,9 @@ interface Hud {
   flipped: boolean;
   /** A ready power that would help right now (its slot), or -1. */
   hint: number;
+  /** Haunted vault; and the phantom made the last touch. */
+  haunted: boolean;
+  byPhantom: boolean;
 }
 
 export function RushGame(props: RushGameProps) {
@@ -264,6 +276,8 @@ export function RushGame(props: RushGameProps) {
       getComputedStyle(document.body).getPropertyValue('--font-display').trim() || 'Impact, sans-serif';
     const g = { ...fresh(), r };
     game.current = g;
+    // Local testing only: the run's state, to set up a moment and look at it.
+    if (location.hostname === 'localhost') (window as unknown as { __rush: unknown }).__rush = game;
     for (const img of [images.player, ...images.guards]) img.onload = () => r.faceReady();
     const fit = () => {
       const box = stage.getBoundingClientRect();
@@ -464,6 +478,8 @@ export function RushGame(props: RushGameProps) {
         combo: st.seenCombo,
         flipped: st.seenFlip,
         hint: s.phase === 'play' ? powerHint(s, map, (i) => laserOn(s, i)) : -1,
+        haunted: !!s.phantom,
+        byPhantom: !!s.phantom && s.phase === 'busted' && s.caughtBy === null && s.timeLeft > 0,
       };
       const key = JSON.stringify(next);
       if (key !== lastKey) {
@@ -592,6 +608,27 @@ export function RushGame(props: RushGameProps) {
             st.fx.flashColor = '#ff2d55';
             st.fx.burst(me.x, me.y, 16, ['#ffd666', '#ff4d6d'], 3);
             if (e.lost) st.fx.float(me.x, me.y - t * 1.1, `−${money(e.lost)}`, '#ff4d6d', true);
+            break;
+          case 'haunt': {
+            sfx?.wail();
+            st.fx.shake = 12;
+            st.fx.flash = 0.45;
+            st.fx.flashColor = '#9dffd9';
+            st.fx.burst(me.x, me.y, 22, ['#c9fff0', '#7dffd0', '#ffffff'], 3);
+            if (e.lost) st.fx.float(me.x, me.y - t * 1.1, `BOO! −${money(e.lost)}`, '#9dffd9', true);
+            break;
+          }
+          case 'banish': {
+            sfx?.banish();
+            const ph = st.s.phantom;
+            const p = ph ? { x: rr.X(ph.x), y: rr.Y(ph.y) } : me;
+            st.fx.burst(p.x, p.y, 30, ['#c9fff0', '#7dffd0', '#ffffff'], 3.6, 0.08);
+            st.fx.ring(p.x, p.y, t * 1.6, '#9dffd9');
+            st.fx.float(p.x, p.y - t * 0.8, 'BANISHED!', '#9dffd9', true);
+            break;
+          }
+          case 'rise':
+            sfx?.rise();
             break;
           case 'escaped':
             sfx?.escaped();
@@ -928,7 +965,7 @@ export function RushGame(props: RushGameProps) {
           </div>
         )}
         {hud && !hud.started && !over && (
-          <StartCard player={player} rescue={rescue} safeValue={rules.safeValue} />
+          <StartCard player={player} rescue={rescue} safeValue={rules.safeValue} haunted={!!rules.haunted} />
         )}
         {viewer && hud && ((over && showEnd) || viewerGone) && (
           <ViewerEnd
@@ -1324,20 +1361,38 @@ function StartCard({
   player,
   rescue,
   safeValue,
+  haunted,
 }: {
   player: RushGameProps['player'];
   rescue?: RushChog;
   safeValue: number;
+  haunted: boolean;
 }) {
   return (
     <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-3">
-      <div className="flex max-w-[460px] items-center gap-3 glass-strong rounded-[22px] px-3.5 py-3 text-white">
-        <img src={chogImage(player.id, 256)} alt="" className="h-12 w-12 rounded-[10px] object-cover" />
+      <div
+        className={cn(
+          'flex max-w-[460px] items-center gap-3 glass-strong rounded-[22px] px-3.5 py-3 text-white',
+          haunted && 'ring-1 ring-inset ring-[#9dffd9]/40 shadow-[0_0_40px_rgba(120,255,210,0.18)]',
+        )}
+      >
+        <div className="relative shrink-0">
+          <img src={chogImage(player.id, 256)} alt="" className="h-12 w-12 rounded-[10px] object-cover" />
+          {haunted && (
+            <span className="absolute -bottom-1.5 -right-1.5 grid h-6 w-6 place-items-center rounded-full bg-[#0e1e1c] text-[#9dffd9] ring-2 ring-[#9dffd9]/70">
+              <Ghost size={14} weight="fill" />
+            </span>
+          )}
+        </div>
         <div className="text-[13px] leading-snug">
-          <strong className="block font-display text-[15px] leading-none">Move to start</strong>
-          {rescue
-            ? `Open ${rescue.name}'s cell at the top, dodge the guards, and get out the green exit.`
-            : `Grab cash in long runs for combos, crack the safe (${money(safeValue)}), and get out before the doors lock. Blue loudspeakers make the guards run.`}
+          <strong className="block font-display text-[15px] leading-none">
+            {haunted ? 'Haunted vault · move to start' : 'Move to start'}
+          </strong>
+          {haunted
+            ? 'The lights are out. Watch for red eyes, follow the glints of cash, and keep away from the phantom: it drifts through walls. A loudspeaker or a tackle banishes it.'
+            : rescue
+              ? `Open ${rescue.name}'s cell at the top, dodge the guards, and get out the green exit.`
+              : `Grab cash in long runs for combos, crack the safe (${money(safeValue)}), and get out before the doors lock. Blue loudspeakers make the guards run.`}
         </div>
       </div>
     </div>
@@ -1499,7 +1554,17 @@ function EndCard(props: {
           </p>
         ) : (
           <>
-            {props.caughtBy ? (
+            {props.hud.byPhantom ? (
+              <div className="mt-4 flex items-center justify-center gap-3">
+                <span className="grid h-14 w-14 place-items-center rounded-[10px] bg-[#0e1e1c] text-[#9dffd9] shadow-[0_0_24px_rgba(120,255,210,0.35)] ring-1 ring-inset ring-[#9dffd9]/50">
+                  <Ghost size={30} weight="fill" />
+                </span>
+                <p className="text-left text-[15px] leading-snug">
+                  <strong className="block">The phantom</strong>
+                  got you in the dark
+                </p>
+              </div>
+            ) : props.caughtBy ? (
               <div className="mt-4 flex items-center justify-center gap-3">
                 <img
                   src={chogImage(props.caughtBy.id, 256)}

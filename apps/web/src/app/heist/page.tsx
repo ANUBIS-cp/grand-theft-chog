@@ -28,9 +28,9 @@ const DEFAULT_CHOG = 1595;
 export default async function HeistPage({
   searchParams,
 }: {
-  searchParams: Promise<{ chog?: string; map?: string; tier?: string }>;
+  searchParams: Promise<{ chog?: string; map?: string; tier?: string; haunted?: string }>;
 }) {
-  const { chog: asked, map, tier } = await searchParams;
+  const { chog: asked, map, tier, haunted } = await searchParams;
   const mapId = map === 'casino' ? RUSH_CASINO.id : RUSH_BANK.id;
   const level = Math.max(0, Math.min(3, Number(tier) || 1));
   const number = Number(asked);
@@ -69,7 +69,7 @@ export default async function HeistPage({
       <div className="min-h-0 w-full flex-1">
         <RushGame
           mapId={mapId}
-          rules={rushRules(level)}
+          rules={rushRules(level, false, false, undefined, haunted === '1')}
           coach
           player={{
             id: chog.id,

@@ -1,5 +1,6 @@
 'use client';
 import { GANGS, GANG_IDS, metadataIdFor, type GangId } from '@chog-city/data';
+import { BLOOD_MOON_BONUS, dayOf, hauntedVault, isHalloweenWeek } from '@chog-city/game';
 import { CITY, EMOTES, HEAD_START, getawayTime, placeOf, type Emote, type Place } from '@chog-city/game/city';
 import { encodeLock, lockFor, type LockKind } from '@chog-city/game/lock';
 import { RUSH_BANK, rushRules, rushSeed } from '@chog-city/game/rush';
@@ -66,7 +67,8 @@ import {
   PhoneControls,
   RoundButton,
 } from './hud';
-import type { Chase, ChaseEnd, ChatMsg, LiveStatus } from './live-city';
+import type { Chase, ChaseEnd, ChatMsg, LiveStatus, PumpkinGot, Wanted, WantedGot } from './live-city';
+import { MoonPill } from './moon-pill';
 import { useNoPageScroll } from '@/lib/no-page-scroll';
 import { ViewportProbe } from './viewport-probe';
 
@@ -123,6 +125,8 @@ interface Run {
   stage?: 'lock' | 'vault';
   /** The break-in was loud: the alarm is ringing inside. */
   loud?: boolean;
+  /** Halloween: lights out and a phantom in the vault. */
+  haunted?: boolean;
 }
 interface Robbing {
   target: GangId;
@@ -142,6 +146,7 @@ interface CityData {
   practice: { id: number; name: string; powers: PowerId[] };
   burns: Burns;
   events?: { key: string; screen: string; title: string; line: string }[];
+  moon?: { from: number; to: number; up: boolean } | null;
 }
 
 const POWER_ICON: Record<PowerId, Parameters<typeof SkillIcon>[0]['skill']> = {
@@ -219,6 +224,9 @@ export function CityApp() {
     admin?: boolean;
   } | null>(null);
   const [city, setCity] = useState<CityData | null>(null);
+  // Today's Most Wanted (from the live city), and pumpkins you've grabbed today (this browser).
+  const [mostWanted, setMostWanted] = useState<Wanted | null>(null);
+  const [pumpkinsToday, setPumpkinsToday] = useState(0);
   // Walking as your Chog from its wallet address alone (read from Monad, nothing signed): practice only until
   // the wallet is proved. Remembered in this browser.
   const [pass, setPassState] = useState<Pass | null>(null);
@@ -269,6 +277,8 @@ export function CityApp() {
     gang: GangId;
     seed: number;
     loud: boolean;
+    /** Halloween: a haunted practice vault (lights out, the phantom). */
+    haunted: boolean;
   } | null>(null);
   const [practiceRun, setPracticeRun] = useState<{
     since: number;
@@ -336,11 +346,14 @@ export function CityApp() {
   const startPracticeRef = useRef(() => {});
   const startPractice = () => {
     const pool = GANG_IDS.filter((g) => g !== chog?.gang);
+    const gang = pool[Math.floor(Math.random() * pool.length)]!;
+    // Halloween: once you've learned the vault, practice is haunted (a first try is always lit).
     setPractice({
       stage: 'lock',
-      gang: pool[Math.floor(Math.random() * pool.length)]!,
+      gang,
       seed: Math.floor(Math.random() * 1e9),
       loud: false,
+      haunted: !!haunt && (practiced || hauntedVault(gang, Date.now())),
     });
   };
   startPracticeRef.current = startPractice;
@@ -647,6 +660,103 @@ export function CityApp() {
       .flatMap((v) => v.guards);
     return ids.length ? ids : null;
   }, [city?.events, board, hauntDemo]);
+  // The Blood Moon: the one up now or the next, from the server. ?bloodmoon=1 shows one on a local copy.
+  const [moonPreview, setMoonPreview] = useState(0);
+  useEffect(() => {
+    if (location.hostname === 'localhost' && new URLSearchParams(location.search).get('bloodmoon') === '1')
+      setMoonPreview(Date.now());
+  }, []);
+  const moon = moonPreview ? { from: moonPreview, to: moonPreview + 3_600_000 } : (city?.moon ?? null);
+  const moonUp = !!moon && now >= moon.from && now < moon.to;
+  const pumpkinTime = moonUp || isHalloweenWeek(now);
+  // Pumpkins you've grabbed today, kept in this browser for the task list.
+  const pumpkinKey = `cw-pk-${dayOf(now)}`;
+  useEffect(() => {
+    try {
+      setPumpkinsToday(Number(localStorage.getItem(pumpkinKey) ?? 0) || 0);
+    } catch {
+      /* no storage */
+    }
+  }, [pumpkinKey]);
+  const pumpkinGot = (e: PumpkinGot) => {
+    if (chog && e.chog === chog.id) {
+      siren.current ??= new Sound();
+      siren.current.cash();
+      setPumpkinsToday((n) => {
+        try {
+          localStorage.setItem(pumpkinKey, String(n + 1));
+        } catch {
+          /* no storage */
+        }
+        return n + 1;
+      });
+      setBanner({
+        id: `pk${e.id}`,
+        title: e.gold ? 'Gold pumpkin!' : 'Pumpkin!',
+        line: `${money(e.cash)} for ${GANGS[e.gang].name}.`,
+        chog: e.chog,
+        tone: 'win',
+      });
+      void loadBoard();
+    } else if (e.gold)
+      setBanner({
+        id: `pk${e.id}`,
+        title: 'Gold pumpkin taken',
+        line: `${e.name} grabbed ${money(e.cash)} for ${GANGS[e.gang].name}.`,
+        chog: e.chog,
+        tone: chog?.gang === e.gang ? 'win' : 'lose',
+      });
+  };
+  const wantedNews = (w: Wanted | null, got?: WantedGot) => {
+    setMostWanted(w);
+    if (!got) return;
+    if (chog && got.chog === chog.id) {
+      setBanner({
+        id: `wanted${got.chog}`,
+        title: 'Caught!',
+        line: `${got.byName} of ${GANGS[got.byGang].name} claimed the ${money(got.bounty)} bounty on you. 30 minutes in jail.`,
+        chog: got.by,
+        tone: 'lose',
+      });
+      void loadMe();
+    } else if (chog && got.by === chog.id)
+      setBanner({
+        id: `wanted${got.chog}`,
+        title: 'Bounty claimed!',
+        line: `You caught ${got.name}: ${money(got.bounty)} for ${GANGS[got.byGang].name}.`,
+        chog: got.chog,
+        tone: 'win',
+      });
+    else
+      setBanner({
+        id: `wanted${got.chog}`,
+        title: 'Most Wanted caught',
+        line: `${got.byName} caught ${got.name} and took the ${money(got.bounty)} bounty.`,
+        chog: got.chog,
+        tone: chog?.gang === got.byGang ? 'win' : chog?.gang === got.gang ? 'lose' : 'win',
+      });
+    void loadBoard();
+  };
+  // You're today's Most Wanted: told once a day.
+  const wantedMe = !!mostWanted && !mostWanted.claimed && !!chog && mostWanted.chog === chog.id;
+  useEffect(() => {
+    if (!wantedMe || !mostWanted) return;
+    const key = `cw-wanted-${mostWanted.day}`;
+    try {
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, '1');
+    } catch {
+      return;
+    }
+    setBanner({
+      id: key,
+      title: 'You’re Most Wanted',
+      line: `You stole the most yesterday. Every haul pays 25% more today, but there’s ${money(mostWanted.bounty)} on your head: a rival who tags you in the city takes it from your gang. Your gang’s door is safe.`,
+      chog: mostWanted.chog,
+      tone: 'alarm',
+    });
+  }, [wantedMe, mostWanted]);
+
   const screen = useMemo(
     () => ({
       lines: (board?.board ?? [])
@@ -902,6 +1012,27 @@ export function CityApp() {
         onGo: done || jailedNow ? undefined : walk(g),
       });
     }
+    if (mostWanted && !mostWanted.claimed) {
+      if (mostWanted.chog === chog.id)
+        duties.push({
+          key: 'wanted',
+          label: 'You’re Most Wanted',
+          sub: `+25% hauls · ${money(mostWanted.bounty)} on your head`,
+        });
+      else if (mostWanted.gang !== gang)
+        duties.push({
+          key: 'hunt',
+          label: `Catch ${mostWanted.name}`,
+          sub: `Most Wanted · ${money(mostWanted.bounty)} bounty`,
+        });
+    }
+    if (pumpkinTime)
+      duties.push({
+        key: 'pumpkin',
+        label: pumpkinsToday ? `Grabbed ${plural(pumpkinsToday, 'pumpkin')} today` : 'Grab a pumpkin',
+        sub: moonUp ? 'Blood Moon: they’re all over the city' : 'Follow the column of light',
+        done: pumpkinsToday > 0,
+      });
     const mates = (city?.jailed ?? []).filter((j) => j.gang === gang && j.id !== chog.id && j.until > now);
     if (mates.length)
       duties.push({
@@ -1038,7 +1169,7 @@ export function CityApp() {
           <RushGame
             key={run.id}
             mapId={run.vault}
-            rules={rushRules(run.tier, !!run.prisoner, run.loud)}
+            rules={rushRules(run.tier, !!run.prisoner, run.loud, undefined, run.haunted)}
             seed={rushSeed(run.id)}
             link={run.link}
             player={{
@@ -1115,7 +1246,7 @@ export function CityApp() {
         <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0918]">
           <RushGame
             mapId={RUSH_BANK.id}
-            rules={rushRules(1, false, practice.loud)}
+            rules={rushRules(1, false, practice.loud, undefined, practice.haunted)}
             coach
             player={{ ...player, gang: chog?.gang ? GANGS[chog.gang].name : null }}
             guards={guards}
@@ -1232,6 +1363,9 @@ export function CityApp() {
         places={looks}
         wanted={city?.burns.posters.map((p) => p.chog)}
         haunt={haunt}
+        moon={moonUp}
+        onPumpkin={pumpkinGot}
+        onWanted={wantedNews}
         board={screen}
         paused={!!heistScreen || !!sheet || !!peek || mapOpen || (!!chog && !chog.gang)}
         onDoor={(p, asked) => {
@@ -1330,6 +1464,20 @@ export function CityApp() {
           <div className="sm:hidden">
             <MusicButton />
           </div>
+          {moon && (
+            <MoonPill
+              moon={moon}
+              now={now}
+              onOpen={() =>
+                setBanner({
+                  id: `moon${now}`,
+                  title: moonUp ? 'The Blood Moon is up' : 'The Blood Moon',
+                  line: `Every night of Halloween week, 18:00 to 19:00 UTC: every vault is haunted, hauls pay ${BLOOD_MOON_BONUS}% more, and pumpkins full of cash pop up all over the city. First Chog to one keeps it.`,
+                  tone: 'alarm',
+                })
+              }
+            />
+          )}
         </div>
       </div>
 

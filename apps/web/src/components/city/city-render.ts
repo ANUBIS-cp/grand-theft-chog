@@ -24,6 +24,7 @@ import {
 } from '../chog/walk';
 import { CityArt } from './art';
 import type { Halloween, HauntView } from './halloween';
+import { CityHunts } from './hunts';
 import { FACADE, LANDMARK_RISE, paintLandmark, paintWall, paintYard, treeOf } from './landmarks';
 
 // Draws the city at night in the same 3/4 view as the vaults: ground tiles, buildings (roof at the back, front
@@ -54,6 +55,8 @@ export interface Person {
   bag?: number;
   /** A Wanted poster ($CHOG) is up on this Chog: a poster tag next to its name. */
   wanted?: boolean;
+  /** Today's Most Wanted, not yet caught: the bounty on their head. */
+  hunted?: number;
   /** Their gang, for how they walk. */
   gang?: GangId | null;
   /** What they just said in the city chat: a speech bubble over them for a few seconds. */
@@ -159,6 +162,8 @@ export class CityRenderer {
   sirens: PatrolCar[] = [];
   /** Halloween week's haunting (halloween.ts), or null the rest of the year. */
   haunt: Halloween | null = null;
+  /** Pumpkin Rush, Most Wanted and the Blood Moon (hunts.ts). */
+  readonly hunts = new CityHunts();
   private hauntView(): HauntView {
     return {
       g: this.g,
@@ -1688,6 +1693,49 @@ export class CityRenderer {
       g.fillStyle = INK;
       g.fillText(label, x, by + 1);
     }
+    if (p.hunted) {
+      // Most Wanted: a red plate over the name with the bounty in gold, swinging a little.
+      const ps = Math.round(size * 0.92);
+      g.font = `900 ${ps}px ${this.font}`;
+      const title = 'MOST WANTED';
+      const prize = `$${p.hunted.toLocaleString('en-US')}`;
+      const tw = g.measureText(title).width;
+      g.font = `900 ${Math.round(ps * 1.05)}px ${this.font}`;
+      const pw2 = g.measureText(prize).width;
+      const pw = tw + pw2 + ps * 2.2;
+      const ph = ps * 1.75;
+      const py = ty - h / 2 - ph / 2 - (p.bag ? size * 1.9 : 6) + Math.sin(now / 300) * 1.5;
+      g.save();
+      g.translate(x, py);
+      g.rotate(Math.sin(now / 700) * 0.03);
+      g.shadowColor = 'rgba(255, 30, 50, 0.55)';
+      g.shadowBlur = 14;
+      const plate = g.createLinearGradient(0, -ph / 2, 0, ph / 2);
+      plate.addColorStop(0, '#ff4a5c');
+      plate.addColorStop(1, '#c4121f');
+      g.fillStyle = plate;
+      g.beginPath();
+      g.roundRect(-pw / 2, -ph / 2, pw, ph, 6);
+      g.fill();
+      g.shadowColor = 'transparent';
+      g.strokeStyle = INK;
+      g.lineWidth = 2;
+      g.stroke();
+      // The bounty in its own gold box at the right end.
+      const bw = pw2 + ps * 0.8;
+      g.fillStyle = '#ffd23f';
+      g.beginPath();
+      g.roundRect(pw / 2 - bw - 3, -ph / 2 + 3, bw, ph - 6, 4);
+      g.fill();
+      g.textAlign = 'center';
+      g.fillStyle = INK;
+      g.font = `900 ${Math.round(ps * 1.05)}px ${this.font}`;
+      g.fillText(prize, pw / 2 - 3 - bw / 2, 1);
+      g.font = `900 ${ps}px ${this.font}`;
+      g.fillStyle = '#ffffff';
+      g.fillText(title, -pw / 2 + ps * 0.6 + tw / 2, 1);
+      g.restore();
+    }
     if (p.wanted) {
       // A little torn poster pinned beside the name: WANTED in red.
       const ps = Math.round(size * 0.95);
@@ -1884,6 +1932,8 @@ export class CityRenderer {
 
     const haunt = this.haunt;
     const hv = haunt ? this.hauntView() : null;
+    const hview = this.hauntView();
+    this.hunts.font = this.font;
     if (haunt && hv) {
       const mine = people.find((p) => p.me);
       haunt.step(hv, now, mine ? { x: mine.x, y: mine.y } : null);
@@ -1896,6 +1946,19 @@ export class CityRenderer {
     if (haunt && hv) haunt.things(hv, now, (y, draw) => things.push({ y, draw }));
     const inView = (x: number, y: number, m: number) =>
       x >= x0 - m && x <= x1 + m && y >= y0 - m && y <= y1 + m;
+    this.hunts.things(
+      hview,
+      now,
+      (x, y) => inView(x, y, 2),
+      (y, draw) => things.push({ y, draw }),
+    );
+    // The Most Wanted's target turns on the ground under them.
+    for (const p of people)
+      if (p.hunted && inView(p.x, p.y, 2))
+        things.push({
+          y: p.y - 0.001,
+          draw: () => this.hunts.ring(g, this.sx(p.x), this.sy(p.y) + t * 0.1, t, now),
+        });
     for (const p of CITY.places) {
       if (!inView(p.x + p.w / 2, p.y + p.h / 2, p.w)) continue;
       const look = this.places[p.id];
@@ -1949,12 +2012,15 @@ export class CityRenderer {
     for (const c of this.sirens)
       if (inView(c.x, c.y, 3)) lit.push({ x: this.sx(c.x), y: this.sy(c.y), r: t * 1.6 });
     if (haunt && hv) lit.push(...haunt.lights(hv, now));
+    lit.push(...this.hunts.lights(hview));
     this.drawNight(x0, y0, x1, y1, now, lit);
     this.drawSirenGlow(now, inView);
     if (haunt && hv) {
       haunt.glow(g, hv, now);
       haunt.sky(g, hv);
     }
+    this.hunts.bloodMoon(g, hview, now);
+    this.hunts.glow(g, hview, now);
 
     for (const p of CITY.places) {
       const look = this.places[p.id];
@@ -1971,6 +2037,15 @@ export class CityRenderer {
     // On a getaway the only door that matters is home, and the arrow shows it.
     if (opts.door && !opts.goal) this.drawDoorHint(opts.door, now);
     if (opts.goal) this.drawGoal(opts.goal, now);
+    // Off screen: the nearest pumpkin, and the Most Wanted if they're a rival.
+    const hunted = people.find((p) => p.hunted && !p.me);
+    this.hunts.marks(
+      g,
+      hview,
+      now,
+      me ? { x: me.x, y: me.y } : null,
+      hunted && me && hunted.gang !== me.gang ? { x: hunted.x, y: hunted.y, bounty: hunted.hunted! } : null,
+    );
   }
 
   /**

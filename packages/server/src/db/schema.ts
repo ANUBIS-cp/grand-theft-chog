@@ -179,6 +179,8 @@ export const heistRuns = pgTable(
     vault: text('vault').notNull(),
     tier: integer('tier').notNull(),
     revenge: boolean('revenge').notNull().default(false),
+    /** Halloween: lights out and a phantom in the vault (decided when the run starts). */
+    haunted: boolean('haunted').notNull().default(false),
     powers: jsonb('powers').$type<string[]>().notNull(),
     guards: jsonb('guards').$type<number[]>().notNull(),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
@@ -277,4 +279,29 @@ export const walletProofs = pgTable('wallet_proofs', {
   /** The self-transfer that proved it, once found. */
   tx: text('tx'),
   doneAt: timestamp('done_at', { withTimezone: true }),
+});
+
+// ---------- the city's live hunts (packages/server/src/hunts.ts) ----------
+
+/** Pumpkin Rush: each pumpkin a Chog reached first, and the cash it carried home for its gang. */
+export const pumpkins = pgTable('pumpkins', {
+  id: text('id').primaryKey(),
+  chogId: integer('chog_id').notNull(),
+  gang: text('gang').$type<GangId>().notNull(),
+  cash: integer('cash').notNull(),
+  gold: boolean('gold').notNull().default(false),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Most Wanted: one per game day, yesterday's best robber, and who claimed the bounty. */
+export const mostWanted = pgTable('most_wanted', {
+  day: integer('day').primaryKey(),
+  /** Null on a day nobody stole enough to be wanted. */
+  chogId: integer('chog_id'),
+  gang: text('gang').$type<GangId>(),
+  /** What they stole the day before, and the bounty on them. */
+  stole: integer('stole').notNull().default(0),
+  bounty: integer('bounty').notNull().default(0),
+  claimedBy: integer('claimed_by'),
+  claimedAt: timestamp('claimed_at', { withTimezone: true }),
 });

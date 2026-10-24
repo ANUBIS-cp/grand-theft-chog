@@ -117,7 +117,7 @@ export function raidHello(ws: WebSocket, msg: Record<string, unknown>, now: numb
       const st = pass.setup;
       const map = st && rushMap(st.map);
       if (!st || !map) return null;
-      const rules = rushRules(st.tier, st.breakout, st.loud === true);
+      const rules = rushRules(st.tier, st.breakout, st.loud === true, undefined, st.haunted === true);
       r = {
         id: pass.run,
         map,

@@ -14,7 +14,13 @@ export const rushMapFor = (gang: GangId) => RUSH_MAPS[GANG_IDS.indexOf(gang) % R
 export const SAFE_CORNERS_FROM = Date.UTC(2026, 9, 17, 21, 50);
 
 /** `startedAt`: when the run began (left out for a run starting now). */
-export function rushRules(tier: number, breakout = false, loud = false, startedAt?: number): RushRules {
+export function rushRules(
+  tier: number,
+  breakout = false,
+  loud = false,
+  startedAt?: number,
+  haunted = false,
+): RushRules {
   const t = Math.max(0, Math.min(3, tier));
   return {
     ...(startedAt !== undefined && startedAt < SAFE_CORNERS_FROM ? { safeEdgesOnly: true } : {}),
@@ -23,6 +29,7 @@ export function rushRules(tier: number, breakout = false, loud = false, startedA
     hunt: [0, 0.15, 0.3, 0.5][t]!,
     needSafe: breakout,
     ...(loud ? { loud: true } : {}),
+    ...(haunted ? { haunted: true } : {}),
   };
 }
 
