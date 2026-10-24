@@ -102,6 +102,8 @@ interface MyChog {
   gangWhy?: Record<string, string[]>;
   jailedUntil: number | null;
   hitToday: GangId[];
+  /** The owner's wallets may rob a vault again the same day (filming). */
+  robAgain?: boolean;
   powers: PowerId[];
   record: { stolen: number; escapes: number; busts: number; catches: number; best: number };
 }
@@ -2264,7 +2266,7 @@ function DoorCard(props: {
   else if (!chog) block = 'You need a Chog to rob vaults.';
   else if (!chog.gang) block = 'Pick a gang first.';
   else if (props.jailedNow) block = 'Your Chog is in jail.';
-  else if (done) block = 'Your Chog already robbed this vault today.';
+  else if (done && !chog.robAgain) block = 'Your Chog already robbed this vault today.';
   return (
     <>
       <div className="flex items-start gap-3 pr-8">
