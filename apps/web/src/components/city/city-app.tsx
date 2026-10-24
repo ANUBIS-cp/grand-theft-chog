@@ -898,11 +898,16 @@ export function CityApp() {
         onGo: jailedNow ? undefined : walk('jail'),
       });
     if (myRow) {
-      const guarded = !!myRow.boughtUntil && myRow.boughtUntil > now;
+      // A vault rich enough for Fortress has nothing left to buy, so that counts as guarded too.
+      const top = myRow.tier >= DEFENCE.length - 1;
+      const guarded = top || (!!myRow.boughtUntil && myRow.boughtUntil > now);
       duties.push({
         key: 'guard',
         label: guarded ? 'Guards on duty' : 'Guard your vault',
-        sub: `Defence: ${DEFENCE[myRow.tier]}`,
+        sub:
+          top && !myRow.boughtUntil
+            ? 'Fortress: your cash keeps it at the top'
+            : `Defence: ${DEFENCE[myRow.tier]}`,
         done: guarded,
         onGo: jailedNow ? undefined : walk(gang),
       });
@@ -981,7 +986,6 @@ export function CityApp() {
     // The city remounts after the heist; put your Chog back at the door it went in by.
     requestAnimationFrame(() => view.current?.appearAt(place));
   };
-
 
   // A robbery or practice runs over the city instead of replacing it, so the city stays connected and
   // drawn: coming out of the vault you're straight back on the street (no reconnect, no reloading).
@@ -1125,13 +1129,8 @@ export function CityApp() {
     return null;
   })();
   // The music follows the scene: the vault (and its lock), the run home, or the city at night.
-  const track: Track = heistScreen || raidView
-    ? 'vault'
-    : myChase || practiceRun
-      ? 'chase'
-      : haunt
-        ? 'halloween'
-        : 'city';
+  const track: Track =
+    heistScreen || raidView ? 'vault' : myChase || practiceRun ? 'chase' : haunt ? 'halloween' : 'city';
   useEffect(() => playMusic(track), [track]);
 
   // Defending or watching a raid: its own screen. Kept below every hook above, so the page runs the same hooks
@@ -1194,7 +1193,10 @@ export function CityApp() {
   );
 
   return (
-    <div className="game-root fixed inset-x-0 top-0 overflow-hidden bg-[#07060d] text-white" data-film={clean ? '' : undefined}>
+    <div
+      className="game-root fixed inset-x-0 top-0 overflow-hidden bg-[#07060d] text-white"
+      data-film={clean ? '' : undefined}
+    >
       {probe && <ViewportProbe />}
       {heistScreen && <div className="fixed inset-0 z-[70]">{heistScreen}</div>}
       {film && me?.admin && !directorOff && (
@@ -2625,7 +2627,17 @@ function ChaseBar(props: { c: Chase; ours: boolean; canChase: boolean; onChase: 
 }
 
 /** Your getaway (or the practice one): where to go, the head start, and the time left in a ring. */
-function RunBar({ line, since, until, go }: { line: string; since: number; until: number; go?: number | null }) {
+function RunBar({
+  line,
+  since,
+  until,
+  go,
+}: {
+  line: string;
+  since: number;
+  until: number;
+  go?: number | null;
+}) {
   const left = Math.max(0, (until - Date.now()) / 1000);
   const total = Math.max(1, (until - since) / 1000);
   const k = left / total;
