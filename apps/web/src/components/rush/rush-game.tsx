@@ -791,7 +791,8 @@ export function RushGame(props: RushGameProps) {
     return () => clearTimeout(t);
   }, [linkDone]);
   const safeState = game.current?.s.safe;
-  const nearSafe = !!map.safe && !!game.current && !safeState?.open && bySafe(map, game.current.s.me, rules.safeEdgesOnly);
+  const nearSafe =
+    !!map.safe && !!game.current && !safeState?.open && bySafe(map, game.current.s.me, rules.safeEdgesOnly);
 
   return (
     <div className="flex h-full flex-col bg-[#0b0918] text-white">
@@ -1367,8 +1368,8 @@ function ViewerEnd(props: {
           {props.gone
             ? 'The raid ended.'
             : escaped
-            ? `${viewer.robber} got out${viewer.result?.moved ? ` with ${money(viewer.result.moved)}` : ''}.`
-            : `${viewer.robber} is off to jail${viewer.result?.moved ? ` and their gang paid ${money(viewer.result.moved)}` : ''}.`}
+              ? `${viewer.robber} got out${viewer.result?.moved ? ` with ${money(viewer.result.moved)}` : ''}.`
+              : `${viewer.robber} is off to jail${viewer.result?.moved ? ` and their gang paid ${money(viewer.result.moved)}` : ''}.`}
         </p>
         <button onClick={props.onLeave} className="btn press btn-primary mt-5 w-full">
           <span className="pt-1">Back to the city</span>
@@ -1477,7 +1478,20 @@ function EndCard(props: {
                 <span>Cleaned out</span>
                 <span className="font-mono">+25%</span>
               </li>
+              {(real?.result?.moved ?? hud.score) < hud.score && (
+                <li className="flex justify-between text-sys-orange">
+                  <span>Vault limit</span>
+                  <span className="font-mono tabular-nums">
+                    −{money(hud.score - (real?.result?.moved ?? 0))}
+                  </span>
+                </li>
+              )}
             </ul>
+            {(real?.result?.moved ?? hud.score) < hud.score && (
+              <p className="mx-auto mt-2 max-w-[260px] text-[12px] leading-snug text-label-2">
+                One robbery takes at most a fifth of a vault. Richer vaults pay more.
+              </p>
+            )}
           </>
         ) : escaped && rescue ? (
           <p className="mt-4 text-[15px]">

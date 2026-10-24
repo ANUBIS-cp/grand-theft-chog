@@ -6,7 +6,10 @@ import {
   REVENGE_MS,
   RUN_MAX_MS,
   START_CASH,
+  HOUR_MS,
   buildLevel,
+  takeCap,
+  tickVault,
   decodeInputs,
   maxTicks,
   powersFor,
@@ -32,7 +35,7 @@ import {
   settleRush,
   type DefenderLog,
 } from '@chog-city/game/rush';
-import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { chogBurns, gangVaults, heistChogs, heistRuns, type Db } from './db/index.ts';
 import { eventBonus } from './events.ts';
@@ -99,6 +102,34 @@ export async function ensureVaults(db: Db): Promise<void> {
 export async function vaultCash(db: Db): Promise<Record<GangId, number>> {
   const v = await vaults(db);
   return Object.fromEntries(GANG_IDS.map((g) => [g, v[g].cash])) as Record<GangId, number>;
+}
+
+/**
+ * Runs each vault's upkeep and refill for every whole hour since it was last ticked (the worker calls this every
+ * minute). A vault that was never ticked starts counting now. Returns how many vaults changed.
+ */
+export async function tickVaults(db: Db, now: number): Promise<number> {
+  const hour = new Date(Math.floor(now / HOUR_MS) * HOUR_MS);
+  await ensureVaults(db);
+  return db.transaction(async (tx) => {
+    const due = await tx
+      .select()
+      .from(gangVaults)
+      .where(or(isNull(gangVaults.tickedAt), lt(gangVaults.tickedAt, hour)))
+      .orderBy(gangVaults.gang)
+      .for('update');
+    let changed = 0;
+    for (const v of due) {
+      const hours = v.tickedAt ? Math.floor((hour.getTime() - v.tickedAt.getTime()) / HOUR_MS) : 0;
+      const cash = tickVault(v.cash, hours);
+      if (cash !== v.cash) changed++;
+      await tx
+        .update(gangVaults)
+        .set(cash !== v.cash ? { cash, tickedAt: hour, updatedAt: new Date(now) } : { tickedAt: hour })
+        .where(eq(gangVaults.gang, v.gang));
+    }
+    return changed;
+  });
 }
 
 export interface VaultState {
@@ -439,9 +470,17 @@ export async function finishRun(
       escaped && !breakout
         ? await eventBonus(tx as unknown as Db, run.chogId, run.gang, run.startedAt.getTime())
         : 0;
-    const moved = bonus
+    const haul = bonus
       ? Math.min(vaultHas, Math.floor((replayed.moved * (100 + bonus)) / 100))
       : replayed.moved;
+    // One robbery takes a share of the vault at most (an event's bonus raises it too), so a near-empty gang isn't
+    // worth farming. Caught, you pay back what you could have taken, plus the fine, never more.
+    const cap = Math.floor((takeCap(vaultHas, run.revenge) * (100 + bonus)) / 100);
+    const moved = breakout
+      ? haul
+      : escaped
+        ? Math.min(haul, cap)
+        : Math.min(robberHas, Math.min(state.carried, cap) + BUST_FINE);
     // Out with cash: the bag leaves the vault now (it can't be spent twice) and reaches your gang's vault
     // only when you carry it home.
     const bagged = escaped && !breakout && moved > 0;

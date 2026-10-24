@@ -28,7 +28,7 @@ Replaces the tile-by-tile stealth heist (feedback 9 Oct: "the whole idea isn't f
 - **Movement.** You move freely, like walking in the city, with no tiles: 5.2 tiles/s. Walls slide you round corners, and a turn pressed just before an opening is kept for 0.15 s.
 - **Cash.** Coins line every corridor ($10 each) and stacks sit in the rooms ($60).
 - **Combos.** Each pickup within 0.7 s of the last raises the combo (×1, ×2, ×3, up to ×5), and a pickup is worth its value × the combo. Combos make you take the long way through a full corridor.
-- **The safe** is a mini-game. Stand at it and press Use, and a dial spins. Press when the needle is in the green, 3 times; each hit narrows the green. A miss makes a noise: every guard switches to chase for 4 s. Payout by defence level: $600 / $1,000 / $1,800 / $3,000 (`SAFE_BY_TIER`). The lockpick power gives a wider green.
+- **The safe** is a mini-game. Stand at it and press Use, and a dial spins. Press when the needle is in the green, twice; the second green is narrower. A miss makes a noise: every guard switches to chase for 4 s. Payout by defence level: $600 / $1,000 / $1,800 / $3,000 (`SAFE_BY_TIER`). The lockpick power gives a wider green.
 - **Laser gates** on timers cross some corridors, another reflex mini-game. Crossing an active beam sounds the alarm: guards chase at full speed for 8 s.
 - **Guards** (3 or 4, more in richer vaults) are the gang's own Chogs:
   - *Bruiser* heads straight for you.
@@ -40,7 +40,15 @@ Replaces the tile-by-tile stealth heist (feedback 9 Oct: "the whole idea isn't f
 - **Getting out.** Touch the exit at any time with at least $1. If a guard touches you, you're busted: your gang pays what you carried + $250, and you get 30 min in jail.
 - **The clock.** When the timer hits 0 the doors lock: you have 5 s at the exit, then you're busted.
 - **Bonuses.** Clean-out +25% for 80% of the cash and the safe. Revenge +25%.
-- **Caps and limits.** Each Chog can hit each rival vault once a day (unchanged). The cash moved is capped by what's in the vault.
+- **Caps and limits.** Each Chog can hit each rival vault once a day (unchanged). One robbery takes at most 20% of the vault's cash (25% on revenge; an event bonus raises the cap by the same share). Caught, the robber's gang pays back at most that much, plus the $250 fine (`takeCap`).
+
+## The vault economy
+
+Cash only moves between gangs, so without these a busy robber stacks for ever and the gangs nobody plays sit empty. The worker ticks every vault once an hour (`tickVaults`, `gang_vaults.ticked_at`):
+
+- **Guard upkeep.** A vault at $25,000 or more (Fortress on its cash alone) pays its guards every hour. The money is gone, not given to anyone. The day's share is 10% at $25,000 and grows with the stash (20% at $50,000), up to 50%; it stops once the vault drops under $25,000. A gang taking $20k a day settles under about $75k.
+- **Refill.** A vault under $5,000 gets $100 an hour back, up to $5,000, so no gang is ever left with nothing to defend or steal.
+- The game shows both under a vault's cash, and the robbery screen shows the most a robbery can take.
 
 ## Live raid (multiplayer)
 

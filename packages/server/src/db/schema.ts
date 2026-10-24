@@ -143,6 +143,8 @@ export const gangVaults = pgTable('gang_vaults', {
   guardLevel: integer('guard_level').notNull().default(0),
   guardUntil: timestamp('guard_until', { withTimezone: true }),
   guardBy: integer('guard_by'),
+  /** The last hour boundary upkeep and refill were run up to. */
+  tickedAt: timestamp('ticked_at', { withTimezone: true }),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

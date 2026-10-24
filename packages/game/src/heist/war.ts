@@ -1,5 +1,5 @@
 import { GANG_IDS, type GangId } from '@chog-city/data';
-import { TPS, buildLevel, tierFor, type Dir, type Level, type VaultDef } from './level.ts';
+import { TIER_CASH, TPS, buildLevel, tierFor, type Dir, type Level, type VaultDef } from './level.ts';
 import { ALARM, replay, type HeistState, type Input } from './sim.ts';
 import type { PowerId } from './powers.ts';
 import { VAULTS } from './vaults.ts';
@@ -27,6 +27,43 @@ export function vaultFor(gang: GangId): VaultDef {
 /** What it costs, out of the gang's own vault, to raise its defence to each level for a day. */
 export const GUARD_PRICE = [0, 800, 2000, 4000] as const;
 export const GUARD_MS = 24 * 3_600_000;
+
+// The vault economy, so no gang stacks cash for ever and no vault sits empty:
+// one robbery takes a share of the vault at most, a vault at Fortress pays its guards every hour (the money is
+// gone), and a near-empty vault slowly refills.
+
+/** The most one robbery can take, as a share of the vault: more on a revenge hit. */
+export const TAKE_PERCENT = 20;
+export const REVENGE_TAKE_PERCENT = 25;
+export const takeCap = (vaultCash: number, revenge: boolean): number =>
+  Math.floor((Math.max(0, vaultCash) * (revenge ? REVENGE_TAKE_PERCENT : TAKE_PERCENT)) / 100);
+
+export const HOUR_MS = 3_600_000;
+/** Upkeep starts where cash alone buys Fortress. */
+export const UPKEEP_FROM = TIER_CASH[3];
+/** Share of the vault paid per day at UPKEEP_FROM; it grows with the stash (20% at twice that), up to the max. */
+export const UPKEEP_PERCENT = 10;
+export const UPKEEP_MAX_PERCENT = 50;
+export const REFILL_TO = 5_000;
+export const REFILL_PER_HOUR = 100;
+
+/** The day's share a vault at Fortress pays its guards, in percent. */
+export function upkeepPercent(cash: number): number {
+  if (cash < UPKEEP_FROM) return 0;
+  return Math.min(UPKEEP_MAX_PERCENT, (UPKEEP_PERCENT * cash) / UPKEEP_FROM);
+}
+
+/** What a vault this size pays for one hour of upkeep. */
+export const upkeepPerHour = (cash: number): number => Math.floor((cash * upkeepPercent(cash)) / 100 / 24);
+
+/** A vault after `hours` whole hours of upkeep and refill. */
+export function tickVault(cash: number, hours: number): number {
+  for (let i = 0; i < Math.min(hours, 24 * 60); i++) {
+    if (cash < REFILL_TO) cash = Math.min(REFILL_TO, cash + REFILL_PER_HOUR);
+    else cash -= upkeepPerHour(cash);
+  }
+  return cash;
+}
 
 /** A vault's defence right now: what its cash buys on its own, or what its members paid for, if higher. */
 export function tierNow(cash: number, bought: { level: number; until: number | null }, now: number): number {

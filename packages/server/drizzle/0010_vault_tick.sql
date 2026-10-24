@@ -1,0 +1,1 @@
+ALTER TABLE "gang_vaults" ADD COLUMN "ticked_at" timestamp with time zone;

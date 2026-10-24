@@ -1,5 +1,5 @@
 // Grand Theft Chog worker: keeps owners in sync with the chain and opens each game day on time.
-import { ensureDay, expireGetaways, monad, seedStates } from '@chog-city/server';
+import { ensureDay, expireGetaways, monad, seedStates, tickVaults } from '@chog-city/server';
 import { connect } from '@chog-city/server/db';
 import { dayOf } from '@chog-city/game';
 import { createPublicClient, http } from 'viem';
@@ -49,6 +49,11 @@ async function main() {
     every(30_000, 'getaways', async () => {
       const n = await expireGetaways(db, Date.now());
       if (n) log('banked unreported getaways', { n });
+    }),
+    // Vault upkeep and refill, once an hour (checked every minute so a restart doesn't skip an hour).
+    every(60_000, 'vaults', async () => {
+      const n = await tickVaults(db, Date.now());
+      if (n) log('vault upkeep and refill', { n });
     }),
   ]);
 }

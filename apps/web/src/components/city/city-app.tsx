@@ -3,7 +3,18 @@ import { GANGS, GANG_IDS, metadataIdFor, type GangId } from '@chog-city/data';
 import { CITY, EMOTES, HEAD_START, getawayTime, placeOf, type Emote, type Place } from '@chog-city/game/city';
 import { encodeLock, lockFor, type LockKind } from '@chog-city/game/lock';
 import { RUSH_BANK, rushRules, rushSeed } from '@chog-city/game/rush';
-import { BUST_FINE, GUARD_PRICE, POWERS, SAFE_BY_TIER, type PowerId } from '@chog-city/game/heist';
+import {
+  BUST_FINE,
+  GUARD_PRICE,
+  POWERS,
+  REFILL_PER_HOUR,
+  REFILL_TO,
+  SAFE_BY_TIER,
+  UPKEEP_FROM,
+  takeCap,
+  upkeepPerHour,
+  type PowerId,
+} from '@chog-city/game/heist';
 import {
   ArrowBendUpLeft,
   ArrowSquareOut,
@@ -2279,6 +2290,7 @@ function DoorCard(props: {
           <div className="font-display text-[25px] leading-none text-[#ffd666] tabular-nums">
             {money(row?.cash ?? 0)}
           </div>
+          <VaultFlow cash={row?.cash ?? 0} />
         </div>
         <div className="text-right">
           <div className="section-label">Guards</div>
@@ -2306,8 +2318,15 @@ function DoorCard(props: {
               </li>
             ))}
           </ol>
-          <p className="mt-1.5 text-[12px] text-white/60">
-            Caught: the cash goes back, your gang pays {money(BUST_FINE)}, and 30 min in jail.
+          <div className="mt-2 flex items-center justify-between gap-3 rounded-[12px] bg-white/[0.06] px-3 py-2">
+            <span className="text-[13px] text-white/70">Most you can take</span>
+            <span className="font-display text-[15px] leading-none text-[#ffd666] tabular-nums">
+              {money(takeCap(row?.cash ?? 0, props.revenge))}
+            </span>
+          </div>
+          <p className="mt-1.5 text-[12px] leading-snug text-white/60">
+            A robbery takes up to {props.revenge ? 'a quarter' : 'a fifth'} of the vault. Caught: it goes
+            back, your gang pays {money(BUST_FINE)} more, and 30 min in jail.
           </p>
         </>
       )}
@@ -2427,8 +2446,51 @@ function Defend(props: {
       <p className="mt-1.5 text-[12px] leading-snug text-white/55">
         Paid from your vault. More guards, cameras and lasers for anyone who tries to rob it.
       </p>
+      {row.cash >= UPKEEP_FROM ? (
+        <div className="mt-3 border-t border-white/[0.08] pt-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="section-label">Guard upkeep</div>
+            <div className="text-[13px] font-semibold text-sys-red tabular-nums">
+              −{money(upkeepPerHour(row.cash))} an hour
+            </div>
+          </div>
+          <p className="mt-1 text-[12px] leading-snug text-white/55">
+            A vault over {money(UPKEEP_FROM)} pays its guards every hour: 10% a day at {money(UPKEEP_FROM)},
+            more as it grows. Below that, it stops.
+          </p>
+        </div>
+      ) : row.cash < REFILL_TO ? (
+        <div className="mt-3 border-t border-white/[0.08] pt-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="section-label">Refilling</div>
+            <div className="text-[13px] font-semibold text-sys-green tabular-nums">
+              +{money(REFILL_PER_HOUR)} an hour
+            </div>
+          </div>
+          <p className="mt-1 text-[12px] leading-snug text-white/55">
+            A vault under {money(REFILL_TO)} slowly refills back up to it.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+/** The hourly change under a vault's cash: guard upkeep at the top, a refill near the bottom. */
+function VaultFlow({ cash }: { cash: number }) {
+  if (cash >= UPKEEP_FROM)
+    return (
+      <div className="mt-1 text-[12px] font-semibold text-sys-red/90 tabular-nums">
+        −{money(upkeepPerHour(cash))}/hr upkeep
+      </div>
+    );
+  if (cash < REFILL_TO)
+    return (
+      <div className="mt-1 text-[12px] font-semibold text-sys-green/90 tabular-nums">
+        +{money(REFILL_PER_HOUR)}/hr refill
+      </div>
+    );
+  return null;
 }
 
 /** Fly your gang's banner over its building for a day ($CHOG). */

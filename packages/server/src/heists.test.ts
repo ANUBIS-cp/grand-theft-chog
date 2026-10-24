@@ -1,6 +1,7 @@
 import { CHOGS, gangOptions } from '@chog-city/data';
 import { HOUR, dayStart } from '@chog-city/game';
-import { BUST_FINE, START_CASH } from '@chog-city/game/heist';
+import { BUST_FINE, HOUR_MS, REFILL_PER_HOUR, START_CASH, takeCap } from '@chog-city/game/heist';
+import { eq } from 'drizzle-orm';
 import { encodeLock, perfectLock } from '@chog-city/game/lock';
 import { encodeRushInputs, rushSeed, type RushInput } from '@chog-city/game/rush';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -20,13 +21,14 @@ import {
   runForReplay,
   setGang,
   startRun,
+  tickVaults,
   vaultCash,
   warBoard,
   HeistRefused,
 } from './heists.ts';
 import { setOwners } from './ownership.ts';
 import { testDb } from './test-db.ts';
-import type { Db } from './db/index.ts';
+import { gangVaults, type Db } from './db/index.ts';
 
 const A = '0x00000000000000000000000000000000000000aa';
 const B = '0x00000000000000000000000000000000000000bb';
@@ -118,8 +120,15 @@ describe('the gang war', () => {
     ).toBe('done-today');
     // ...except the owner's wallets, filming (again: true): the same vault the same day.
     expect(
-      (await startRun(db, { address: A, chogId: lazoorChog, target: 'mcga', now: NOW + 120_000, again: true }))
-        .target,
+      (
+        await startRun(db, {
+          address: A,
+          chogId: lazoorChog,
+          target: 'mcga',
+          now: NOW + 120_000,
+          again: true,
+        })
+      ).target,
     ).toBe('mcga');
     // The robbed gang can hit back for a bonus.
     expect(await revengeTargets(db, 'mcga', NOW + 120_000)).toEqual(['lazoor']);
@@ -182,6 +191,33 @@ describe('the gang war', () => {
     expect(
       await refused(startRun(db, { address: A, chogId: lazoorChog, target: 'robbers', now: NOW + 70_000 })),
     ).toBe('jailed');
+  });
+
+  it('a robbery on a near-empty vault takes a fifth of it at most', async () => {
+    await vaultCash(db);
+    await db.update(gangVaults).set({ cash: 1_000 }).where(eq(gangVaults.gang, 'mcga'));
+    const run = await startRun(db, { address: A, chogId: lazoorChog, target: 'mcga', now: NOW });
+    await breakIn(A, run);
+    const out = await finishRun(db, { address: A, runId: run.id, inputs: grabAndGo, now: NOW + 60_000 });
+    expect(out.result).toBe('escaped');
+    expect(out.moved).toBe(Math.min(out.score, takeCap(1_000, false)));
+    expect(out.moved).toBeLessThanOrEqual(200);
+  });
+
+  it('vaults tick once an hour: refill under $5k, upkeep at Fortress, from the first tick on', async () => {
+    await vaultCash(db);
+    await db.update(gangVaults).set({ cash: 1_000 }).where(eq(gangVaults.gang, 'mcga'));
+    await db.update(gangVaults).set({ cash: 60_000 }).where(eq(gangVaults.gang, 'lazoor'));
+    // The first tick only starts the clock: nothing is charged for the time before it.
+    await tickVaults(db, NOW);
+    expect(await vaultCash(db)).toMatchObject({ mcga: 1_000, lazoor: 60_000, robbers: START_CASH });
+    await tickVaults(db, NOW + 3 * HOUR_MS);
+    await tickVaults(db, NOW + 3 * HOUR_MS + 10_000);
+    const cash = await vaultCash(db);
+    expect(cash.mcga).toBe(1_000 + 3 * REFILL_PER_HOUR);
+    expect(cash.lazoor).toBeLessThan(60_000);
+    expect(cash.lazoor).toBeGreaterThan(58_000);
+    expect(cash.robbers).toBe(START_CASH);
   });
 
   it('lists every gang vault, richest first, with guards from the gang', async () => {
