@@ -877,13 +877,18 @@ export function CityApp() {
       done: hit.length > 0,
       onGo: next && !jailedNow ? walk(next.gang) : undefined,
     });
-    for (const g of revenge.filter((r) => !hit.includes(r)).slice(0, 2))
+    // Revenge you've already taken stays on the list, ticked, after the ones still to do.
+    const owed = revenge.filter((r) => !hit.includes(r));
+    for (const g of [...owed, ...revenge.filter((r) => hit.includes(r))].slice(0, 2)) {
+      const done = hit.includes(g);
       duties.push({
         key: `rev${g}`,
-        label: `Hit back at ${GANGS[g].name}`,
-        sub: 'They robbed you: revenge pays 25% more',
-        onGo: jailedNow ? undefined : walk(g),
+        label: done ? `Got revenge on ${GANGS[g].name}` : `Hit back at ${GANGS[g].name}`,
+        sub: done ? undefined : 'They robbed you: revenge pays 25% more',
+        done,
+        onGo: done || jailedNow ? undefined : walk(g),
       });
+    }
     const mates = (city?.jailed ?? []).filter((j) => j.gang === gang && j.id !== chog.id && j.until > now);
     if (mates.length)
       duties.push({
