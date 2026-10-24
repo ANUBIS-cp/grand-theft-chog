@@ -358,7 +358,9 @@ export class CityHunts {
     const px = v.sx(at.x);
     const py = v.sy(at.y);
     const m = 34;
-    if (px >= m && py >= m && px <= W - m && py <= H - m) return;
+    // Anywhere on screen (even half in at an edge) it's seen already: no marker over it.
+    const t = v.t;
+    if (px >= -t * 0.6 && px <= W + t * 0.6 && py >= -t * 0.3 && py <= H + t * 1.6) return;
     const cx = W / 2;
     const cy = H / 2;
     const ang = Math.atan2(py - cy, px - cx);

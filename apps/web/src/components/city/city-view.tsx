@@ -11,6 +11,8 @@ import {
   inPen,
   newWalker,
   placeOf,
+  PUMPKIN_GRAB,
+  pumpkinSpots,
   rng,
   route,
   seeded,
@@ -41,6 +43,7 @@ import {
   type ChaseEnd,
   type ChatMsg,
   type LiveStatus,
+  type Pumpkin,
   type PumpkinGot,
   type Wanted,
   type WantedGot,
@@ -105,8 +108,10 @@ interface Props {
   haunt?: number[] | null;
   /** The Blood Moon is up: the city goes red. */
   moon?: boolean;
-  /** Someone reached a pumpkin first. */
-  onPumpkin?: (e: PumpkinGot) => void;
+  /** Someone reached a pumpkin first; `practice` for the preview's own pumpkins. */
+  onPumpkin?: (e: PumpkinGot, practice?: boolean) => void;
+  /** The Halloween preview: practice pumpkins round you, only in this browser. */
+  practicePumpkins?: boolean;
   /** Today's Most Wanted changed, or a rival claimed the bounty. */
   onWanted?: (w: Wanted | null, got?: WantedGot) => void;
   /** Covered by a robbery: keep moving and connected, but don't draw. */
@@ -149,14 +154,23 @@ const GUEST = { bg: '#8d89a6', fg: '#111111' };
 const POLICE = { bg: '#2b59ff', fg: '#ffffff' };
 const color = (gang: GangId | null) => (gang ? GANG_COLOR[gang] : GUEST);
 
-
 // Where you were, kept for this tab while you look at another page (a Chog's record) and come back: the city
 // picks up there instead of at the plaza. Kept 15 minutes; a spot you can't stand on is ignored.
 const POS_KEY = 'cw-pos';
 function savedSpot(): { x: number; y: number } {
   try {
-    const p = JSON.parse(sessionStorage.getItem(POS_KEY) ?? 'null') as { x: number; y: number; at: number } | null;
-    if (p && Date.now() - p.at < 15 * 60_000 && Number.isFinite(p.x) && Number.isFinite(p.y) && standable(p.x, p.y))
+    const p = JSON.parse(sessionStorage.getItem(POS_KEY) ?? 'null') as {
+      x: number;
+      y: number;
+      at: number;
+    } | null;
+    if (
+      p &&
+      Date.now() - p.at < 15 * 60_000 &&
+      Number.isFinite(p.x) &&
+      Number.isFinite(p.y) &&
+      standable(p.x, p.y)
+    )
       return { x: p.x, y: p.y };
   } catch {
     /* no storage */
@@ -216,6 +230,9 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     patrol: [] as PatrolCar[],
     r: null as CityRenderer | null,
     net: null as LiveCity | null,
+    /** The Halloween preview's practice pumpkins (only in this browser; nothing is paid). */
+    pk: [] as Pumpkin[],
+    pkNext: 0,
     /** Everyone drawn last frame, for taps. */
     drawn: [] as (Person & { tap?: Tapped })[],
     /** Someone you're running after (a robber with your gang's cash), and when you last steered at them. */
@@ -338,8 +355,6 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       wanted: (w, got) => live.current.onWanted?.(w, got),
     });
     s.net = net;
-    // Local testing only: the city's state, to walk somewhere and look.
-    if (location.hostname === 'localhost') (window as unknown as { __city: unknown }).__city = s;
     const t = setInterval(() => live.current.onLive(net.status, net.online), 2000);
     return () => {
       clearInterval(t);
@@ -597,7 +612,46 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         for (const x of people) if (x.chog !== null && !x.cop && wanted.has(x.chog)) x.wanted = true;
       }
       // The live hunts: pumpkins on the street, and today's Most Wanted with the bounty on their head.
-      r.hunts.pumpkins = s.net?.pumpkins ?? [];
+      // The Halloween preview: three practice pumpkins somewhere near you, a new one a moment after you take one.
+      if (p.practicePumpkins) {
+        const at = Date.now();
+        s.pk = s.pk.filter((k) => k.until > at);
+        for (const k of s.pk)
+          if (Math.hypot(k.x - s.x, k.y - s.y) < PUMPKIN_GRAB) {
+            s.pk = s.pk.filter((x) => x !== k);
+            s.pkNext = at + 1500;
+            const got = {
+              ...k,
+              chog: p.me.chog ?? 0,
+              name: p.me.name,
+              gang: (p.me.gang ?? 'mcga') as GangId,
+            };
+            r.hunts.grabbed(got, now);
+            live.current.onPumpkin?.(got, true);
+          }
+        if (s.pk.length < 3 && at >= s.pkNext) {
+          const near = pumpkinSpots().filter((q) => {
+            const d = Math.hypot(q.x - s.x, q.y - s.y);
+            return d > 4 && d < 12 && s.pk.every((k) => Math.hypot(k.x - q.x, k.y - q.y) > 5);
+          });
+          const q = near[Math.floor(Math.random() * near.length)];
+          if (q) {
+            const gold = Math.random() < 0.15;
+            s.pk.push({
+              id: `practice${at.toString(36)}`,
+              x: q.x,
+              y: q.y,
+              gold,
+              cash: gold ? 1500 : 300 + Math.floor(Math.random() * 5) * 50,
+              until: at + 120_000,
+            });
+          }
+          s.pkNext = at + 400;
+        }
+      } else s.pk = [];
+      // Local testing only: the city's state, to walk somewhere and look.
+      if (location.hostname === 'localhost') (window as unknown as { __city: unknown }).__city = s;
+      r.hunts.pumpkins = s.pk.length ? [...(s.net?.pumpkins ?? []), ...s.pk] : (s.net?.pumpkins ?? []);
       r.hunts.moon = !!p.moon;
       const most = s.net?.wanted;
       if (most && !most.claimed)

@@ -1,5 +1,5 @@
 import { bloodMoon, isHalloweenWeek } from '@chog-city/game';
-import { CITY, Ground, groundAt, placeOf, standable } from '@chog-city/game/city';
+import { PUMPKIN_GRAB, placeOf, pumpkinSpots } from '@chog-city/game/city';
 import { signInternal } from '@chog-city/server/ticket';
 import { runningFor } from './getaway.ts';
 
@@ -16,7 +16,6 @@ import { runningFor } from './getaway.ts';
 const WEB = process.env.WEB_INTERNAL_URL ?? 'http://127.0.0.1:3000';
 /** PUMPKINS=always: pumpkins all the time, for local testing (never set on the real server). */
 const ALWAYS = process.env.PUMPKINS === 'always';
-const GRAB = 0.9;
 const TAG = 0.8;
 /** Most Wanted: safe this close to their own gang's door, and for this long after walking into the city. */
 const HOME_SAFE = 4;
@@ -44,25 +43,6 @@ export interface Pumpkin {
 
 const pumpkins = new Map<string, Pumpkin>();
 let nextPumpkin = 0;
-let spots: { x: number; y: number }[] | null = null;
-const STREET = new Set<Ground>([Ground.Road, Ground.Walk, Ground.Cross, Ground.Plaza, Ground.Grass]);
-
-/** Street tiles a pumpkin can sit on: open, away from doors (no camping a door for them). */
-function streetSpots() {
-  if (spots) return spots;
-  const doors = CITY.places.map((p) => p.door);
-  spots = [];
-  for (let y = 1; y < CITY.h - 1; y++)
-    for (let x = 1; x < CITY.w - 1; x++) {
-      const px = x + 0.5;
-      const py = y + 0.5;
-      if (!STREET.has(groundAt(x, y)) || !standable(px, py)) continue;
-      if (doors.some((d) => Math.hypot(d.x - px, d.y - py) < 3)) continue;
-      spots.push({ x: px, y: py });
-    }
-  return spots;
-}
-
 export const pumpkinsNow = () => [...pumpkins.values()];
 
 async function post(path: string, body: string): Promise<Response | null> {
@@ -100,7 +80,7 @@ export function stepPumpkins(
       changed = true;
     }
   if (on && now >= nextPumpkin && pumpkins.size < (moon ? 5 : 1)) {
-    const all = streetSpots();
+    const all = pumpkinSpots();
     // Somewhere new: not on top of another pumpkin.
     for (let k = 0; k < 12; k++) {
       const s = all[Math.floor(rand() * all.length)]!;
@@ -123,7 +103,7 @@ export function stepPumpkins(
   for (const p of pumpkins.values())
     for (const h of hunters) {
       if (h.chog === null || h.gang === null || jailedNow(h, now)) continue;
-      if (Math.hypot(h.x - p.x, h.y - p.y) > GRAB) continue;
+      if (Math.hypot(h.x - p.x, h.y - p.y) > PUMPKIN_GRAB) continue;
       pumpkins.delete(p.id);
       changed = true;
       broadcast({

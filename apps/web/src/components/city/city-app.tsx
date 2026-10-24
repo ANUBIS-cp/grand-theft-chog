@@ -1,6 +1,6 @@
 'use client';
 import { GANGS, GANG_IDS, metadataIdFor, type GangId } from '@chog-city/data';
-import { BLOOD_MOON_BONUS, dayOf, hauntedVault, isHalloweenWeek } from '@chog-city/game';
+import { dayOf, hauntedVault, isHalloweenWeek } from '@chog-city/game';
 import { CITY, EMOTES, HEAD_START, getawayTime, placeOf, type Emote, type Place } from '@chog-city/game/city';
 import { encodeLock, lockFor, type LockKind } from '@chog-city/game/lock';
 import { RUSH_BANK, rushRules, rushSeed } from '@chog-city/game/rush';
@@ -68,7 +68,7 @@ import {
   RoundButton,
 } from './hud';
 import type { Chase, ChaseEnd, ChatMsg, LiveStatus, PumpkinGot, Wanted, WantedGot } from './live-city';
-import { MoonPill } from './moon-pill';
+import { MoonCard, MoonPill } from './moon-pill';
 import { useNoPageScroll } from '@/lib/no-page-scroll';
 import { ViewportProbe } from './viewport-probe';
 
@@ -227,6 +227,9 @@ export function CityApp() {
   // Today's Most Wanted (from the live city), and pumpkins you've grabbed today (this browser).
   const [mostWanted, setMostWanted] = useState<Wanted | null>(null);
   const [pumpkinsToday, setPumpkinsToday] = useState(0);
+  // The owner's Blood Moon preview (when it started), and the Blood Moon card.
+  const [moonPreview, setMoonPreview] = useState(0);
+  const [moonCard, setMoonCard] = useState(false);
   // Walking as your Chog from its wallet address alone (read from Monad, nothing signed): practice only until
   // the wallet is proved. Remembered in this browser.
   const [pass, setPassState] = useState<Pass | null>(null);
@@ -353,7 +356,7 @@ export function CityApp() {
       gang,
       seed: Math.floor(Math.random() * 1e9),
       loud: false,
-      haunted: !!haunt && (practiced || hauntedVault(gang, Date.now())),
+      haunted: !!moonPreview || (!!haunt && (practiced || hauntedVault(gang, Date.now()))),
     });
   };
   startPracticeRef.current = startPractice;
@@ -572,7 +575,7 @@ export function CityApp() {
   }, [board]);
   useEffect(() => {
     if (!banner) return;
-    const t = setTimeout(() => setBanner(null), 5000);
+    const t = setTimeout(() => setBanner(null), banner.long ? 9000 : 5000);
     return () => clearTimeout(t);
   }, [banner]);
   // An event on now (the election, Halloween): its banner once a day, a moment after you arrive.
@@ -653,22 +656,39 @@ export function CityApp() {
     } catch {
       /* not in a browser */
     }
-    const on = preview || hauntDemo || !!city?.events?.some((e) => e.key.startsWith('halloween'));
+    const on =
+      preview || hauntDemo || !!moonPreview || !!city?.events?.some((e) => e.key.startsWith('halloween'));
     if (!on) return null;
     const ids = (board?.board ?? [])
       .filter((v) => v.gang === 'skulls' || v.gang === 'radioactive')
       .flatMap((v) => v.guards);
     return ids.length ? ids : null;
-  }, [city?.events, board, hauntDemo]);
+  }, [city?.events, board, hauntDemo, moonPreview]);
   // The Blood Moon: the one up now or the next, from the server. ?bloodmoon=1 shows one on a local copy.
-  const [moonPreview, setMoonPreview] = useState(0);
+  // The owner's preview of the Blood Moon (testing before the week): only in this browser, nothing real is paid.
+  // On a local copy ?bloodmoon=1 starts one too.
   useEffect(() => {
     if (location.hostname === 'localhost' && new URLSearchParams(location.search).get('bloodmoon') === '1')
-      setMoonPreview(Date.now());
+      setMoonPreview(Date.now() - 1000);
   }, []);
+  const startPreview = () => {
+    // Starts at once: the page's clock only ticks each second, so bring it up to now as well.
+    const at = Date.now();
+    setMoonPreview(at - 1000);
+    setNow(at);
+    setMoonCard(false);
+    setBanner({
+      id: `preview${Date.now()}`,
+      title: 'Blood Moon preview',
+      line: 'Only you see this. Chase the pumpkins round you (practice, nothing is paid) and try the practice vault: it’s haunted.',
+      tone: 'alarm',
+      long: true,
+    });
+  };
   const moon = moonPreview ? { from: moonPreview, to: moonPreview + 3_600_000 } : (city?.moon ?? null);
   const moonUp = !!moon && now >= moon.from && now < moon.to;
   const pumpkinTime = moonUp || isHalloweenWeek(now);
+  const previewing = !!moonPreview && moonUp;
   // Pumpkins you've grabbed today, kept in this browser for the task list.
   const pumpkinKey = `cw-pk-${dayOf(now)}`;
   useEffect(() => {
@@ -678,7 +698,18 @@ export function CityApp() {
       /* no storage */
     }
   }, [pumpkinKey]);
-  const pumpkinGot = (e: PumpkinGot) => {
+  const pumpkinGot = (e: PumpkinGot, practice?: boolean) => {
+    if (practice) {
+      siren.current ??= new Sound();
+      siren.current.cash();
+      setBanner({
+        id: `pk${e.id}`,
+        title: e.gold ? 'Gold pumpkin!' : 'Pumpkin!',
+        line: `Practice: ${money(e.cash)}. In the real Blood Moon it goes to your gang's vault.`,
+        tone: 'win',
+      });
+      return;
+    }
     if (chog && e.chog === chog.id) {
       siren.current ??= new Sound();
       siren.current.cash();
@@ -716,6 +747,7 @@ export function CityApp() {
         title: 'Caught!',
         line: `${got.byName} of ${GANGS[got.byGang].name} claimed the ${money(got.bounty)} bounty on you. 30 minutes in jail.`,
         chog: got.by,
+        long: true,
         tone: 'lose',
       });
       void loadMe();
@@ -753,6 +785,7 @@ export function CityApp() {
       title: 'You’re Most Wanted',
       line: `You stole the most yesterday. Every haul pays 25% more today, but there’s ${money(mostWanted.bounty)} on your head: a rival who tags you in the city takes it from your gang. Your gang’s door is safe.`,
       chog: mostWanted.chog,
+      long: true,
       tone: 'alarm',
     });
   }, [wantedMe, mostWanted]);
@@ -1364,6 +1397,7 @@ export function CityApp() {
         wanted={city?.burns.posters.map((p) => p.chog)}
         haunt={haunt}
         moon={moonUp}
+        practicePumpkins={previewing}
         onPumpkin={pumpkinGot}
         onWanted={wantedNews}
         board={screen}
@@ -1464,22 +1498,23 @@ export function CityApp() {
           <div className="sm:hidden">
             <MusicButton />
           </div>
-          {moon && (
-            <MoonPill
-              moon={moon}
-              now={now}
-              onOpen={() =>
-                setBanner({
-                  id: `moon${now}`,
-                  title: moonUp ? 'The Blood Moon is up' : 'The Blood Moon',
-                  line: `Every night of Halloween week, 18:00 to 19:00 UTC: every vault is haunted, hauls pay ${BLOOD_MOON_BONUS}% more, and pumpkins full of cash pop up all over the city. First Chog to one keeps it.`,
-                  tone: 'alarm',
-                })
-              }
-            />
-          )}
+          {moon && <MoonPill moon={moon} now={now} preview={previewing} onOpen={() => setMoonCard(true)} />}
         </div>
       </div>
+
+      {moonCard && moon && (
+        <MoonCard
+          moon={moon}
+          now={now}
+          preview={previewing}
+          onTry={me?.admin ? startPreview : undefined}
+          onEnd={() => {
+            setMoonPreview(0);
+            setMoonCard(false);
+          }}
+          onClose={() => setMoonCard(false)}
+        />
+      )}
 
       {/* Your run, other getaways and banners. On a phone they live along the top edge, out of the middle of
           the screen where your Chog is: your run takes the place of your card, banners drop in over the top like

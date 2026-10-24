@@ -1,7 +1,12 @@
 'use client';
 import type { Icon } from '@phosphor-icons/react';
 import { CaretDown, ChatCircleDots, Check, MapTrifold, Smiley, Trophy } from '@phosphor-icons/react';
-import { useEffect, useState, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent } from 'react';
+import {
+  useEffect,
+  useState,
+  type MouseEvent as RMouseEvent,
+  type PointerEvent as RPointerEvent,
+} from 'react';
 import { cn } from '@/lib/cn';
 import { chogImage } from '@/lib/images';
 
@@ -27,7 +32,6 @@ export function tap(fn: () => void) {
     },
   };
 }
-
 
 // The heads-up display over the city, in frosted glass: who you are and today's jobs top left, a round
 // minimap top right, round action buttons bottom right, and a toast that drops in for big moments.
@@ -365,6 +369,8 @@ export interface BannerData {
   line: string;
   chog?: number;
   tone: 'win' | 'lose' | 'alarm';
+  /** A longer message: shown in full (not cut to two lines on a phone) and for longer. */
+  long?: boolean;
 }
 
 const TONE = {
@@ -405,7 +411,12 @@ export function Banner({ b, onClick }: { b: BannerData; onClick?: () => void }) 
         >
           {b.title}
         </span>
-        <span className="mt-0.5 block text-[14px] leading-snug text-label-2 max-sm:line-clamp-2 max-sm:text-[13px]">
+        <span
+          className={cn(
+            'mt-0.5 block text-[14px] leading-snug text-label-2 max-sm:text-[13px]',
+            !b.long && 'max-sm:line-clamp-2',
+          )}
+        >
           {b.line}
         </span>
       </span>
