@@ -362,6 +362,58 @@ canvas {
   }
 }
 
+/* The Blood Moon: rising into the middle of the screen, its name settling in, its glow breathing, and clouds
+   drifting across it in the sky. */
+@keyframes moonrise-up {
+  from {
+    opacity: 0;
+    transform: translateY(46vh) scale(0.6);
+  }
+  35% {
+    opacity: 1;
+  }
+}
+@keyframes moonrise-title {
+  from {
+    opacity: 0;
+    letter-spacing: 0.42em;
+    filter: blur(6px);
+  }
+}
+@keyframes sky-breathe {
+  0%,
+  100% {
+    opacity: 0.75;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+@keyframes cloud-drift {
+  from {
+    transform: translateX(-70%);
+  }
+  to {
+    transform: translateX(45%);
+  }
+}
+
+/* The city's stick area, shown for a moment after a drag that started above it. */
+@keyframes zone-flash {
+  0% {
+    opacity: 0;
+  }
+  18%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* The music button's little level bars. */
 @keyframes eq {
   0%,

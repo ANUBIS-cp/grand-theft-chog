@@ -157,6 +157,16 @@ const color = (gang: GangId | null) => (gang ? GANG_COLOR[gang] : GUEST);
 
 // Where you were, kept for this tab while you look at another page (a Chog's record) and come back: the city
 // picks up there instead of at the plaza. Kept 15 minutes; a spot you can't stand on is ignored.
+/** The stick's area, as parts of the screen: the bottom 40% held upright, the left 40% below the top third sideways. */
+const stickZone = (wide: boolean) =>
+  wide ? { left: 0, top: 1 / 3, w: 0.4, h: 2 / 3 } : { left: 0, top: 0.6, w: 1, h: 0.4 };
+function inStickZone(box: DOMRect, x: number, y: number) {
+  const z = stickZone(box.width > box.height);
+  const fx = (x - box.left) / box.width;
+  const fy = (y - box.top) / box.height;
+  return fx >= z.left && fx <= z.left + z.w && fy >= z.top;
+}
+
 const POS_KEY = 'cw-pos';
 function savedSpot(): { x: number; y: number } {
   try {
@@ -769,7 +779,24 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
   // your thumb landed until you lift it, the way Roblox's phone stick does: a ring that followed the thumb crept
   // across the screen over a long walk (to the edge, where the thumb slid off and you stopped, or up the middle
   // under your hand). Full speed comes a short push out, so the thumb hardly travels.
-  const press = useRef<{ x: number; y: number; id: number; dragged: boolean; touch: boolean } | null>(null);
+  // A thumb starts the stick only low on the screen, where Roblox puts it (the bottom 40% of a phone held upright;
+  // held sideways, the left 40% below the top third), so your hand stays off the city. Taps work anywhere, and a
+  // mouse drags from anywhere.
+  const press = useRef<{
+    x: number;
+    y: number;
+    id: number;
+    dragged: boolean;
+    touch: boolean;
+    /** Started in the stick's area (always, for a mouse). */
+    steer: boolean;
+  } | null>(null);
+  const [zoneHint, setZoneHint] = useState(0);
+  useEffect(() => {
+    if (!zoneHint) return;
+    const t = setTimeout(() => setZoneHint(0), 1400);
+    return () => clearTimeout(t);
+  }, [zoneHint]);
   const [joy, setJoy] = useState<{ bx: number; by: number; kx: number; ky: number } | null>(null);
   const [walked, setWalked] = useState(true);
   useEffect(() => {
@@ -797,12 +824,15 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     // One finger walks; another landing on the street (or lifting off a button that just closed) leaves it be.
     if (press.current && press.current.id !== e.pointerId) return;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    const touch = e.pointerType === 'touch';
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
     press.current = {
       x: e.clientX,
       y: e.clientY,
       id: e.pointerId,
       dragged: false,
-      touch: e.pointerType === 'touch',
+      touch,
+      steer: !touch || inStickZone(box, e.clientX, e.clientY),
     };
   }
   function onMove(e: React.PointerEvent) {
@@ -811,6 +841,14 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     const dx = e.clientX - p.x;
     const dy = e.clientY - p.y;
     const d = Math.hypot(dx, dy);
+    if (!p.steer) {
+      // A drag higher up: not a tap, and nothing moves; the stick's area lights up once to show where it is.
+      if (d > 12 && !p.dragged) {
+        p.dragged = true;
+        setZoneHint(Date.now());
+      }
+      return;
+    }
     if (d > 12 || p.dragged) {
       if (!p.dragged && !walked) {
         setWalked(true);
@@ -894,6 +932,27 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
           />
         </div>
       )}
+      {/* A drag that started too high: the stick's area glows for a moment. */}
+      {!!zoneHint &&
+        (() => {
+          const z = stickZone(window.innerWidth > window.innerHeight);
+          return (
+            <div
+              key={zoneHint}
+              className="pointer-events-none absolute z-10 grid animate-[zone-flash_1400ms_ease-in-out_forwards] items-center justify-items-start rounded-t-[32px] bg-[linear-gradient(to_top,rgba(255,255,255,0.16),rgba(255,255,255,0.04))] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.25)]"
+              style={{
+                left: `${z.left * 100}%`,
+                top: `${z.top * 100}%`,
+                width: `${z.w * 100}%`,
+                height: `${z.h * 100}%`,
+              }}
+            >
+              <p className="pl-6 text-[15px] font-semibold text-white [text-shadow:0_1px_8px_rgba(0,0,0,0.9)]">
+                Drag down here to walk
+              </p>
+            </div>
+          );
+        })()}
       {/* First time on a phone: a ghost of the stick shows where your thumb goes. */}
       {!joy && !walked && !props.paused && !props.hidden && (
         <div className="pointer-events-none absolute bottom-[150px] left-[76px] z-10 sm:hidden">
@@ -901,7 +960,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
             <div className="h-[52px] w-[52px] animate-[stick-hint_2.4s_ease-in-out_infinite] rounded-full bg-white/70" />
           </div>
           <p className="absolute -left-[70px] top-[68px] w-[140px] text-center text-[13px] font-semibold text-white/80 [text-shadow:0_1px_6px_rgba(0,0,0,0.8)]">
-            Drag anywhere to walk
+            Drag down here to walk
           </p>
         </div>
       )}

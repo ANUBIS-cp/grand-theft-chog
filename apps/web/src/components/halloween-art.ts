@@ -20,7 +20,7 @@ const NAMES = [
 export type HalloweenArt = (typeof NAMES)[number];
 
 /** Bump when the pictures change, so browsers fetch the new ones. */
-const V = '1';
+const V = '2';
 const images = new Map<HalloweenArt, HTMLImageElement>();
 const waiting = new Set<() => void>();
 

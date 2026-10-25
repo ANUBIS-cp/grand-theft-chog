@@ -29,7 +29,7 @@ const THINGS: Record<string, number> = {
   'h-cobweb': 256,
   'h-candles': 256,
   phantom: 448,
-  'blood-moon': 512,
+  'blood-moon': 768,
   'pumpkin-cash': 384,
   'pumpkin-gold': 384,
   'power-glove': 256,

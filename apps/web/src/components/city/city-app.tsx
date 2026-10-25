@@ -68,7 +68,7 @@ import {
   RoundButton,
 } from './hud';
 import type { Chase, ChaseEnd, ChatMsg, LiveStatus, PumpkinGot, Wanted, WantedGot } from './live-city';
-import { MoonCard, MoonPill } from './moon-pill';
+import { MoonCard, MoonPill, Moonrise, SkyMoon } from './moon-pill';
 import { useNoPageScroll } from '@/lib/no-page-scroll';
 import { ViewportProbe } from './viewport-probe';
 
@@ -230,6 +230,8 @@ export function CityApp() {
   // The owner's Blood Moon preview (when it started), and the Blood Moon card.
   const [moonPreview, setMoonPreview] = useState(0);
   const [moonCard, setMoonCard] = useState(false);
+  // The moonrise playing now.
+  const [rising, setRising] = useState(false);
   // Walking as your Chog from its wallet address alone (read from Monad, nothing signed): practice only until
   // the wallet is proved. Remembered in this browser.
   const [pass, setPassState] = useState<Pass | null>(null);
@@ -669,7 +671,10 @@ export function CityApp() {
   // On a local copy ?bloodmoon=1 starts one too.
   useEffect(() => {
     if (location.hostname === 'localhost' && new URLSearchParams(location.search).get('bloodmoon') === '1')
+    {
       setMoonPreview(Date.now() - 1000);
+      setRising(true);
+    }
   }, []);
   const startPreview = () => {
     // Starts at once: the page's clock only ticks each second, so bring it up to now as well.
@@ -677,18 +682,38 @@ export function CityApp() {
     setMoonPreview(at - 1000);
     setNow(at);
     setMoonCard(false);
-    setBanner({
-      id: `preview${Date.now()}`,
-      title: 'Blood Moon preview',
-      line: 'Only you see this. Chase the pumpkins round you (practice, nothing is paid) and try the practice vault: it’s haunted.',
-      tone: 'alarm',
-      long: true,
-    });
+    setRising(true);
+  };
+  /** The moonrise is over: in a preview, what there is to try. */
+  const risen = () => {
+    setRising(false);
+    if (moonPreview)
+      setBanner({
+        id: `preview${Date.now()}`,
+        title: 'Blood Moon preview',
+        line: 'Only you see this. Chase the pumpkins round you (practice, nothing is paid) and try the practice vault: it’s haunted.',
+        tone: 'alarm',
+        long: true,
+      });
   };
   const moon = moonPreview ? { from: moonPreview, to: moonPreview + 3_600_000 } : (city?.moon ?? null);
   const moonUp = !!moon && now >= moon.from && now < moon.to;
   const pumpkinTime = moonUp || isHalloweenWeek(now);
   const previewing = !!moonPreview && moonUp;
+  // The moonrise: when the Blood Moon comes up while you're here, or once if you arrive while it's up (a preview
+  // plays its own when it starts).
+  const risingFor = moonUp && !moonPreview ? moon.from : 0;
+  useEffect(() => {
+    if (!risingFor) return;
+    try {
+      const key = `cw-moonrise-${risingFor}`;
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, '1');
+    } catch {
+      return;
+    }
+    setRising(true);
+  }, [risingFor]);
   // The preview's hour is over: back to the real calendar.
   useEffect(() => {
     if (moonPreview && now >= moonPreview + 3_600_000) setMoonPreview(0);
@@ -1450,6 +1475,9 @@ export function CityApp() {
         }}
       />
 
+      {moonUp && <SkyMoon shown={!rising} />}
+      {rising && !heistScreen && <Moonrise preview={!!moonPreview} onDone={risen} />}
+
       {/* Top left: who you are and today's jobs */}
       <div
         className={cn(
@@ -1761,7 +1789,7 @@ export function CityApp() {
             and bring the cash home.
           </p>
           <p className="mt-2 text-[14px] text-white/60">
-            <span className="sm:hidden">Drag anywhere to walk. </span>
+            <span className="sm:hidden">Drag low on the screen to walk. </span>
             <span className="max-sm:hidden">
               Walk with the arrow keys or WASD, or tap where you want to go.{' '}
             </span>

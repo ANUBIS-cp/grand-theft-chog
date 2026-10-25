@@ -1,19 +1,153 @@
 import { Coins, Crosshair, Ghost, X } from '@phosphor-icons/react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 
-// The Blood Moon in the corner, under the map: a countdown to the next one during (and just before) Halloween
-// week, and while it's up, how long is left, pulsing red.
+// The Blood Moon: the moonrise when it comes up, the moon itself in the sky over the city while it's up, and in
+// the corner under the map a countdown to the next one (or how long is left), with its card.
+
+const MOON_SRC = '/art/halloween/blood-moon.webp?v=2';
+
+/** The moonrise lasts this long (ms) before the moon settles in; a tap skips it. */
+const RISE_MS = 3800;
+
+/**
+ * The moment the Blood Moon rises: the city dims, the moon rises big into the middle with its name, then it
+ * settles in: on a phone it flies down into its badge under the map (so you know where it lives), on a wide
+ * screen it drifts up into the sky, where SkyMoon takes over.
+ */
+export function Moonrise({ preview, onDone }: { preview: boolean; onDone: () => void }) {
+  const [leaving, setLeaving] = useState(false);
+  /** Where the moon flies to (its badge), from where it is now, and how much it shrinks. */
+  const [to, setTo] = useState<{ x: number; y: number; k: number } | null>(null);
+  const moonEl = useRef<HTMLDivElement>(null);
+  const done = useRef(onDone);
+  done.current = onDone;
+  const leave = useRef(() => {});
+  leave.current = () => {
+    if (leaving) return;
+    const m = moonEl.current?.getBoundingClientRect();
+    const t = document.querySelector('[data-moon-pill]')?.getBoundingClientRect();
+    if (m && t?.width && !SKY.matches())
+      setTo({
+        x: t.left + t.width / 2 - (m.left + m.width / 2),
+        y: t.top + t.height / 2 - (m.top + m.height / 2),
+        k: t.width / m.width,
+      });
+    setLeaving(true);
+    setTimeout(() => done.current(), 950);
+  };
+  useEffect(() => {
+    const t = setTimeout(() => leave.current(), RISE_MS);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div
+      className="pointer-events-auto fixed inset-0 z-[60] overflow-hidden"
+      onPointerDown={() => leave.current()}
+      role="presentation"
+    >
+      <div
+        className={cn(
+          'absolute inset-0 animate-[fade-in_700ms_ease-out] bg-[radial-gradient(circle_at_50%_40%,rgba(46,3,12,0.88),rgba(4,2,7,0.96)_70%)] backdrop-blur-[3px] transition-opacity duration-[900ms]',
+          leaving && 'opacity-0',
+        )}
+      />
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-[clamp(20px,4vh,36px)] px-6 pb-[6vh]">
+        <div
+          ref={moonEl}
+          className={cn(
+            'relative aspect-square w-[clamp(210px,60vw,360px)] transition-[translate,scale,opacity] duration-[900ms] ease-[cubic-bezier(.55,0,.2,1)]',
+            leaving && !to && '-translate-y-[55vh] scale-[0.55] opacity-0',
+          )}
+          style={leaving && to ? { translate: `${to.x}px ${to.y}px`, scale: String(to.k) } : undefined}
+        >
+          <div className="h-full w-full animate-[moonrise-up_2100ms_cubic-bezier(.16,.84,.24,1)_both]">
+            <div
+              className={cn(
+                'absolute -inset-[38%] animate-[sky-breathe_3.2s_ease-in-out_infinite] rounded-full bg-[radial-gradient(circle,rgba(255,50,60,0.42),rgba(170,10,30,0.16)_42%,transparent_68%)] transition-opacity duration-500',
+                leaving && 'opacity-0',
+              )}
+            />
+            <img
+              src={MOON_SRC}
+              alt=""
+              draggable={false}
+              className="relative h-full w-full select-none object-contain drop-shadow-[0_0_40px_rgba(255,40,50,0.55)]"
+            />
+          </div>
+        </div>
+        <div
+          className={cn(
+            'text-center transition-opacity duration-500',
+            leaving && 'opacity-0',
+          )}
+        >
+          <p className="animate-[moonrise-title_1300ms_cubic-bezier(.2,.8,.2,1)_900ms_both] font-display text-[clamp(23px,6.6vw,42px)] uppercase leading-none tracking-[0.16em] text-[#ffc2c2] [text-shadow:0_0_24px_rgba(255,40,60,0.75),0_2px_0_rgba(80,0,10,0.6)]">
+            The Blood Moon
+            <br />
+            has risen
+          </p>
+          <p className="mx-auto mt-3 max-w-[340px] animate-[fade-in_900ms_ease-out_1600ms_both] text-[15px] font-medium leading-snug text-white/75 [text-wrap:balance]">
+            {preview
+              ? 'Preview: only you can see it, and nothing real is paid.'
+              : 'For one hour: pumpkins in the streets, haunted vaults and +50% on every haul.'}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Wide enough for the moon in the sky (between your card and the map); smaller screens keep it in its badge. */
+const SKY = { matches: () => typeof window !== 'undefined' && matchMedia('(min-width: 1024px)').matches };
+
+/**
+ * The Blood Moon in the sky over the city while it's up, on a wide screen: a big moon just over the top edge, so
+ * only its lower part shows, hazy and fading into the night (above the city, not on its streets), behind the
+ * cards and buttons, its glow breathing, thin clouds drifting across it.
+ */
+export function SkyMoon({ shown }: { shown: boolean }) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        'pointer-events-none absolute left-1/2 top-0 z-[15] aspect-square w-[clamp(320px,27vw,440px)] -translate-x-1/2 -translate-y-[64%] transition-opacity duration-[1200ms] max-lg:hidden',
+        shown ? 'opacity-90' : 'opacity-0',
+      )}
+      style={{
+        maskImage: 'linear-gradient(to bottom, #000 72%, transparent 100%)',
+        WebkitMaskImage: 'linear-gradient(to bottom, #000 72%, transparent 100%)',
+      }}
+    >
+      <div className="absolute -inset-[24%] animate-[sky-breathe_6s_ease-in-out_infinite] rounded-full bg-[radial-gradient(circle,rgba(255,45,55,0.26),rgba(150,8,28,0.1)_45%,transparent_70%)]" />
+      <img
+        src={MOON_SRC}
+        alt=""
+        draggable={false}
+        className="relative h-full w-full select-none object-contain drop-shadow-[0_0_30px_rgba(255,40,50,0.45)]"
+      />
+      {/* Clouds drifting across it. */}
+      <div className="absolute inset-0 overflow-hidden rounded-full">
+        <div className="absolute left-0 top-[58%] h-[16%] w-[150%] animate-[cloud-drift_38s_linear_infinite] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(14,8,22,0.75),transparent_70%)] blur-[3px]" />
+        <div className="absolute left-0 top-[74%] h-[12%] w-[130%] animate-[cloud-drift_27s_linear_infinite_reverse] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(14,8,22,0.6),transparent_70%)] blur-[3px]" />
+      </div>
+    </div>
+  );
+}
 
 /** The moon (the drawn picture, docs/art-halloween.md), glowing while it's up. */
 function Moon({ up, big }: { up: boolean; big?: boolean }) {
+  // Bigger in the badge while it's up: that's where the moon lives on a phone.
+  const size = big ? 62 : up ? 28 : 20;
   return (
     <img
-      src="/art/halloween/blood-moon.webp?v=1"
+      src={MOON_SRC}
       alt=""
       draggable={false}
-      width={big ? 62 : 20}
-      height={big ? 62 : 20}
-      style={{ width: big ? 62 : 20, height: big ? 62 : 20, maxWidth: 'none' }}
+      data-moon-pill={big ? undefined : ''}
+      width={size}
+      height={size}
+      style={{ width: size, height: size, maxWidth: 'none' }}
       className={cn(
         'pointer-events-none aspect-square shrink-0 select-none rounded-full object-contain',
         up &&
