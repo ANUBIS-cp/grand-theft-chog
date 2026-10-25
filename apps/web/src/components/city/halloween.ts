@@ -3,7 +3,7 @@ import { CITY, placeOf, type Place } from '@chog-city/game/city';
 // Halloween week in the city (packages/server/src/events.ts has the dates). Everything here is drawn by
 // CityRenderer at a few points in its frame and lit against its night:
 // - Chog-o'-lanterns: pumpkins carved with a Chog's face (big round eyes, a little grin) by every gang's door
-//   and round the plaza, candlelight flickering and spilling orange on the pavement; one flares up as you pass.
+//   and round the plaza, steady candlelight spilling orange on the pavement; one brightens as you pass.
 // - Ghost Chogs: see-through ghosts of real Skulls and Radioactive Chogs, a wavy sheet for a hem, drifting
 //   the streets, fading in and out, darting off when you come close.
 // - Will-o'-wisps: little lights wandering with sparkle trails; near you they're drawn in and circle you.
@@ -371,7 +371,7 @@ export class Halloween {
     const t = v.t;
     const out: { x: number; y: number; r: number }[] = [];
     for (const l of this.lanterns) {
-      const f = 0.85 + 0.15 * Math.sin(now / 70 + l.x) * Math.sin(now / 41 + l.y);
+      const f = 0.97 + 0.03 * Math.sin(now / 1700 + l.x);
       out.push({ x: v.sx(l.x), y: v.sy(l.y) - t * 0.2, r: t * (1.25 + l.flare * 0.7) * f });
     }
     for (const w of this.wisps) out.push({ x: v.sx(w.x), y: v.sy(w.y), r: t * 0.4 });
@@ -388,7 +388,8 @@ export class Halloween {
       const x = v.sx(l.x);
       const y = v.sy(l.y) - t * 0.25;
       if (x < -t * 3 || x > v.view.w + t * 3 || y < -t * 3 || y > v.view.h + t * 3) continue;
-      const f = 0.75 + 0.25 * Math.sin(now / 63 + l.x * 3) * Math.sin(now / 37 + l.y);
+      // Steady candlelight: a slow breath, never a flicker.
+      const f = 0.95 + 0.05 * Math.sin(now / 1700 + l.x * 3);
       // Candlelight spilling on the ground round it; brighter when it flares at you.
       g.globalAlpha = 0.38 * f;
       g.drawImage(this.glowSprite('lantern', 255, 140, 30), x - t * 2, y + t * 0.1 - t * 1.2, t * 4, t * 2.4);
@@ -406,7 +407,7 @@ export class Halloween {
         g.globalAlpha = 0.4 * k;
         g.drawImage(sprite, v.sx(p.x) - s, v.sy(p.y) - s, s * 2, s * 2);
       });
-      const pulse = 1 + 0.18 * Math.sin(now / 160 + w.x * 4);
+      const pulse = 1 + 0.06 * Math.sin(now / 1100 + w.x * 4);
       const s = t * 0.38 * pulse;
       g.globalAlpha = 1;
       g.drawImage(sprite, v.sx(w.x) - s, v.sy(w.y) - s, s * 2, s * 2);
@@ -436,16 +437,15 @@ export class Halloween {
     if (this.cauldron) this.drawBrewGlow(g, v, this.cauldron, now);
     // Ghost-fire on the Skulls' roof.
     if (this.skulls) this.drawGhostFire(g, v, this.skulls, now);
-    // The street lamps burn a little eerie: purple and green, flickering.
+    // The street lamps burn a little eerie: purple and green, steady.
     for (const p of CITY.props) {
       if (p.kind !== 'lamp') continue;
       const x = v.sx(p.x);
       const y = v.sy(p.y) - t * 1.6;
       if (x < -t * 2 || x > v.view.w + t * 2 || y < -t * 2 || y > v.view.h + t * 2) continue;
       const green = Math.round(p.x * 7 + p.y * 3) % 2 === 0;
-      // Just a tint on the lamp's own light, with the odd flicker.
-      const flick =
-        0.3 + 0.12 * Math.sin(now / 230 + p.x) + (Math.sin(now / 47 + p.y * 9) > 0.96 ? -0.25 : 0);
+      // Just a tint on the lamp's own light.
+      const flick = 0.3 + 0.03 * Math.sin(now / 2000 + p.x);
       g.globalAlpha = Math.max(0, flick);
       g.drawImage(
         this.glowSprite(green ? 'lg' : 'lp', green ? 80 : 170, green ? 255 : 90, green ? 140 : 255),
@@ -501,7 +501,7 @@ export class Halloween {
 
   /**
    * A jack-o'-lantern, the 🎃 kind but alive: a fat ribbed pumpkin (drawn once, sharp), an angry carved face
-   * with the candle blazing through it, flickering. Walk up and it laughs at you: the grin stretches, it
+   * with the candle glowing steadily through it. Walk up and it laughs at you: the grin stretches, it
    * shakes, embers spit out of its mouth, and the glints in its eyes turn to watch you.
    */
   private drawLantern(v: HauntView, l: { x: number; y: number; flare: number }, now: number) {
@@ -514,7 +514,7 @@ export class Halloween {
     const near = l.flare;
     const seed = l.x * 7.1 + l.y * 3.3;
     // Laughing: a quick shake and a bounce.
-    const shake = near * Math.sin(now / 38 + seed) * 0.07;
+    const shake = near * Math.sin(now / 160 + seed) * 0.05;
     const bounce = near * Math.abs(Math.sin(now / 120 + seed)) * t * 0.08;
     // Shadow on the street.
     g.fillStyle = 'rgba(0,0,0,0.42)';
@@ -529,8 +529,8 @@ export class Halloween {
     g.rotate(shake);
     const body = this.pumpkinBody(t, v.dpr);
     g.drawImage(body, -W * 0.62, -H * 1.42, W * 1.24, H * 1.5);
-    // The face, live: the candle's flicker, the grin, the eyes.
-    const flick = 0.78 + 0.22 * Math.sin(now / 57 + seed) * Math.sin(now / 31 + seed * 2);
+    // The face, live: the candle's steady glow (a slow breath), the grin, the eyes.
+    const flick = 0.95 + 0.05 * Math.sin(now / 1700 + seed);
     const grin = 1 + near * (0.35 + 0.1 * Math.sin(now / 90));
     const cy = -H * 0.52;
     this.pumpkinFace(g, 0, cy, W, H, flick, grin, near, l, now);

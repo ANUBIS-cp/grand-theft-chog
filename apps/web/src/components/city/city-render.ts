@@ -1476,8 +1476,7 @@ export class CityRenderer {
     g.fillRect(x + t * 0.15, by - t * 0.24, w - t * 0.3, t * 0.48);
     g.font = `800 ${Math.round(t * 0.3)}px ${this.font}`;
     g.textAlign = 'center';
-    const flicker = 0.85 + 0.15 * Math.sin(now / 90) * Math.sin(now / 37);
-    g.fillStyle = `rgba(255,122,26,${flicker})`;
+    g.fillStyle = '#ff7a1a';
     const strips = [
       `${(this.board.burned ?? 0).toLocaleString('en-US')} $CHOG BURNED`,
       ...(this.board.events ?? []),
@@ -2088,7 +2087,7 @@ export class CityRenderer {
       g.fillText(label, lx, ly + 1);
       g.restore();
     } else {
-      g.strokeStyle = `rgba(255,210,63,${0.6 + 0.4 * Math.sin(now / 120)})`;
+      g.strokeStyle = `rgba(255,210,63,${0.7 + 0.3 * Math.sin(now / 320)})`;
       g.lineWidth = 4;
       g.beginPath();
       g.ellipse(gx, gy + t * 0.25, t * 0.95, t * 0.35, 0, 0, Math.PI * 2);
@@ -2252,15 +2251,13 @@ export class CityRenderer {
             : look?.color === '#141414'
               ? '#e8b931'
               : (look?.color ?? '#888888');
-      const flick =
-        0.85 + 0.15 * Math.sin(now / 90 + p.x) * (hash(p.x, Math.floor(now / 2000)) > 0.9 ? 1 : 0);
       const x = this.sx(p.x + p.w / 2);
       const y = this.sy(p.y + p.h - CityRenderer.WALL) + t * 0.4;
       const r = t * 3.2;
       const gr = g.createRadialGradient(x, y, 0, x, y, r);
       gr.addColorStop(0, color);
       gr.addColorStop(1, 'rgba(0,0,0,0)');
-      g.globalAlpha = 0.16 * flick;
+      g.globalAlpha = 0.16;
       g.fillStyle = gr;
       g.fillRect(x - r, y - r, r * 2, r * 2);
       if (look?.alarm && Math.floor(now / 250) % 2 === 0) {

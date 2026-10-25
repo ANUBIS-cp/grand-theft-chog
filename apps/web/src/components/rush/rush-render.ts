@@ -351,10 +351,9 @@ export class RushRenderer {
       map.flips.forEach((f, i) => {
         if (!s.flips[i]) lights.push({ x: this.X(f.x + 0.5), y: this.Y(f.y + 0.5), r: 0.9, strength: 0.45 });
       });
-      // Every candle lights the stone round it, flickering.
-      v.candles.forEach((c, i) => {
-        const flick = 0.92 + 0.08 * Math.sin(now / 90 + i * 1.7) * Math.sin(now / 37 + i);
-        lights.push({ x: c.x, y: c.y + t * 0.3, r: 1.7 * flick, strength: 0.7 });
+      // Every candle lights the stone round it: a steady glow.
+      v.candles.forEach((c) => {
+        lights.push({ x: c.x, y: c.y + t * 0.3, r: 1.7, strength: 0.7 });
       });
       this.haunt.darkness(d, s, { x: fx0 - this.cam.x, y: fy0 - this.cam.y }, lights);
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -421,7 +420,7 @@ export class RushRenderer {
       const y = this.Y(l.y);
       g.save();
       if (on) {
-        const flick = 0.75 + 0.25 * Math.sin(now / 40 + i);
+        const flick = 0.88 + 0.12 * Math.sin(now / 240 + i);
         g.strokeStyle = `rgba(255, 45, 85, ${flick})`;
         g.lineWidth = t * 0.12;
         g.shadowColor = '#ff2d55';

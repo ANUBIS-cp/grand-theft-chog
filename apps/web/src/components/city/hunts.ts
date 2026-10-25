@@ -99,8 +99,8 @@ export class CityHunts {
     const seed = p.id.length * 3.7 + p.id.charCodeAt(p.id.length - 1);
     const pop = Math.max(0, this.scaleIn(p, now));
     const left = p.until - Date.now();
-    // Its last 15 seconds: it flickers, about to go.
-    const fading = left < 15_000 ? 0.55 + 0.45 * Math.abs(Math.sin(now / 140)) : 1;
+    // Its last 15 seconds: it fades softly in and out, about to go.
+    const fading = left < 15_000 ? 0.7 + 0.3 * Math.cos(now / 220) : 1;
     // Hopping away from you: up in an arc, a squash as it lands; standing, a nervous little bounce.
     const idle = at.lift === 0 && at.land === 0;
     const twitch = idle ? Math.abs(Math.sin(now / 260 + seed)) * v.t * 0.06 : 0;
@@ -126,8 +126,7 @@ export class CityHunts {
     } else {
       const body = p.gold ? this.goldBody(t, v.dpr) : this.art.pumpkinBody(t, v.dpr);
       g.drawImage(body, -W * 0.62, -H * 1.42, W * 1.24, H * 1.5);
-      const flick = 0.82 + 0.18 * Math.sin(now / 61 + seed) * Math.sin(now / 33 + seed * 2);
-      this.art.pumpkinFace(g, 0, -H * 0.52, W, H, flick, 1.2, 0.5, p, now);
+      this.art.pumpkinFace(g, 0, -H * 0.52, W, H, 1, 1.2, 0.5, p, now);
     }
     g.restore();
   }
@@ -178,7 +177,8 @@ export class CityHunts {
       if (x < -t * 3 || x > v.view.w + t * 3 || y < -t * 8 || y > v.view.h + t * 3) continue;
       const pop = Math.max(0, this.scaleIn(p, now));
       const col = p.gold ? '255, 214, 90' : '255, 150, 50';
-      const pulse = 0.85 + 0.15 * Math.sin(now / 300 + p.x);
+      // Steady light, breathing very slowly.
+      const pulse = 0.95 + 0.05 * Math.sin(now / 900 + p.x);
       g.save();
       g.globalCompositeOperation = 'lighter';
       // The column of light, rising from the top of the pumpkin (not over it) and narrowing as it goes.
@@ -330,7 +330,7 @@ export class CityHunts {
 
   /** The red target turning on the ground under today's Most Wanted (screen px of their feet). */
   ring(g: G, x: number, y: number, t: number, now: number) {
-    const pulse = 0.5 + 0.5 * Math.sin(now / 220);
+    const pulse = 0.5 + 0.5 * Math.sin(now / 400);
     const rx = t * 0.75;
     const ry = t * 0.28;
     g.save();
@@ -544,7 +544,7 @@ export class CityHunts {
       const x = v.sx(p.x);
       const y = v.sy(p.y) - t * 1.95;
       if (!seen(x, y, t * 3)) continue;
-      const flick = 0.85 + 0.15 * Math.sin(now / 120 + p.x * 3) * Math.sin(now / 47 + p.y);
+      const flick = 0.96 + 0.04 * Math.sin(now / 1500 + p.x * 3);
       const r = t * 1.4;
       const gr = g.createRadialGradient(x, y, 0, x, y, r);
       gr.addColorStop(0, `rgba(255, 70, 60, ${0.32 * flick})`);

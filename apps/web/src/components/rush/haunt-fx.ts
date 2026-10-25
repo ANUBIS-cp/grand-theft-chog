@@ -63,8 +63,8 @@ export class HauntFx {
       k.arc(x, y, r, 0, Math.PI * 2);
       k.fill();
     };
-    // A candle's breath: two slow waves and a quick one.
-    const breathe = 1 + 0.035 * Math.sin(now / 410) + 0.02 * Math.sin(now / 137) + 0.012 * Math.sin(now / 53);
+    // The lantern breathes slowly; it never flickers.
+    const breathe = 1 + 0.025 * Math.sin(now / 900);
     hole(lantern.x, lantern.y, t * 5 * breathe, 1);
     for (const l of lights) hole(l.x - d.cam.x, l.y - d.cam.y, t * l.r, l.strength);
     k.globalCompositeOperation = 'source-over';
