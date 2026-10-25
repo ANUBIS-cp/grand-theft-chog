@@ -22,6 +22,19 @@ export interface HauntDraw {
   Y: (y: number) => number;
 }
 
+/** How a light falls off in the vault: full for the first third, then a smooth fade to nothing. */
+const POOL = [
+  [0, 1],
+  [0.3, 1],
+  [0.55, 0.75],
+  [0.8, 0.28],
+  [1, 0],
+] as const;
+/** What each light adds to the dark (so dark + light at its middle is about the painted colour). */
+const LANTERN = [179, 168, 140] as const;
+const CANDLE = [179, 158, 118] as const;
+const PLAIN = [179, 183, 161] as const;
+
 export class HauntFx {
   private dark: HTMLCanvasElement | null = null;
   private trail: { x: number; y: number; at: number }[] = [];
@@ -32,7 +45,9 @@ export class HauntFx {
   private wasOut = true;
 
   /**
-   * The dark, in screen space: everything is covered, then light is cut back out where it falls.
+   * The dark, lit the way 2D games light a scene (a light map, as in the city): a layer starts at the dark's dim
+   * blue, each light adds its colour into it, and it's multiplied over the vault. So light only brightens and
+   * tints what it falls on (your lantern warms the stone round you) and nothing is painted over the scene.
    * `lantern` is the screen position the light follows (you, or the guard a defender steers).
    */
   darkness(d: HauntDraw, s: RushState, lantern: { x: number; y: number }, lights: Light[]) {
@@ -47,38 +62,26 @@ export class HauntFx {
     const k = this.dark.getContext('2d')!;
     k.setTransform(dpr, 0, 0, dpr, 0, 0);
     k.globalCompositeOperation = 'source-over';
-    k.clearRect(0, 0, view.w, view.h);
-    // The alarm throws red emergency light: the dark lifts a little and pulses.
+    // The dark: about 30% of the painted colours. The alarm throws red emergency light: it lifts and pulses.
     const alarm = s.alarm > 0 ? 0.5 + 0.5 * Math.sin(now / 160) : 0;
-    k.fillStyle = `rgba(4, 2, 12, ${0.7 - alarm * 0.08})`;
+    k.fillStyle = `rgb(${Math.round(76 + alarm * 40)},${Math.round(72 + alarm * 4)},${Math.round(94 + alarm * 4)})`;
     k.fillRect(0, 0, view.w, view.h);
-    k.globalCompositeOperation = 'destination-out';
-    const hole = (x: number, y: number, r: number, strength: number) => {
-      const gr = k.createRadialGradient(x, y, r * 0.3, x, y, r);
-      gr.addColorStop(0, `rgba(0,0,0,${strength})`);
-      gr.addColorStop(0.55, `rgba(0,0,0,${strength * 0.75})`);
-      gr.addColorStop(1, 'rgba(0,0,0,0)');
+    k.globalCompositeOperation = 'lighter';
+    const add = (x: number, y: number, r: number, [cr, cg, cb]: readonly number[], strength: number) => {
+      // The same shape of light the vault always had: full for the first third, then fading out smoothly.
+      const gr = k.createRadialGradient(x, y, 0, x, y, r);
+      for (const [at, f] of POOL) gr.addColorStop(at, `rgba(${cr},${cg},${cb},${f * strength})`);
       k.fillStyle = gr;
-      k.beginPath();
-      k.arc(x, y, r, 0, Math.PI * 2);
-      k.fill();
+      k.fillRect(x - r, y - r, r * 2, r * 2);
     };
     // The lantern breathes slowly; it never flickers.
     const breathe = 1 + 0.025 * Math.sin(now / 900);
-    hole(lantern.x, lantern.y, t * 5 * breathe, 1);
-    for (const l of lights) hole(l.x - d.cam.x, l.y - d.cam.y, t * l.r, l.strength);
-    k.globalCompositeOperation = 'source-over';
+    add(lantern.x, lantern.y, t * 5 * breathe, LANTERN, 1);
+    for (const l of lights) add(l.x - d.cam.x, l.y - d.cam.y, t * l.r, l.warm ? CANDLE : PLAIN, l.strength);
     g.save();
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.drawImage(this.dark, 0, 0, view.w, view.h);
-    // The lantern's warm colour on what it lights.
-    g.globalCompositeOperation = 'lighter';
-    const warm = g.createRadialGradient(lantern.x, lantern.y, 0, lantern.x, lantern.y, t * 4.4 * breathe);
-    warm.addColorStop(0, 'rgba(255, 176, 92, 0.16)');
-    warm.addColorStop(0.6, 'rgba(255, 140, 60, 0.06)');
-    warm.addColorStop(1, 'rgba(255, 120, 40, 0)');
-    g.fillStyle = warm;
-    g.fillRect(lantern.x - t * 5, lantern.y - t * 5, t * 10, t * 10);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'multiply';
+    g.drawImage(this.dark, 0, 0);
     g.restore();
   }
 
@@ -469,4 +472,6 @@ export interface Light {
   y: number;
   r: number;
   strength: number;
+  /** Candlelight: a warmer colour. */
+  warm?: boolean;
 }

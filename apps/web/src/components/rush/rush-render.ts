@@ -353,7 +353,7 @@ export class RushRenderer {
       });
       // Every candle lights the stone round it: a steady glow.
       v.candles.forEach((c) => {
-        lights.push({ x: c.x, y: c.y + t * 0.3, r: 1.7, strength: 0.7 });
+        lights.push({ x: c.x, y: c.y + t * 0.3, r: 1.7, strength: 0.7, warm: true });
       });
       this.haunt.darkness(d, s, { x: fx0 - this.cam.x, y: fy0 - this.cam.y }, lights);
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
