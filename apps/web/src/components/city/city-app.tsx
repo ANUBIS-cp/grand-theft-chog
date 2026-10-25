@@ -68,7 +68,7 @@ import {
   RoundButton,
 } from './hud';
 import type { Chase, ChaseEnd, ChatMsg, LiveStatus, PumpkinGot, Wanted, WantedGot } from './live-city';
-import { MoonCard, MoonPill, Moonrise, SkyMoon } from './moon-pill';
+import { MoonCard, MoonPill, Moonrise } from './moon-pill';
 import { useNoPageScroll } from '@/lib/no-page-scroll';
 import { ViewportProbe } from './viewport-probe';
 
@@ -1475,7 +1475,6 @@ export function CityApp() {
         }}
       />
 
-      {moonUp && <SkyMoon shown={!rising} />}
       {rising && !heistScreen && <Moonrise preview={!!moonPreview} onDone={risen} />}
 
       {/* Top left: who you are and today's jobs */}

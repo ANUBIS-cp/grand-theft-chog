@@ -2,8 +2,8 @@ import { Coins, Crosshair, Ghost, X } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 
-// The Blood Moon: the moonrise when it comes up, the moon itself in the sky over the city while it's up, and in
-// the corner under the map a countdown to the next one (or how long is left), with its card.
+// The Blood Moon: the moonrise when it comes up, and in the corner under the map its badge: the moon itself while
+// it's up (with how long is left), or a countdown to the next one, with its card.
 
 const MOON_SRC = '/art/halloween/blood-moon.webp?v=2';
 
@@ -12,8 +12,7 @@ const RISE_MS = 3800;
 
 /**
  * The moment the Blood Moon rises: the city dims, the moon rises big into the middle with its name, then it
- * settles in: on a phone it flies down into its badge under the map (so you know where it lives), on a wide
- * screen it drifts up into the sky, where SkyMoon takes over.
+ * flies into its badge under the map, so you know where it lives while it's up.
  */
 export function Moonrise({ preview, onDone }: { preview: boolean; onDone: () => void }) {
   const [leaving, setLeaving] = useState(false);
@@ -27,7 +26,7 @@ export function Moonrise({ preview, onDone }: { preview: boolean; onDone: () => 
     if (leaving) return;
     const m = moonEl.current?.getBoundingClientRect();
     const t = document.querySelector('[data-moon-pill]')?.getBoundingClientRect();
-    if (m && t?.width && !SKY.matches())
+    if (m && t?.width)
       setTo({
         x: t.left + t.width / 2 - (m.left + m.width / 2),
         y: t.top + t.height / 2 - (m.top + m.height / 2),
@@ -98,47 +97,10 @@ export function Moonrise({ preview, onDone }: { preview: boolean; onDone: () => 
   );
 }
 
-/** Wide enough for the moon in the sky (between your card and the map); smaller screens keep it in its badge. */
-const SKY = { matches: () => typeof window !== 'undefined' && matchMedia('(min-width: 1024px)').matches };
-
-/**
- * The Blood Moon in the sky over the city while it's up, on a wide screen: a big moon just over the top edge, so
- * only its lower part shows, hazy and fading into the night (above the city, not on its streets), behind the
- * cards and buttons, its glow breathing, thin clouds drifting across it.
- */
-export function SkyMoon({ shown }: { shown: boolean }) {
-  return (
-    <div
-      aria-hidden
-      className={cn(
-        'pointer-events-none absolute left-1/2 top-0 z-[15] aspect-square w-[clamp(320px,27vw,440px)] -translate-x-1/2 -translate-y-[64%] transition-opacity duration-[1200ms] max-lg:hidden',
-        shown ? 'opacity-90' : 'opacity-0',
-      )}
-      style={{
-        maskImage: 'linear-gradient(to bottom, #000 72%, transparent 100%)',
-        WebkitMaskImage: 'linear-gradient(to bottom, #000 72%, transparent 100%)',
-      }}
-    >
-      <div className="absolute -inset-[24%] animate-[sky-breathe_6s_ease-in-out_infinite] rounded-full bg-[radial-gradient(circle,rgba(255,45,55,0.26),rgba(150,8,28,0.1)_45%,transparent_70%)]" />
-      <img
-        src={MOON_SRC}
-        alt=""
-        draggable={false}
-        className="relative h-full w-full select-none object-contain drop-shadow-[0_0_30px_rgba(255,40,50,0.45)]"
-      />
-      {/* Clouds drifting across it. */}
-      <div className="absolute inset-0 overflow-hidden rounded-full">
-        <div className="absolute left-0 top-[58%] h-[16%] w-[150%] animate-[cloud-drift_38s_linear_infinite] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(14,8,22,0.75),transparent_70%)] blur-[3px]" />
-        <div className="absolute left-0 top-[74%] h-[12%] w-[130%] animate-[cloud-drift_27s_linear_infinite_reverse] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(14,8,22,0.6),transparent_70%)] blur-[3px]" />
-      </div>
-    </div>
-  );
-}
-
 /** The moon (the drawn picture, docs/art-halloween.md), glowing while it's up. */
 function Moon({ up, big }: { up: boolean; big?: boolean }) {
-  // Bigger in the badge while it's up: that's where the moon lives on a phone.
-  const size = big ? 62 : up ? 28 : 20;
+  // Bigger in the badge while it's up, poking out of it: that's where the moon lives.
+  const size = big ? 62 : up ? 40 : 20;
   return (
     <img
       src={MOON_SRC}
@@ -150,8 +112,9 @@ function Moon({ up, big }: { up: boolean; big?: boolean }) {
       style={{ width: size, height: size, maxWidth: 'none' }}
       className={cn(
         'pointer-events-none aspect-square shrink-0 select-none rounded-full object-contain',
+        up && !big && '-my-2.5',
         up &&
-          (big ? 'shadow-[0_0_36px_8px_rgba(255,40,40,0.45)]' : 'shadow-[0_0_14px_4px_rgba(255,40,40,0.55)]'),
+          (big ? 'shadow-[0_0_36px_8px_rgba(255,40,40,0.45)]' : 'shadow-[0_0_10px_1px_rgba(255,40,40,0.35)]'),
       )}
     />
   );
@@ -182,7 +145,7 @@ export function MoonPill(props: {
       className={cn(
         'press pointer-events-auto inline-flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3 text-left text-white max-sm:py-1 max-sm:pr-2.5',
         up
-          ? 'bg-[linear-gradient(135deg,#3a0610,#7a0c18)] shadow-[0_0_24px_rgba(255,40,50,0.45)] ring-1 ring-inset ring-[#ff5a5a]/60'
+          ? 'bg-[linear-gradient(135deg,#3a0610,#7a0c18)] shadow-[0_6px_18px_rgba(0,0,0,0.4)] ring-1 ring-inset ring-[#ff5a5a]/50'
           : 'glass',
       )}
     >

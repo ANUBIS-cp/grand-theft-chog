@@ -183,11 +183,11 @@ export class CityHunts {
       g.globalCompositeOperation = 'lighter';
       // The column of light, rising from the top of the pumpkin (not over it) and narrowing as it goes.
       const base = y - t * 1.35;
-      const top = base - t * 6;
+      const top = base - t * 4.5;
       const beam = g.createLinearGradient(0, base, 0, top);
       beam.addColorStop(0, `rgba(${col}, 0)`);
-      beam.addColorStop(0.06, `rgba(${col}, ${0.85 * pulse * pop})`);
-      beam.addColorStop(0.45, `rgba(${col}, ${0.32 * pulse * pop})`);
+      beam.addColorStop(0.06, `rgba(${col}, ${0.5 * pulse * pop})`);
+      beam.addColorStop(0.45, `rgba(${col}, ${0.17 * pulse * pop})`);
       beam.addColorStop(1, `rgba(${col}, 0)`);
       g.fillStyle = beam;
       g.beginPath();
@@ -200,7 +200,7 @@ export class CityHunts {
       // A bright core up the middle.
       const core = g.createLinearGradient(0, base, 0, base - t * 4);
       core.addColorStop(0, `rgba(255, 245, 210, 0)`);
-      core.addColorStop(0.08, `rgba(255, 245, 210, ${0.6 * pulse * pop})`);
+      core.addColorStop(0.08, `rgba(255, 245, 210, ${0.35 * pulse * pop})`);
       core.addColorStop(1, 'rgba(255, 245, 210, 0)');
       g.fillStyle = core;
       g.fillRect(x - t * 0.06, base - t * 4, t * 0.12, t * 4);
@@ -514,8 +514,8 @@ export class CityHunts {
     const tile = this.mistTile();
     const size = t * 14;
     for (const [speed, alpha, scale] of [
-      [0.012, 0.22, 1],
-      [-0.008, 0.16, 1.6],
+      [0.012, 0.12, 1],
+      [-0.008, 0.08, 1.6],
     ] as const) {
       const sz = size * scale;
       const ox = (((v.cam.x * 0.9 + now * speed * t) % sz) + sz) % sz;
@@ -534,7 +534,7 @@ export class CityHunts {
       Math.max(W, H) * 0.75,
     );
     edge.addColorStop(0, 'rgba(120, 8, 24, 0)');
-    edge.addColorStop(1, 'rgba(90, 6, 20, 0.22)');
+    edge.addColorStop(1, 'rgba(90, 6, 20, 0.1)');
     g.fillStyle = edge;
     g.fillRect(0, 0, W, H);
     // Crimson lamps.
@@ -545,10 +545,10 @@ export class CityHunts {
       const y = v.sy(p.y) - t * 1.95;
       if (!seen(x, y, t * 3)) continue;
       const flick = 0.85 + 0.15 * Math.sin(now / 120 + p.x * 3) * Math.sin(now / 47 + p.y);
-      const r = t * 2.4;
+      const r = t * 1.4;
       const gr = g.createRadialGradient(x, y, 0, x, y, r);
-      gr.addColorStop(0, `rgba(255, 70, 60, ${0.55 * flick})`);
-      gr.addColorStop(0.25, `rgba(220, 30, 40, ${0.25 * flick})`);
+      gr.addColorStop(0, `rgba(255, 70, 60, ${0.32 * flick})`);
+      gr.addColorStop(0.3, `rgba(220, 30, 40, ${0.12 * flick})`);
       gr.addColorStop(1, 'rgba(200, 20, 30, 0)');
       g.fillStyle = gr;
       g.fillRect(x - r, y - r, r * 2, r * 2);

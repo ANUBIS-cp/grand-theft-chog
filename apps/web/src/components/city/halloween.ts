@@ -136,7 +136,7 @@ export class Halloween {
     }
 
     // Wisps: wander, and circle you for a while when they come near.
-    const WISPS = v.view.w < 600 ? 6 : 9;
+    const WISPS = v.view.w < 600 ? 3 : 5;
     while (this.wisps.length < WISPS) {
       const p = spawn();
       this.wisps.push({

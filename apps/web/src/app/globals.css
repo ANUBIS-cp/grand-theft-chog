@@ -362,8 +362,7 @@ canvas {
   }
 }
 
-/* The Blood Moon: rising into the middle of the screen, its name settling in, its glow breathing, and clouds
-   drifting across it in the sky. */
+/* The Blood Moon: rising into the middle of the screen, its name settling in, its glow breathing. */
 @keyframes moonrise-up {
   from {
     opacity: 0;
@@ -389,14 +388,6 @@ canvas {
   50% {
     opacity: 1;
     transform: scale(1.04);
-  }
-}
-@keyframes cloud-drift {
-  from {
-    transform: translateX(-70%);
-  }
-  to {
-    transform: translateX(45%);
   }
 }
 

@@ -2,7 +2,7 @@ import type { RushState } from '@chog-city/game/rush';
 import { hArt } from '../halloween-art';
 
 // A haunted vault (Halloween): the lights are out. You carry a lantern, a warm circle that breathes a little;
-// past it the vault is near-black. What gives itself away in the dark is drawn over the top: guards' eyes,
+// past it the vault is dim (the walls and corridors still show, so you can always see your way). What gives itself away in the dark is drawn over the top: guards' eyes,
 // a glint now and then off the cash, the lasers, the exit's green and the safe's gold. And the phantom: a
 // see-through Chog with a wavy hem, drifting through the walls with a trail of mist, rising out of the floor
 // and sinking back into it.
@@ -50,7 +50,7 @@ export class HauntFx {
     k.clearRect(0, 0, view.w, view.h);
     // The alarm throws red emergency light: the dark lifts a little and pulses.
     const alarm = s.alarm > 0 ? 0.5 + 0.5 * Math.sin(now / 160) : 0;
-    k.fillStyle = `rgba(4, 2, 12, ${0.94 - alarm * 0.1})`;
+    k.fillStyle = `rgba(4, 2, 12, ${0.7 - alarm * 0.08})`;
     k.fillRect(0, 0, view.w, view.h);
     k.globalCompositeOperation = 'destination-out';
     const hole = (x: number, y: number, r: number, strength: number) => {
@@ -65,7 +65,7 @@ export class HauntFx {
     };
     // A candle's breath: two slow waves and a quick one.
     const breathe = 1 + 0.035 * Math.sin(now / 410) + 0.02 * Math.sin(now / 137) + 0.012 * Math.sin(now / 53);
-    hole(lantern.x, lantern.y, t * 3.9 * breathe, 1);
+    hole(lantern.x, lantern.y, t * 5 * breathe, 1);
     for (const l of lights) hole(l.x - d.cam.x, l.y - d.cam.y, t * l.r, l.strength);
     k.globalCompositeOperation = 'source-over';
     g.save();
@@ -73,12 +73,12 @@ export class HauntFx {
     g.drawImage(this.dark, 0, 0, view.w, view.h);
     // The lantern's warm colour on what it lights.
     g.globalCompositeOperation = 'lighter';
-    const warm = g.createRadialGradient(lantern.x, lantern.y, 0, lantern.x, lantern.y, t * 3.4 * breathe);
+    const warm = g.createRadialGradient(lantern.x, lantern.y, 0, lantern.x, lantern.y, t * 4.4 * breathe);
     warm.addColorStop(0, 'rgba(255, 176, 92, 0.16)');
     warm.addColorStop(0.6, 'rgba(255, 140, 60, 0.06)');
     warm.addColorStop(1, 'rgba(255, 120, 40, 0)');
     g.fillStyle = warm;
-    g.fillRect(lantern.x - t * 4, lantern.y - t * 4, t * 8, t * 8);
+    g.fillRect(lantern.x - t * 5, lantern.y - t * 5, t * 10, t * 10);
     g.restore();
   }
 
