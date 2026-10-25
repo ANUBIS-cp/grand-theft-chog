@@ -25,6 +25,10 @@ export const viewport: Viewport = {
   themeColor: '#0b0918',
   width: 'device-width',
   initialScale: 1,
+  // A game screen: never zoomed. iPhone Safari zooms into a text box when you tap it (and stays zoomed, even
+  // after a reload), which cut the right side of the screen off and shook the joystick.
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: 'cover',
 };
 

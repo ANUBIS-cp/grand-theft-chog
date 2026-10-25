@@ -122,7 +122,7 @@ export function ChogPass(props: {
             autoCapitalize="off"
             autoComplete="off"
             inputMode="text"
-            className="min-w-0 flex-1 bg-transparent px-2.5 py-2 font-mono text-[15px] text-white outline-none placeholder:text-white/30"
+            className="min-w-0 flex-1 bg-transparent px-2.5 py-2 font-mono text-[16px] text-white outline-none placeholder:text-white/30"
           />
           <button
             onClick={paste}
