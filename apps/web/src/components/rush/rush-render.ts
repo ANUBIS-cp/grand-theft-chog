@@ -175,6 +175,8 @@ export class RushRenderer {
     const dpr = v.dpr;
     const SW = this.view.w;
     const SH = this.view.h;
+    // A haunted run paints the vault as a crypt (from the Halloween pictures).
+    if (!!s.phantom !== v.haunted) v.setHaunted(!!s.phantom);
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = '#0b0918';
     g.fillRect(0, 0, SW, SH);
@@ -337,6 +339,11 @@ export class RushRenderer {
       });
       map.flips.forEach((f, i) => {
         if (!s.flips[i]) lights.push({ x: this.X(f.x + 0.5), y: this.Y(f.y + 0.5), r: 0.9, strength: 0.45 });
+      });
+      // Every candle lights the stone round it, flickering.
+      v.candles.forEach((c, i) => {
+        const flick = 0.92 + 0.08 * Math.sin(now / 90 + i * 1.7) * Math.sin(now / 37 + i);
+        lights.push({ x: c.x, y: c.y + t * 0.3, r: 1.7 * flick, strength: 0.7 });
       });
       this.haunt.darkness(d, s, { x: fx0 - this.cam.x, y: fy0 - this.cam.y }, lights);
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -583,6 +590,23 @@ export class RushRenderer {
     }
     const scared = gd.mode === 'panic';
     const wob = scared ? Math.sin(now / 40 + i) * t * 0.04 : 0;
+    // Haunted: the guards are ghosts of themselves, floating a little off the floor, see-through, a cold
+    // glow round them (their eyes burn red in the dark, haunt-fx.ts).
+    const ghostly = !!s.phantom && !human && gd.mode !== 'out';
+    if (ghostly) {
+      const hover = Math.sin(now / 420 + i * 1.3) * t * 0.06;
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      const aura = g.createRadialGradient(x, y - t * 0.25 + hover, 0, x, y - t * 0.25 + hover, t * 0.85);
+      aura.addColorStop(0, 'rgba(150, 255, 215, 0.22)');
+      aura.addColorStop(1, 'rgba(150, 255, 215, 0)');
+      g.fillStyle = aura;
+      g.beginPath();
+      g.arc(x, y - t * 0.25 + hover, t * 0.85, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+      y = y - t * 0.1 + hover;
+    }
     g.save();
     if (gd.mode === 'out') {
       g.translate(x, y + t * 0.3);
@@ -600,7 +624,7 @@ export class RushRenderer {
           seed: i * 0.37,
           face: gd.face,
           turned: this.turnedFor(`g${i}`, gd.face, now),
-          alpha: gd.mode === 'out' ? 0.6 : 1,
+          alpha: gd.mode === 'out' ? 0.6 : ghostly ? 0.68 : 1,
         },
         now,
       );

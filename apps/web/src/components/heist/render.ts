@@ -19,6 +19,7 @@ import {
   type Level,
 } from '@chog-city/game/heist';
 import { drawPiece, makePiece, type Piece } from '../chog/piece';
+import { hArt, halloweenArtReady, loadHalloweenArt } from '../halloween-art';
 import type { Fx } from './fx';
 
 // Draws a vault in a 3/4 top-down view: floors, raised walls, furniture, the people in it, and the lights.
@@ -78,6 +79,18 @@ export class VaultRenderer {
   /** Screen size (CSS px), and the camera's top-left corner in the world. */
   private view = { w: 0, h: 0 };
   private cam = { x: 0, y: 0, ready: false };
+  /** Halloween: the haunted vault's look (crypt floors and walls, coffins, candles, cobwebs). */
+  haunted = false;
+  /** Haunted: where candles burn (world px), so their light cuts through the dark. */
+  candles: { x: number; y: number }[] = [];
+
+  /** Switch the haunted look on: the pictures load, then the vault is painted again with them. */
+  setHaunted(on: boolean) {
+    if (this.haunted === on) return;
+    this.haunted = on;
+    if (on) loadHalloweenArt(() => this.base && this.buildBase());
+    else if (this.base) this.buildBase();
+  }
 
   constructor(
     private cv: HTMLCanvasElement,
@@ -180,13 +193,36 @@ export class VaultRenderer {
     g.fillStyle = '#120f24';
     g.fillRect(0, 0, level.w * t, level.h * t + lift);
 
+    // Haunted (and its pictures are in): crypt stone and old planks instead of the vault's floors.
+    const H = this.haunted && halloweenArtReady();
+    this.candles = [];
+    const pattern = (img: HTMLImageElement, tiles: number, dy = 0) => {
+      const p = g.createPattern(img, 'repeat')!;
+      p.setTransform(new DOMMatrix().translate(0, dy).scale((tiles * t) / img.width));
+      return p;
+    };
+    const stone = H ? pattern(hArt('h-floor-stone')!, 4, lift) : null;
+    const planks = H ? pattern(hArt('h-floor-wood')!, 3, lift) : null;
+
     // Floors.
     for (let y = 0; y < level.h; y++)
       for (let x = 0; x < level.w; x++) {
         if (tileAt(level, x, y) === Tile.Wall) continue;
-        this.floorTile(g, x, y, tileAt(level, x, y) === Tile.Exit ? 'exit' : this.floorOf(x, y));
+        const floor = tileAt(level, x, y) === Tile.Exit ? 'exit' : this.floorOf(x, y);
+        if (H && floor !== 'exit') {
+          g.fillStyle = floor === 'wood' || floor === 'carpet' ? planks! : stone!;
+          g.fillRect(this.tx(x), this.ty(y), t, t);
+        } else this.floorTile(g, x, y, floor);
       }
-    for (const r of level.rooms) this.roomTrim(g, r.x, r.y, r.w, r.h, r.floor);
+    for (const r of level.rooms)
+      if (!H) this.roomTrim(g, r.x, r.y, r.w, r.h, r.floor);
+      else if (r.floor === 'gold')
+        this.emblem(
+          g,
+          this.tx(r.x) + (r.w * t) / 2,
+          this.ty(r.y) + (r.h * t) / 2,
+          Math.min(r.w, r.h) * t * 0.42,
+        );
 
     // Guard routes: faint dotted lines, so you can plan.
     g.save();
@@ -220,18 +256,24 @@ export class VaultRenderer {
         g.fillRect(this.tx(x), top, t, t * 0.45);
       }
 
-    // Furniture.
-    for (let y = 0; y < level.h; y++)
-      for (let x = 0; x < level.w; x++) {
-        const k = tileAt(level, x, y);
-        if (k === Tile.Desk) this.desk(g, x, y);
-        if (k === Tile.Pillar) this.pillar(g, x, y);
-        if (k === Tile.Plant) this.plant(g, x, y);
-      }
+    // Furniture (haunted: drawn after the walls, as the crypt's pieces stand taller).
+    if (!H)
+      for (let y = 0; y < level.h; y++)
+        for (let x = 0; x < level.w; x++) {
+          const k = tileAt(level, x, y);
+          if (k === Tile.Desk) this.desk(g, x, y);
+          if (k === Tile.Pillar) this.pillar(g, x, y);
+          if (k === Tile.Plant) this.plant(g, x, y);
+        }
 
     // Walls, row by row so front faces sit over the floor below.
     for (let y = 0; y < level.h; y++)
-      for (let x = 0; x < level.w; x++) if (tileAt(level, x, y) === Tile.Wall) this.wall(g, x, y);
+      for (let x = 0; x < level.w; x++) {
+        if (tileAt(level, x, y) !== Tile.Wall) continue;
+        if (H) this.cryptWall(g, x, y);
+        else this.wall(g, x, y);
+      }
+    if (H) this.crypt(g);
     this.exitSign(g);
     for (const l of level.lasers) if (l.on > 0) this.laserPosts(g, l.x, l.y, l.across);
     for (const cam of level.cameras) this.cameraBody(g, cam.x, cam.y);
@@ -396,6 +438,162 @@ export class VaultRenderer {
         1.5,
       );
     if (!isWall(-1, 0)) g.fillRect(px + lw, top + lw, 1.5, t - lw * 2);
+  }
+
+  /** A haunted wall: crumbling stone on top, a mossy brick face, the same dark outlines as the vault's. */
+  private cryptWall(g: CanvasRenderingContext2D, x: number, y: number) {
+    const { t, lift, level } = this;
+    const px = this.tx(x);
+    const top = this.ty(y) - lift;
+    const isWall = (dx: number, dy: number) => tileAt(level, x + dx, y + dy) === Tile.Wall;
+    const capImg = hArt('h-wall-top')!;
+    const cap = g.createPattern(capImg, 'repeat')!;
+    cap.setTransform(new DOMMatrix().scale((3 * t) / capImg.width));
+    g.fillStyle = cap;
+    g.fillRect(px, top, t, t);
+    if (!isWall(0, 1) && y < level.h - 1) {
+      const fy = top + t;
+      const faceImg = hArt('h-wall-front')!;
+      const face = g.createPattern(faceImg, 'repeat')!;
+      // About two rows of bricks show on each face.
+      face.setTransform(new DOMMatrix().translate(0, fy).scale((lift * 3) / faceImg.height));
+      g.fillStyle = face;
+      g.fillRect(px, fy, t, lift);
+      // The face falls into shadow towards the floor.
+      const shade = g.createLinearGradient(0, fy, 0, fy + lift);
+      shade.addColorStop(0, 'rgba(5, 4, 14, 0)');
+      shade.addColorStop(1, 'rgba(5, 4, 14, 0.45)');
+      g.fillStyle = shade;
+      g.fillRect(px, fy, t, lift);
+      // The owning gang's colour, faint, like an old painted band.
+      g.fillStyle = this.gang.color;
+      g.globalAlpha = 0.3;
+      g.fillRect(px, fy + lift * 0.55, t, Math.max(2, lift * 0.12));
+      g.globalAlpha = 1;
+      g.fillStyle = INK;
+      g.fillRect(px, fy + lift - 2, t, 2);
+    }
+    g.fillStyle = INK;
+    const lw = 2;
+    if (!isWall(0, -1)) g.fillRect(px, top, t, lw);
+    if (!isWall(-1, 0)) g.fillRect(px, top, lw, t + (isWall(0, 1) ? 0 : lift));
+    if (!isWall(1, 0)) g.fillRect(px + t - lw, top, lw, t + (isWall(0, 1) ? 0 : lift));
+    if (!isWall(0, 1)) g.fillRect(px, top + t - 1, t, lw);
+    g.fillStyle = 'rgba(170, 200, 230, 0.22)';
+    if (!isWall(0, -1)) g.fillRect(px + (isWall(-1, 0) ? 0 : lw), top + lw, t - lw * 2, 1.5);
+  }
+
+  /**
+   * The crypt's pieces, from the Halloween pictures. The vault is a maze of stone blocks between corridors,
+   * so the blocks become plinths: a coffin lies on each long block, a tombstone stands on each square one,
+   * a broken candle pillar on the small ones. Cobwebs hang in some corners and the light of every candle is
+   * kept (`candles`) so it cuts through the dark.
+   */
+  private crypt(g: CanvasRenderingContext2D) {
+    const { t, lift, level } = this;
+    const W = level.w;
+    const Hh = level.h;
+    const wall = (x: number, y: number) => tileAt(level, x, y) === Tile.Wall;
+    const used = new Uint8Array(W * Hh);
+    const fits = (x: number, y: number, w: number, h: number) => {
+      if (x < 1 || y < 1 || x + w > W - 1 || y + h > Hh - 1) return false;
+      for (let j = y; j < y + h; j++)
+        for (let i = x; i < x + w; i++) if (!wall(i, j) || used[j * W + i]) return false;
+      return true;
+    };
+    const take = (x: number, y: number, w: number, h: number) => {
+      for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) used[j * W + i] = 1;
+    };
+    const sprite = (
+      name: Parameters<typeof hArt>[0],
+      cx: number,
+      bottom: number,
+      w: number,
+      flip = false,
+    ) => {
+      const img = hArt(name)!;
+      const h = (w * img.height) / img.width;
+      g.save();
+      g.translate(cx, bottom);
+      if (flip) g.scale(-1, 1);
+      g.drawImage(img, -w / 2, -h, w, h);
+      g.restore();
+      return h;
+    };
+    const shadow = (cx: number, cy: number, rx: number) => {
+      g.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      g.beginPath();
+      g.ellipse(cx, cy, rx, rx * 0.3, 0, 0, Math.PI * 2);
+      g.fill();
+    };
+    // A block's top face, in world px: its middle and how far down it goes.
+    const top = (x: number, y: number, w: number, h: number) => ({
+      cx: this.tx(x) + (w * t) / 2,
+      y0: this.ty(y) - lift,
+      y1: this.ty(y + h - 1) - lift + t,
+    });
+    const blocks: { x: number; y: number; w: number; h: number; kind: 'coffin' | 'tomb' | 'pillar' }[] = [];
+    for (const [w, h, kind] of [
+      [3, 2, 'coffin'],
+      [2, 3, 'coffin'],
+      [2, 2, 'tomb'],
+      [3, 1, 'pillar'],
+      [2, 1, 'pillar'],
+      [1, 2, 'pillar'],
+    ] as const)
+      for (let y = 1; y < Hh - 1; y++)
+        for (let x = 1; x < W - 1; x++)
+          if (fits(x, y, w, h)) {
+            take(x, y, w, h);
+            blocks.push({ x, y, w, h, kind });
+          }
+    // The widest a picture can be and still sit inside the block's top (plus a little of the wall above it).
+    const fit = (name: Parameters<typeof hArt>[0], maxW: number, maxH: number) => {
+      const img = hArt(name)!;
+      return Math.min(maxW, (maxH * img.width) / img.height);
+    };
+    // Candles are kept apart, so the dark stays dark between them.
+    const lit: { x: number; y: number }[] = [];
+    for (const b of blocks) {
+      const { cx, y0, y1 } = top(b.x, b.y, b.w, b.h);
+      const r = hash(b.x * 7 + 3, b.y * 13 + 1);
+      const bw = b.w * t;
+      const bh = y1 - y0;
+      if (b.kind === 'coffin') {
+        const w = fit('h-coffin', bw * 0.9, bh * 0.92);
+        shadow(cx, y1 - bh * 0.12, w * 0.4);
+        sprite('h-coffin', cx, y1 - bh * 0.04, w, r > 0.5);
+      } else if (b.kind === 'tomb') {
+        const w = fit('h-tomb', bw * 0.6, bh * 1.05);
+        shadow(cx, y1 - bh * 0.1, w * 0.55);
+        sprite('h-tomb', cx, y1 - bh * 0.05, w);
+      } else if (r < 0.3 && !lit.some((c) => Math.abs(c.x - b.x) + Math.abs(c.y - b.y) < 5)) {
+        lit.push(b);
+        shadow(cx, y1 - t * 0.2, t * 0.3);
+        const h = sprite('h-pillar', cx, y1 - t * 0.12, t * 0.55);
+        this.candles.push({ x: cx, y: y1 - t * 0.12 - h * 0.92 });
+      } else if (r > 0.82 && !lit.some((c) => Math.abs(c.x - b.x) + Math.abs(c.y - b.y) < 4)) {
+        lit.push(b);
+        const h = sprite('h-candles', cx, (y0 + y1) / 2 + t * 0.2, t * 0.48);
+        this.candles.push({ x: cx, y: (y0 + y1) / 2 + t * 0.2 - h * 0.85 });
+      }
+    }
+    // Cobwebs in some of the corners where two walls meet over a corridor.
+    const web = hArt('h-cobweb')!;
+    const ww = t * 0.9;
+    const wh = (ww * web.height) / web.width;
+    for (let y = 1; y < Hh; y++)
+      for (let x = 0; x < W; x++) {
+        if (wall(x, y) || !wall(x, y - 1) || hash(x * 3 + 1, y * 7 + 2) > 0.3) continue;
+        if (wall(x - 1, y)) g.drawImage(web, this.tx(x), this.ty(y), ww, wh);
+        else if (wall(x + 1, y)) {
+          g.save();
+          g.translate(this.tx(x) + t, this.ty(y));
+          g.scale(-1, 1);
+          g.drawImage(web, 0, 0, ww, wh);
+          g.restore();
+        }
+      }
   }
 
   private desk(g: CanvasRenderingContext2D, x: number, y: number) {

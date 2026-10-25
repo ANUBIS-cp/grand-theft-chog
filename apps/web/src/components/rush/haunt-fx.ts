@@ -1,4 +1,5 @@
 import type { RushState } from '@chog-city/game/rush';
+import { hArt } from '../halloween-art';
 
 // A haunted vault (Halloween): the lights are out. You carry a lantern, a warm circle that breathes a little;
 // past it the vault is near-black. What gives itself away in the dark is drawn over the top: guards' eyes,
@@ -64,7 +65,7 @@ export class HauntFx {
     };
     // A candle's breath: two slow waves and a quick one.
     const breathe = 1 + 0.035 * Math.sin(now / 410) + 0.02 * Math.sin(now / 137) + 0.012 * Math.sin(now / 53);
-    hole(lantern.x, lantern.y, t * 3.5 * breathe, 1);
+    hole(lantern.x, lantern.y, t * 3.9 * breathe, 1);
     for (const l of lights) hole(l.x - d.cam.x, l.y - d.cam.y, t * l.r, l.strength);
     k.globalCompositeOperation = 'source-over';
     g.save();
@@ -164,7 +165,10 @@ export class HauntFx {
     if (this.sank) {
       const k = (now - this.sank.at) / 650;
       if (k >= 1) this.sank = null;
-      else this.ghost(d, this.sank.x, this.sank.y - k * d.t * 0.6, ph.face, 1 - k, 1 + k * 0.35, 1 - k * 0.4);
+      else if (
+        !this.sprite(d, this.sank.x, this.sank.y - k * d.t * 0.6, ph.face, 1 - k, 1 + k * 0.35, 1 - k * 0.4)
+      )
+        this.ghost(d, this.sank.x, this.sank.y - k * d.t * 0.6, ph.face, 1 - k, 1 + k * 0.35, 1 - k * 0.4);
     }
     if (out || !p) return;
     if (now - this.trailAt > 55) {
@@ -175,7 +179,8 @@ export class HauntFx {
     this.mist(d);
     const rise = Math.min(1, (now - this.shownAt) / 750);
     const ease = 1 - (1 - rise) ** 3;
-    this.ghost(d, p.x, p.y + (1 - ease) * d.t * 0.5, ph.face, ease, 0.7 + 0.3 * ease, 1);
+    if (!this.sprite(d, p.x, p.y + (1 - ease) * d.t * 0.5, ph.face, ease, 0.7 + 0.3 * ease, 1))
+      this.ghost(d, p.x, p.y + (1 - ease) * d.t * 0.5, ph.face, ease, 0.7 + 0.3 * ease, 1);
   }
 
   private mist(d: HauntDraw) {
@@ -201,6 +206,52 @@ export class HauntFx {
    * The ghost itself: a Chog's round head with its spikes swept back, big round Chog eyes, little wisps of arms
    * reaching the way it drifts, and a body that narrows into a swaying tail. Lit from inside, with a halo.
    */
+  /** The phantom's picture when it's loaded (else the drawn one): floating, breathing, its halo and pool. */
+  private sprite(
+    d: HauntDraw,
+    x: number,
+    y: number,
+    face: number,
+    alpha: number,
+    scale: number,
+    stretch: number,
+  ) {
+    const img = hArt('phantom');
+    if (!img) return false;
+    const { g, t, now } = d;
+    const bob = Math.sin(now / 340) * t * 0.08;
+    const h = t * 2.2 * scale * (2 - stretch);
+    const w = (h * img.width) / img.height;
+    // Breathing: a slow squash and stretch.
+    const breathe = 1 + 0.035 * Math.sin(now / 520);
+    g.save();
+    g.globalAlpha = alpha;
+    g.globalCompositeOperation = 'lighter';
+    const halo = g.createRadialGradient(x, y - h * 0.45 + bob, h * 0.1, x, y - h * 0.45 + bob, h * 0.9);
+    halo.addColorStop(0, `rgba(${MIST}, 0.26)`);
+    halo.addColorStop(1, `rgba(${MIST}, 0)`);
+    g.fillStyle = halo;
+    g.beginPath();
+    g.arc(x, y - h * 0.45 + bob, h * 0.9, 0, Math.PI * 2);
+    g.fill();
+    const pool = g.createRadialGradient(x, y + t * 0.38, 0, x, y + t * 0.38, t * 0.95);
+    pool.addColorStop(0, `rgba(${MIST}, 0.3)`);
+    pool.addColorStop(1, `rgba(${MIST}, 0)`);
+    g.fillStyle = pool;
+    g.beginPath();
+    g.ellipse(x, y + t * 0.38, t * 0.95, t * 0.34, 0, 0, Math.PI * 2);
+    g.fill();
+    g.globalCompositeOperation = 'source-over';
+    g.translate(x, y + t * 0.3 + bob);
+    // Leaning into the way it drifts.
+    g.rotate(face * -0.06);
+    g.scale(face < 0 ? -1 / breathe : 1 / breathe, breathe);
+    g.globalAlpha = alpha * 0.92;
+    g.drawImage(img, -w / 2, -h, w, h);
+    g.restore();
+    return true;
+  }
+
   private ghost(
     d: HauntDraw,
     x: number,

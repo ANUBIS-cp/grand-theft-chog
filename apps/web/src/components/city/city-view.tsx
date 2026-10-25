@@ -12,6 +12,7 @@ import {
   newWalker,
   placeOf,
   PUMPKIN_GRAB,
+  hopAway,
   pumpkinSpots,
   rng,
   route,
@@ -616,6 +617,14 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       if (p.practicePumpkins) {
         const at = Date.now();
         s.pk = s.pk.filter((k) => k.until > at);
+        // They hop away from you, like the real ones.
+        for (const k of s.pk) {
+          const to = hopAway(k, [{ x: s.x, y: s.y }], at, Math.random);
+          if (!to) continue;
+          k.hop = { fx: k.x, fy: k.y, at: now };
+          k.x = to.x;
+          k.y = to.y;
+        }
         for (const k of s.pk)
           if (Math.hypot(k.x - s.x, k.y - s.y) < PUMPKIN_GRAB) {
             s.pk = s.pk.filter((x) => x !== k);

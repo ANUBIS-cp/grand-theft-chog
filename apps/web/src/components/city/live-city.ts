@@ -70,6 +70,10 @@ export interface Pumpkin {
   cash: number;
   gold: boolean;
   until: number;
+  /** Its last hop away from someone: where from, and when it took off (this page's clock), for the arc. */
+  hop?: { fx: number; fy: number; at: number };
+  /** The preview's own pumpkins: when they may hop next (see hopAway). */
+  next?: number;
 }
 
 export interface PumpkinGot {
@@ -342,6 +346,15 @@ export class LiveCity {
       case 'pk':
         this.pumpkins = m.list as Pumpkin[];
         break;
+      case 'pk-hop': {
+        const p = this.pumpkins.find((k) => k.id === m.id);
+        if (p) {
+          p.hop = { fx: m.fx as number, fy: m.fy as number, at: now };
+          p.x = m.x as number;
+          p.y = m.y as number;
+        }
+        break;
+      }
       case 'pk-got':
         this.pumpkins = this.pumpkins.filter((p) => p.id !== m.id);
         this.on.pumpkin?.(m as unknown as PumpkinGot);

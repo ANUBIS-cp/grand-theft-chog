@@ -1,5 +1,5 @@
 import { bloodMoon, isHalloweenWeek } from '@chog-city/game';
-import { PUMPKIN_GRAB, placeOf, pumpkinSpots } from '@chog-city/game/city';
+import { PUMPKIN_GRAB, hopAway, placeOf, pumpkinSpots } from '@chog-city/game/city';
 import { signInternal } from '@chog-city/server/ticket';
 import { runningFor } from './getaway.ts';
 
@@ -39,6 +39,8 @@ export interface Pumpkin {
   cash: number;
   gold: boolean;
   until: number;
+  /** When it may hop away next (ms; see hopAway). */
+  next?: number;
 }
 
 const pumpkins = new Map<string, Pumpkin>();
@@ -99,6 +101,15 @@ export function stepPumpkins(
       break;
     }
     nextPumpkin = now + (moon ? 30_000 + rand() * 25_000 : 5 * 60_000 + rand() * 5 * 60_000);
+  }
+  // Pumpkins hop away from any Chog that comes near: everyone sees the same hop.
+  const chasers = [...hunters].filter((h) => h.chog !== null && h.gang !== null && !jailedNow(h, now));
+  for (const p of pumpkins.values()) {
+    const to = hopAway(p, chasers, now, rand);
+    if (!to) continue;
+    broadcast({ t: 'pk-hop', id: p.id, fx: p.x, fy: p.y, x: to.x, y: to.y });
+    p.x = to.x;
+    p.y = to.y;
   }
   for (const p of pumpkins.values())
     for (const h of hunters) {

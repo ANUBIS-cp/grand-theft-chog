@@ -1,3 +1,5 @@
+import { CITY, HOP } from '@chog-city/game/city';
+import { hArt, loadHalloweenArt } from '../halloween-art';
 import { Halloween, type HauntView } from './halloween';
 import type { Pumpkin, PumpkinGot } from './live-city';
 
@@ -40,6 +42,7 @@ export class CityHunts {
     inView: (x: number, y: number) => boolean,
     push: (y: number, draw: () => void) => void,
   ) {
+    if (this.pumpkins.length || this.moon) loadHalloweenArt();
     for (const p of this.pumpkins) {
       if (!this.born.has(p.id)) this.born.set(p.id, now);
       if (inView(p.x, p.y)) push(p.y, () => this.drawPumpkin(v, p, now));
@@ -50,11 +53,11 @@ export class CityHunts {
 
   /** Each pumpkin lights the street round it at night (screen px). */
   lights(v: HauntView): { x: number; y: number; r: number }[] {
-    return this.pumpkins.map((p) => ({
-      x: v.sx(p.x),
-      y: v.sy(p.y) - v.t * 0.4,
-      r: v.t * (p.gold ? 2.6 : 2),
-    }));
+    const now = performance.now();
+    return this.pumpkins.map((p) => {
+      const at = this.where(p, now);
+      return { x: v.sx(at.x), y: v.sy(at.y) - v.t * 0.4, r: v.t * (p.gold ? 2.6 : 2) };
+    });
   }
 
   private scaleIn(p: Pumpkin, now: number) {
@@ -64,36 +67,68 @@ export class CityHunts {
     return 1 + (c1 + 1) * (k - 1) ** 3 + c1 * (k - 1) ** 2;
   }
 
+  /**
+   * Where a pumpkin is drawn now: mid-hop it arcs from where it was to where it lands. `lift` is its height off
+   * the street (tiles), `land` how hard it's squashing as it lands (0-1).
+   */
+  private where(p: Pumpkin, now: number) {
+    const h = p.hop;
+    if (!h) return { x: p.x, y: p.y, lift: 0, land: 0 };
+    const k = (now - h.at) / HOP.air;
+    if (k >= 1) {
+      const after = (now - h.at - HOP.air) / 140;
+      return { x: p.x, y: p.y, lift: 0, land: after < 1 ? Math.sin(after * Math.PI) : 0 };
+    }
+    const e = Math.max(0, k);
+    return {
+      x: h.fx + (p.x - h.fx) * e,
+      y: h.fy + (p.y - h.fy) * e,
+      lift: Math.sin(e * Math.PI) * 0.6,
+      land: 0,
+    };
+  }
+
   private drawPumpkin(v: HauntView, p: Pumpkin, now: number) {
     const g = v.g;
     const t = v.t * 0.95;
     const W = t * 1.5;
     const H = t * 1.18;
-    const x = v.sx(p.x);
-    const y = v.sy(p.y);
-    const seed = p.x * 3.7 + p.y * 1.9;
+    const at = this.where(p, now);
+    const x = v.sx(at.x);
+    const y = v.sy(at.y);
+    const seed = p.id.length * 3.7 + p.id.charCodeAt(p.id.length - 1);
     const pop = Math.max(0, this.scaleIn(p, now));
     const left = p.until - Date.now();
     // Its last 15 seconds: it flickers, about to go.
     const fading = left < 15_000 ? 0.55 + 0.45 * Math.abs(Math.sin(now / 140)) : 1;
-    // A little hop every couple of seconds, squashing as it lands: it wants to be picked up.
-    const hopK = (now / 2200 + seed * 0.1) % 1;
-    const hop = hopK < 0.18 ? Math.sin((hopK / 0.18) * Math.PI) : 0;
-    const squash = hopK >= 0.18 && hopK < 0.26 ? Math.sin(((hopK - 0.18) / 0.08) * Math.PI) * 0.12 : 0;
-    const bob = Math.sin(now / 380 + seed) * v.t * 0.04 + hop * v.t * 0.35;
+    // Hopping away from you: up in an arc, a squash as it lands; standing, a nervous little bounce.
+    const idle = at.lift === 0 && at.land === 0;
+    const twitch = idle ? Math.abs(Math.sin(now / 260 + seed)) * v.t * 0.06 : 0;
+    const squash = at.land * 0.16 - (at.lift > 0 ? 0.06 : 0);
+    const bob = at.lift * v.t + twitch;
     g.save();
     g.globalAlpha = fading;
     g.fillStyle = 'rgba(0,0,0,0.4)';
     g.beginPath();
-    g.ellipse(x, y + v.t * 0.04, W * 0.46 * pop, v.t * 0.12 * pop, 0, 0, Math.PI * 2);
+    // Its shadow stays on the street and shrinks as it jumps.
+    const sh = 1 - at.lift * 0.45;
+    g.ellipse(x, y + v.t * 0.04, W * 0.46 * pop * sh, v.t * 0.12 * pop * sh, 0, 0, Math.PI * 2);
     g.fill();
     g.translate(x, y - bob);
     g.scale(pop * (1 + squash), pop * (1 - squash));
     g.rotate(Math.sin(now / 520 + seed) * 0.05);
-    const body = p.gold ? this.goldBody(t, v.dpr) : this.art.pumpkinBody(t, v.dpr);
-    g.drawImage(body, -W * 0.62, -H * 1.42, W * 1.24, H * 1.5);
-    const flick = 0.82 + 0.18 * Math.sin(now / 61 + seed) * Math.sin(now / 33 + seed * 2);
-    this.art.pumpkinFace(g, 0, -H * 0.52, W, H, flick, 1.2, 0.5, p, now);
+    // The drawn pumpkin full of cash (docs/art-halloween.md); until it's loaded, the carved lantern.
+    const pic = hArt(p.gold ? 'pumpkin-gold' : 'pumpkin-cash');
+    if (pic) {
+      const ph = v.t * 1.55;
+      const pw = (ph * pic.width) / pic.height;
+      g.drawImage(pic, -pw / 2, -ph + v.t * 0.12, pw, ph);
+    } else {
+      const body = p.gold ? this.goldBody(t, v.dpr) : this.art.pumpkinBody(t, v.dpr);
+      g.drawImage(body, -W * 0.62, -H * 1.42, W * 1.24, H * 1.5);
+      const flick = 0.82 + 0.18 * Math.sin(now / 61 + seed) * Math.sin(now / 33 + seed * 2);
+      this.art.pumpkinFace(g, 0, -H * 0.52, W, H, flick, 1.2, 0.5, p, now);
+    }
     g.restore();
   }
 
@@ -137,8 +172,9 @@ export class CityHunts {
   glow(g: G, v: HauntView, now: number) {
     const t = v.t;
     for (const p of this.pumpkins) {
-      const x = v.sx(p.x);
-      const y = v.sy(p.y);
+      const at = this.where(p, now);
+      const x = v.sx(at.x);
+      const y = v.sy(at.y) - at.lift * t;
       if (x < -t * 3 || x > v.view.w + t * 3 || y < -t * 8 || y > v.view.h + t * 3) continue;
       const pop = Math.max(0, this.scaleIn(p, now));
       const col = p.gold ? '255, 214, 90' : '255, 150, 50';
@@ -433,47 +469,109 @@ export class CityHunts {
     g.restore();
   }
 
-  /** The Blood Moon: the city washed red, and the moon's light from the top of the screen. */
+  private mist: HTMLCanvasElement | null = null;
+
+  /** A soft cloudy tile, drawn once: the Blood Moon's mist, drifting over the streets. */
+  private mistTile() {
+    if (this.mist) return this.mist;
+    const S = 512;
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const g = c.getContext('2d')!;
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    // Soft blobs, wrapped round the edges so the tile repeats without a seam.
+    for (let i = 0; i < 26; i++) {
+      const x = rnd() * S;
+      const y = rnd() * S;
+      const r = S * (0.08 + rnd() * 0.16);
+      for (const dx of [-S, 0, S])
+        for (const dy of [-S, 0, S]) {
+          const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+          gr.addColorStop(0, `rgba(170, 24, 44, ${0.22 + rnd() * 0.1})`);
+          gr.addColorStop(1, 'rgba(170, 24, 44, 0)');
+          g.fillStyle = gr;
+          g.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
+        }
+    }
+    this.mist = c;
+    return c;
+  }
+
+  /**
+   * The Blood Moon in the city, without a filter over the screen: the street lamps burn crimson, a low red mist
+   * drifts along the streets, the edges of the night go a little red, and the moon shows in the plaza
+   * fountain's water. (The moon itself is in the badge under the map.)
+   */
   bloodMoon(g: G, v: HauntView, now: number) {
     if (!this.moon) return;
     const W = v.view.w;
     const H = v.view.h;
+    const t = v.t;
+    const seen = (x: number, y: number, m: number) => x > -m && x < W + m && y > -m && y < H + m;
     g.save();
-    g.globalCompositeOperation = 'multiply';
-    g.fillStyle = 'rgba(255, 120, 120, 0.85)';
-    g.fillRect(0, 0, W, H);
-    g.globalCompositeOperation = 'lighter';
-    // The moon itself, half off the top of the screen, and its glow.
-    // Top middle, clear of the card on the left and the map on the right.
-    const mx = W * 0.56;
-    const my = -Math.min(W, H) * 0.07;
-    const R = Math.min(W, H) * 0.15;
-    const halo = g.createRadialGradient(mx, my, R * 0.6, mx, my, R * 4.5);
-    halo.addColorStop(0, `rgba(255, 50, 40, ${0.32 + 0.04 * Math.sin(now / 900)})`);
-    halo.addColorStop(1, 'rgba(255, 30, 30, 0)');
-    g.fillStyle = halo;
-    g.fillRect(0, 0, W, H);
-    g.globalCompositeOperation = 'source-over';
-    const disc = g.createRadialGradient(mx - R * 0.3, my + R * 0.25, R * 0.1, mx, my, R);
-    disc.addColorStop(0, '#ff8a66');
-    disc.addColorStop(0.6, '#d8262a');
-    disc.addColorStop(1, '#7a0c18');
-    g.fillStyle = disc;
-    g.beginPath();
-    g.arc(mx, my, R, 0, Math.PI * 2);
-    g.fill();
-    // Craters.
-    g.fillStyle = 'rgba(90, 8, 16, 0.35)';
-    for (const [dx, dy, r] of [
-      [-0.35, 0.35, 0.16],
-      [0.2, 0.55, 0.11],
-      [0.4, 0.15, 0.08],
-      [-0.05, 0.75, 0.07],
+    // The mist, in two layers drifting at different speeds, so it rolls.
+    const tile = this.mistTile();
+    const size = t * 14;
+    for (const [speed, alpha, scale] of [
+      [0.012, 0.22, 1],
+      [-0.008, 0.16, 1.6],
     ] as const) {
-      g.beginPath();
-      g.arc(mx + dx * R, my + dy * R, r * R, 0, Math.PI * 2);
-      g.fill();
+      const sz = size * scale;
+      const ox = (((v.cam.x * 0.9 + now * speed * t) % sz) + sz) % sz;
+      const oy = (((v.cam.y * 0.9 + now * speed * 0.4 * t) % sz) + sz) % sz;
+      g.globalAlpha = alpha;
+      for (let x = -ox; x < W; x += sz) for (let y = -oy; y < H; y += sz) g.drawImage(tile, x, y, sz, sz);
     }
+    g.globalAlpha = 1;
+    // A faint red at the edges of the night.
+    const edge = g.createRadialGradient(
+      W / 2,
+      H / 2,
+      Math.min(W, H) * 0.4,
+      W / 2,
+      H / 2,
+      Math.max(W, H) * 0.75,
+    );
+    edge.addColorStop(0, 'rgba(120, 8, 24, 0)');
+    edge.addColorStop(1, 'rgba(90, 6, 20, 0.22)');
+    g.fillStyle = edge;
+    g.fillRect(0, 0, W, H);
+    // Crimson lamps.
+    g.globalCompositeOperation = 'lighter';
+    for (const p of CITY.props) {
+      if (p.kind !== 'lamp') continue;
+      const x = v.sx(p.x);
+      const y = v.sy(p.y) - t * 1.95;
+      if (!seen(x, y, t * 3)) continue;
+      const flick = 0.85 + 0.15 * Math.sin(now / 120 + p.x * 3) * Math.sin(now / 47 + p.y);
+      const r = t * 2.4;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, `rgba(255, 70, 60, ${0.55 * flick})`);
+      gr.addColorStop(0.25, `rgba(220, 30, 40, ${0.25 * flick})`);
+      gr.addColorStop(1, 'rgba(200, 20, 30, 0)');
+      g.fillStyle = gr;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    g.globalCompositeOperation = 'source-over';
+    // The moon in the fountain: its picture in the water, rippling.
+    const moon = hArt('blood-moon');
+    if (moon)
+      for (const p of CITY.props) {
+        if (p.kind !== 'fountain') continue;
+        const x = v.sx(p.x);
+        const y = v.sy(p.y) - t * 0.08;
+        if (!seen(x, y, t * 3)) continue;
+        g.save();
+        g.beginPath();
+        g.ellipse(x, y, t * 0.92, t * 0.44, 0, 0, Math.PI * 2);
+        g.clip();
+        const r = t * 0.5;
+        const wob = Math.sin(now / 700) * t * 0.04;
+        g.globalAlpha = 0.45;
+        g.drawImage(moon, x + t * 0.25 - r + wob, y - r * 0.55, r * 2, r * 1.1);
+        g.restore();
+      }
     g.restore();
   }
 

@@ -4,21 +4,22 @@ import { cn } from '@/lib/cn';
 // The Blood Moon in the corner, under the map: a countdown to the next one during (and just before) Halloween
 // week, and while it's up, how long is left, pulsing red.
 
-/** The moon itself, in CSS: a red disc with a few craters and a glow. */
+/** The moon (the drawn picture, docs/art-halloween.md), glowing while it's up. */
 function Moon({ up, big }: { up: boolean; big?: boolean }) {
   return (
-    <span
+    <img
+      src="/art/halloween/blood-moon.webp?v=1"
+      alt=""
+      draggable={false}
+      width={big ? 62 : 20}
+      height={big ? 62 : 20}
+      style={{ width: big ? 62 : 20, height: big ? 62 : 20, maxWidth: 'none' }}
       className={cn(
-        'relative inline-block shrink-0 rounded-full',
-        big ? 'h-[18px] w-[18px] scale-[3.4]' : 'h-[18px] w-[18px]',
-        up && 'shadow-[0_0_14px_4px_rgba(255,40,40,0.55)]',
+        'pointer-events-none aspect-square shrink-0 select-none rounded-full object-contain',
+        up &&
+          (big ? 'shadow-[0_0_36px_8px_rgba(255,40,40,0.45)]' : 'shadow-[0_0_14px_4px_rgba(255,40,40,0.55)]'),
       )}
-      style={{ background: 'radial-gradient(circle at 35% 35%, #ff9a7a 0%, #e0262c 55%, #7a0c18 100%)' }}
-    >
-      <span className="absolute left-[4px] top-[9px] h-[4px] w-[4px] rounded-full bg-[#5a0812]/45" />
-      <span className="absolute left-[10px] top-[4px] h-[3px] w-[3px] rounded-full bg-[#5a0812]/40" />
-      <span className="absolute left-[11px] top-[11px] h-[2.5px] w-[2.5px] rounded-full bg-[#5a0812]/35" />
-    </span>
+    />
   );
 }
 
@@ -96,7 +97,7 @@ const ROWS = [
     icon: <PumpkinIcon />,
     bg: 'bg-[#3a1a06]',
     title: 'Pumpkin Rush',
-    line: 'Pumpkins full of cash pop up all over the city. Follow the column of light. First Chog to one keeps it; the gold ones pay $1,500.',
+    line: 'Pumpkins full of cash pop up all over the city and hop away when you get close. Corner one to grab it; the gold ones are quick and pay $1,500.',
   },
   {
     icon: <Coins size={20} weight="fill" className="text-[#ffd23f]" />,
@@ -187,8 +188,8 @@ export function MoonCard(props: {
                 <span>Try it now</span>
               </button>
               <p className="mt-2 text-center text-[12px] leading-snug text-white/50">
-                Owner test: the red city, practice pumpkins round you, and a haunted practice vault. Only you
-                see it, and nothing real is paid.
+                Owner test: the Blood Moon city, practice pumpkins round you, and a haunted practice vault.
+                Only you see it, and nothing real is paid.
               </p>
             </>
           )}
