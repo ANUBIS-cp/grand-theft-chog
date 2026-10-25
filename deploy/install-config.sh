@@ -6,7 +6,7 @@ for u in systemd/*.service systemd/*.timer; do install -m 0644 "$u" /etc/systemd
 install -m 0755 backup.sh /usr/local/bin/chog-city-backup
 # Non-secret settings. Secrets (db.env, keys) are created by hand and never come from the repo.
 touch /etc/chog-city/app.env
-grep -q '^PUBLIC_HOST=' /etc/chog-city/app.env || echo 'PUBLIC_HOST=chogcity.35-212-31-75.sslip.io' >> /etc/chog-city/app.env
+grep -q '^PUBLIC_HOST=' /etc/chog-city/app.env || echo 'PUBLIC_HOST=chogcity.34-4-42-81.sslip.io' >> /etc/chog-city/app.env
 # The site's names: the first is the real address, the rest redirect to it (deploy/set-domain.sh adds one).
 HOSTS=$(grep -m1 '^PUBLIC_HOST=' /etc/chog-city/app.env | cut -d= -f2)
 MAIN=${HOSTS%%,*}

@@ -2,7 +2,7 @@
 # Ships the current commit to the server, builds it there, switches it live and checks it.
 # Usage (from the repo root on the Mac): deploy/deploy.sh [--config]
 set -euo pipefail
-HOST=ubuntu@35.212.31.75
+HOST=ubuntu@34.4.42.81
 KEY="$HOME/.ssh/flipper_gcp"
 SSH=(ssh -i "$KEY" -o ConnectTimeout=15 "$HOST")
 
