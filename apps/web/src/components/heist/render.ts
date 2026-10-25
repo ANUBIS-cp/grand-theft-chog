@@ -210,7 +210,9 @@ export class VaultRenderer {
         if (tileAt(level, x, y) === Tile.Wall) continue;
         const floor = tileAt(level, x, y) === Tile.Exit ? 'exit' : this.floorOf(x, y);
         if (H && floor !== 'exit') {
-          g.fillStyle = floor === 'wood' || floor === 'carpet' ? planks! : stone!;
+          // Corridors are old planks, the safe's room is stone: either way darker than the stone walls, so
+          // the way through reads at a glance.
+          g.fillStyle = floor === 'gold' ? stone! : planks!;
           g.fillRect(this.tx(x), this.ty(y), t, t);
         } else this.floorTile(g, x, y, floor);
       }
@@ -479,8 +481,21 @@ export class VaultRenderer {
     if (!isWall(-1, 0)) g.fillRect(px, top, lw, t + (isWall(0, 1) ? 0 : lift));
     if (!isWall(1, 0)) g.fillRect(px + t - lw, top, lw, t + (isWall(0, 1) ? 0 : lift));
     if (!isWall(0, 1)) g.fillRect(px, top + t - 1, t, lw);
-    g.fillStyle = 'rgba(170, 200, 230, 0.22)';
-    if (!isWall(0, -1)) g.fillRect(px + (isWall(-1, 0) ? 0 : lw), top + lw, t - lw * 2, 1.5);
+    // A lit rim round the top's edges (moonlight from above), so each block reads as raised stone.
+    const rim = Math.max(2, t * 0.06);
+    g.fillStyle = 'rgba(200, 225, 255, 0.32)';
+    if (!isWall(0, -1)) g.fillRect(px, top + lw, t, rim);
+    if (!isWall(-1, 0)) g.fillRect(px + lw, top, rim, t);
+    if (!isWall(1, 0)) g.fillRect(px + t - lw - rim * 0.7, top, rim * 0.7, t);
+    // The wall's shadow on the floor in front of it.
+    if (!isWall(0, 1) && y < level.h - 1) {
+      const sy = top + t + lift;
+      const sh = g.createLinearGradient(0, sy, 0, sy + t * 0.5);
+      sh.addColorStop(0, 'rgba(3, 2, 10, 0.6)');
+      sh.addColorStop(1, 'rgba(3, 2, 10, 0)');
+      g.fillStyle = sh;
+      g.fillRect(px, sy, t, t * 0.5);
+    }
   }
 
   /**

@@ -16,9 +16,9 @@ const SETS = [
 
 /** Textures: the size each repeat is stored at, and how much darker / greyer it's made. */
 const TEXTURES: Record<string, { w: number; h: number; brightness: number; saturation: number }> = {
-  'h-floor-stone': { w: 512, h: 512, brightness: 0.62, saturation: 0.62 },
-  'h-floor-wood': { w: 512, h: 512, brightness: 0.95, saturation: 0.9 },
-  'h-wall-top': { w: 512, h: 344, brightness: 0.85, saturation: 0.85 },
+  'h-floor-stone': { w: 512, h: 512, brightness: 0.5, saturation: 0.55 },
+  'h-floor-wood': { w: 512, h: 512, brightness: 0.78, saturation: 0.85 },
+  'h-wall-top': { w: 512, h: 344, brightness: 1.12, saturation: 0.8 },
   'h-wall-front': { w: 512, h: 512, brightness: 0.9, saturation: 0.9 },
 };
 /** Things: the longest side after trimming. */
