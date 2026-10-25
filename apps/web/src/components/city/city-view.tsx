@@ -167,6 +167,9 @@ function inStickZone(box: DOMRect, x: number, y: number) {
   return fx >= z.left && fx <= z.left + z.w && fy >= z.top;
 }
 
+/** With nothing touched for this long (ms), the city draws at 30 frames a second instead of 60. */
+const IDLE_MS = 10_000;
+
 const POS_KEY = 'cw-pos';
 function savedSpot(): { x: number; y: number } {
   try {
@@ -425,12 +428,18 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     window.addEventListener('keydown', kd);
     window.addEventListener('keyup', ku);
     window.addEventListener('blur', blur);
+    // Any touch, click or key: back to full speed at once (see the idle rule in step()).
+    let activeAt = performance.now();
+    const active = () => (activeAt = performance.now());
+    const ACTIVITY = ['pointerdown', 'pointermove', 'keydown', 'wheel'] as const;
+    for (const ev of ACTIVITY) window.addEventListener(ev, active, { passive: true });
 
     let raf = 0;
     let last = performance.now();
     let miniAt = 0;
     let savedAt = 0;
     const gate = frameGate();
+    let idleSkip = false;
     // One bad frame must never stop the game: if drawing throws, the next frame still comes.
     const frame = (now: number) => {
       try {
@@ -444,6 +453,27 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       if (!gate(now)) {
         raf = requestAnimationFrame(frame);
         return;
+      }
+      // Idle: nothing touched for 10 seconds, your Chog standing still and no chase on (or, on a computer, the
+      // game's window isn't the one in front): draw every other frame, 30 a second instead of 60, the rate Unity
+      // runs phone games at by default to save battery and heat, and what iPhones drop web pages to in Low Power
+      // Mode. Your first touch brings it straight back to 60. Everything moves by the time passed, so no speed
+      // changes, only smoothness while you watch.
+      const busy =
+        s.keys.size > 0 ||
+        !!s.stick ||
+        s.path.length > 0 ||
+        s.moving ||
+        !!s.practice ||
+        !!s.after ||
+        (s.net?.chases.size ?? 0) > 0;
+      if (busy) activeAt = now;
+      if (now - activeAt > IDLE_MS || !document.hasFocus()) {
+        idleSkip = !idleSkip;
+        if (idleSkip) {
+          raf = requestAnimationFrame(frame);
+          return;
+        }
       }
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
@@ -761,6 +791,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       window.removeEventListener('keydown', kd);
       window.removeEventListener('keyup', ku);
       window.removeEventListener('blur', blur);
+      for (const ev of ACTIVITY) window.removeEventListener(ev, active);
       steps.policeOff();
     };
   }, []);
