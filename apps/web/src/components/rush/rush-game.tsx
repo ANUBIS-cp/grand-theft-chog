@@ -1303,8 +1303,8 @@ function Coach({ hud }: { hud: Hud }) {
       done: hud.combo,
     },
     {
-      label: 'Grab a loudspeaker',
-      tip: 'The blue one: guards panic and you can knock them out.',
+      label: 'Grab the gold glove',
+      tip: 'The shining gold glove: the guards panic, and you can knock them out.',
       done: hud.flipped,
     },
     {
@@ -1389,10 +1389,10 @@ function StartCard({
             {haunted ? 'Haunted vault · move to start' : 'Move to start'}
           </strong>
           {haunted
-            ? 'The lights are out. Watch for red eyes, follow the glints of cash, and keep away from the phantom: it drifts through walls. A loudspeaker or a tackle banishes it.'
+            ? 'The lights are out. Watch for red eyes, follow the glints of cash, and keep away from the phantom: it drifts through walls. A gold glove or a tackle banishes it.'
             : rescue
               ? `Open ${rescue.name}'s cell at the top, dodge the guards, and get out the green exit.`
-              : `Grab cash in long runs for combos, crack the safe (${money(safeValue)}), and get out before the doors lock. Blue loudspeakers make the guards run.`}
+              : `Grab cash in long runs for combos, crack the safe (${money(safeValue)}), and get out before the doors lock. Grab a gold glove and the guards run: catch them to knock them out.`}
         </div>
       </div>
     </div>

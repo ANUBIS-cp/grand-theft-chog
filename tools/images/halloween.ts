@@ -1,5 +1,6 @@
 // Prepares the Halloween art (docs/art-halloween.md) for the game. Put the pictures in art-in/halloween/, then:
 //   node tools/images/halloween.ts
+// It also prepares the vault's own drawn pieces in art-in/vault/ (the gold glove) into public/art/vault/.
 // Textures (floors, walls) are sized and toned down a little so game pieces stand out on them; things (on
 // magenta) get their background cut off, are trimmed and sized. Output: apps/web/public/art/halloween/*.webp.
 import { mkdirSync, readdirSync } from 'node:fs';
@@ -8,8 +9,10 @@ import sharp from 'sharp';
 import { keyMagenta } from './key.ts';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
-const IN = join(ROOT, 'art-in/halloween');
-const OUT = join(ROOT, 'apps/web/public/art/halloween');
+const SETS = [
+  { IN: join(ROOT, 'art-in/halloween'), OUT: join(ROOT, 'apps/web/public/art/halloween') },
+  { IN: join(ROOT, 'art-in/vault'), OUT: join(ROOT, 'apps/web/public/art/vault') },
+];
 
 /** Textures: the size each repeat is stored at, and how much darker / greyer it's made. */
 const TEXTURES: Record<string, { w: number; h: number; brightness: number; saturation: number }> = {
@@ -29,41 +32,52 @@ const THINGS: Record<string, number> = {
   'blood-moon': 512,
   'pumpkin-cash': 384,
   'pumpkin-gold': 384,
+  'power-glove': 256,
 };
 
-mkdirSync(OUT, { recursive: true });
-for (const f of readdirSync(IN).filter((x) => /\.(png|jpe?g|webp)$/i.test(x))) {
-  const name = basename(f, extname(f)).toLowerCase();
-  const tex = TEXTURES[name];
-  if (tex) {
-    await sharp(join(IN, f))
-      .resize(tex.w, tex.h, { fit: 'cover' })
-      .modulate({ brightness: tex.brightness, saturation: tex.saturation })
-      .webp({ quality: 86, effort: 5 })
+for (const { IN, OUT } of SETS) {
+  mkdirSync(OUT, { recursive: true });
+  let files: string[] = [];
+  try {
+    files = readdirSync(IN).filter((x) => /\.(png|jpe?g|webp)$/i.test(x));
+  } catch {
+    continue;
+  }
+  for (const f of files) {
+    const name = basename(f, extname(f)).toLowerCase();
+    const tex = TEXTURES[name];
+    if (tex) {
+      await sharp(join(IN, f))
+        .resize(tex.w, tex.h, { fit: 'cover' })
+        .modulate({ brightness: tex.brightness, saturation: tex.saturation })
+        .webp({ quality: 86, effort: 5 })
+        .toFile(join(OUT, `${name}.webp`));
+      console.log(`${name}: texture ${tex.w}x${tex.h}`);
+      continue;
+    }
+    const size = THINGS[name];
+    if (!size) {
+      console.log(`skip ${f}`);
+      continue;
+    }
+    const { data, info } = await sharp(join(IN, f)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    keyMagenta(data, info.width, info.height);
+    // Any strongly magenta pixel left (a corner the outline closed off) goes too: no subject here is pink.
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i]!;
+      const g = data[i + 1]!;
+      const b = data[i + 2]!;
+      if (Math.min(r, b) - g > 90 && r > 150 && b > 90) data[i + 3] = 0;
+    }
+    const png = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } })
+      .png()
+      .toBuffer();
+    await sharp(png)
+      .trim({ threshold: 1 })
+      .resize({ width: size, height: size, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 88, alphaQuality: 100, effort: 5 })
       .toFile(join(OUT, `${name}.webp`));
-    console.log(`${name}: texture ${tex.w}x${tex.h}`);
-    continue;
+    const meta = await sharp(join(OUT, `${name}.webp`)).metadata();
+    console.log(`${name}: ${meta.width}x${meta.height}`);
   }
-  const size = THINGS[name];
-  if (!size) {
-    console.log(`skip ${f}`);
-    continue;
-  }
-  const { data, info } = await sharp(join(IN, f)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  keyMagenta(data, info.width, info.height);
-  // Any strongly magenta pixel left (a corner the outline closed off) goes too: no subject here is pink.
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i]!;
-    const g = data[i + 1]!;
-    const b = data[i + 2]!;
-    if (Math.min(r, b) - g > 90 && r > 150 && b > 90) data[i + 3] = 0;
-  }
-  const png = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
-  await sharp(png)
-    .trim({ threshold: 1 })
-    .resize({ width: size, height: size, fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 88, alphaQuality: 100, effort: 5 })
-    .toFile(join(OUT, `${name}.webp`));
-  const meta = await sharp(join(OUT, `${name}.webp`)).metadata();
-  console.log(`${name}: ${meta.width}x${meta.height}`);
 }

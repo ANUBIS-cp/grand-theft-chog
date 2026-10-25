@@ -7,12 +7,23 @@ import type { Fx } from '../heist/fx';
 import { VaultRenderer } from '../heist/render';
 
 // Draws a Cash Rush run. The vault itself (floors, walls, furniture, the safe) comes from the heist's
-// renderer; on top go the coins and cash, the loudspeakers, the laser gates, the exit, and everyone as game
+// renderer; on top go the coins and cash, the gold gloves, the laser gates, the exit, and everyone as game
 // pieces: you, and the guards with their moods (hunting, patrolling, running scared, knocked out).
 
 /** The interface font: San Francisco on Apple devices, then Inter. */
 export const UI_FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif';
 const INK = '#0d0b1a';
+
+/** The gold glove's picture (public/art/vault), loaded the first time a vault is drawn. */
+let gloveImg: HTMLImageElement | null = null;
+function glove() {
+  if (!gloveImg && typeof window !== 'undefined') {
+    gloveImg = new Image();
+    gloveImg.decoding = 'async';
+    gloveImg.src = '/art/vault/power-glove.webp?v=1';
+  }
+  return gloveImg?.complete && gloveImg.naturalWidth ? gloveImg : null;
+}
 
 /** The maze as a heist level, so the heist renderer can draw its floors and walls. */
 export function asLevel(m: RushMap): Level {
@@ -241,7 +252,7 @@ export class RushRenderer {
       const bob = Math.sin(now / 260 + c.x) * t * 0.05;
       g.drawImage(stack, this.X(c.x + 0.5) - sw / 2, this.Y(c.y + 0.5) - sh / 2 + bob, sw, sh);
     });
-    // Loudspeakers: grab one and the guards run.
+    // Gold gloves: grab one and the guards run (and you can knock them out).
     map.flips.forEach((f, i) => {
       if (s.flips[i]) return;
       this.speaker(this.X(f.x + 0.5), this.Y(f.y + 0.5), now);
@@ -446,9 +457,45 @@ export class RushRenderer {
     });
   }
 
+  /**
+   * The gold glove (grab it and the guards run, and you can knock them out): the drawn glove, bobbing and
+   * jabbing, a gold ring of light pulsing out under it. Until the picture loads, the old loudspeaker.
+   */
   private speaker(x: number, y: number, now: number) {
     const { g } = this;
     const t = this.v.t;
+    const img = glove();
+    if (img) {
+      const k = (now / 900) % 1;
+      g.save();
+      // Light pooled on the floor, and a ring going out.
+      g.globalCompositeOperation = 'lighter';
+      const pool = g.createRadialGradient(x, y + t * 0.2, 0, x, y + t * 0.2, t * 0.6);
+      pool.addColorStop(0, 'rgba(255, 200, 60, 0.35)');
+      pool.addColorStop(1, 'rgba(255, 200, 60, 0)');
+      g.fillStyle = pool;
+      g.beginPath();
+      g.ellipse(x, y + t * 0.2, t * 0.6, t * 0.24, 0, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = `rgba(255, 214, 102, ${0.7 * (1 - k)})`;
+      g.lineWidth = Math.max(1.5, t * 0.05);
+      g.beginPath();
+      g.ellipse(x, y + t * 0.2, t * (0.2 + k * 0.45), t * (0.08 + k * 0.18), 0, 0, Math.PI * 2);
+      g.stroke();
+      g.globalCompositeOperation = 'source-over';
+      // Bobbing, and a quick jab forward now and then.
+      const jabK = (now / 1600) % 1;
+      const jab = jabK < 0.12 ? Math.sin((jabK / 0.12) * Math.PI) : 0;
+      const h = t * 0.92;
+      const w = (h * img.width) / img.height;
+      const bob = Math.sin(now / 300) * t * 0.05;
+      g.translate(x + jab * t * 0.1, y - t * 0.12 + bob);
+      g.rotate(-jab * 0.18);
+      g.scale(1 + jab * 0.12, 1 + jab * 0.12);
+      g.drawImage(img, -w / 2, -h / 2, w, h);
+      g.restore();
+      return;
+    }
     const pulse = 1 + 0.12 * Math.sin(now / 140);
     g.save();
     g.translate(x, y - t * 0.08);

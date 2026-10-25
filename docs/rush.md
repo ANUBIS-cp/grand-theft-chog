@@ -36,7 +36,7 @@ Replaces the tile-by-tile stealth heist (feedback 9 Oct: "the whole idea isn't f
   - *Flanker* mirrors the bruiser to box you in.
   - *Drifter* chases when far away and wanders off when close.
 - **Waves.** Guards alternate between patrolling their corner and hunting: patrol 6 s, then hunt 14 s. Turning round signals each change. Speeds: patrolling 3.4 tiles/s, hunting 4.4 tiles/s (you're faster), and 5.0 tiles/s in the last 15 seconds.
-- **Flip.** Two loudspeakers in the map (pickups): for 6 s guards panic and run, and touching one knocks it out for 6 s (+$100, doubling per guard). Your trait power is a button (Hide, Sprint, Laser eyes and the rest), using the same powers you already have.
+- **Flip.** Two gold gloves in the map (pickups; the map letter is still F): for 6 s guards panic and run, and touching one knocks it out for 6 s (+$100, doubling per guard). Your trait power is a button (Hide, Sprint, Laser eyes and the rest), using the same powers you already have.
 - **Getting out.** Touch the exit at any time with at least $1. If a guard touches you, you're busted: your gang pays what you carried + $250, and you get 30 min in jail.
 - **The clock.** When the timer hits 0 the doors lock: you have 5 s at the exit, then you're busted.
 - **Bonuses.** Clean-out +25% for 80% of the cash and the safe. Revenge +25%.
@@ -79,6 +79,6 @@ Cash only moves between gangs, so without these a busy robber stacks for ever an
 
 A run is haunted when it starts in Halloween week on a Skulls or Radioactive vault, or on any vault while the Blood Moon is up (`hauntedVault` in packages/game/src/season.ts). The flag is stored on the run (`heist_runs.haunted`) and carried in the raid pass, so the browser, the live server, the server's replay check and the replay page all play the same rules.
 
-- **Lights out.** You see a lantern circle round you; past it the vault is near-black. Guards' eyes glow red, cash glints now and then, and the lasers, the exit, the safe and the loudspeakers give off their own light (drawing only: apps/web/src/components/rush/haunt-fx.ts).
+- **Lights out.** You see a lantern circle round you; past it the vault is near-black. Guards' eyes glow red, cash glints now and then, and the lasers, the exit, the safe and the gold gloves give off their own light (drawing only: apps/web/src/components/rush/haunt-fx.ts).
 - **The phantom** (`stepPhantom` in sim.ts): rises 3 s in at the corner farthest from you and drifts straight at you through the walls at 2.3 tiles/s (you run 5.2). Its touch costs a heart and 30% of your cash like a guard's tag, no bribe works on it, then it sinks and rises again far off 5 s later. Hide loses it; a flip or Scare makes it flee and touching it then banishes it for 6 s; so does a tackle or Laser eyes.
 - Practice is haunted in Halloween week once you've done your first practice run; `/heist?haunted=1` opens one any time.
