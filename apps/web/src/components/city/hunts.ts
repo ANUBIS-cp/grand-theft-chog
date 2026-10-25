@@ -1,6 +1,7 @@
 import { CITY, HOP } from '@chog-city/game/city';
 import { hArt, loadHalloweenArt } from '../halloween-art';
 import { Halloween, type HauntView } from './halloween';
+import type { Glow } from './city-render';
 import type { Pumpkin, PumpkinGot } from './live-city';
 
 // The city's live hunts, drawn (the live server runs them: apps/live/src/hunts.ts).
@@ -51,12 +52,17 @@ export class CityHunts {
       for (const id of this.born.keys()) if (!this.pumpkins.some((p) => p.id === id)) this.born.delete(id);
   }
 
-  /** Each pumpkin lights the street round it at night (screen px). */
-  lights(v: HauntView): { x: number; y: number; r: number }[] {
+  /** Each pumpkin lights the street round it at night (screen px), in its own warm colour. */
+  lights(v: HauntView): Glow[] {
     const now = performance.now();
     return this.pumpkins.map((p) => {
       const at = this.where(p, now);
-      return { x: v.sx(at.x), y: v.sy(at.y) - v.t * 0.4, r: v.t * (p.gold ? 2.6 : 2) };
+      return {
+        x: v.sx(at.x),
+        y: v.sy(at.y) - v.t * 0.4,
+        r: v.t * (p.gold ? 2.2 : 1.8),
+        rgb: p.gold ? ([150, 128, 50] as const) : ([150, 100, 45] as const),
+      };
     });
   }
 
@@ -204,14 +210,6 @@ export class CityHunts {
       core.addColorStop(1, 'rgba(255, 245, 210, 0)');
       g.fillStyle = core;
       g.fillRect(x - t * 0.06, base - t * 4, t * 0.12, t * 4);
-      // Warm light on the street round its base.
-      const pool = g.createRadialGradient(x, y, 0, x, y, t * 1.3);
-      pool.addColorStop(0, `rgba(${col}, ${0.22 * pop})`);
-      pool.addColorStop(1, `rgba(${col}, 0)`);
-      g.fillStyle = pool;
-      g.beginPath();
-      g.ellipse(x, y, t * 1.3, t * 0.5, 0, 0, Math.PI * 2);
-      g.fill();
       // Sparks rising up the light.
       for (let i = 0; i < 5; i++) {
         const k = (now / 1600 + i / 5 + p.y * 0.13) % 1;
@@ -537,23 +535,7 @@ export class CityHunts {
     edge.addColorStop(1, 'rgba(90, 6, 20, 0.1)');
     g.fillStyle = edge;
     g.fillRect(0, 0, W, H);
-    // Crimson lamps.
-    g.globalCompositeOperation = 'lighter';
-    for (const p of CITY.props) {
-      if (p.kind !== 'lamp') continue;
-      const x = v.sx(p.x);
-      const y = v.sy(p.y) - t * 1.95;
-      if (!seen(x, y, t * 3)) continue;
-      const flick = 0.96 + 0.04 * Math.sin(now / 1500 + p.x * 3);
-      const r = t * 1.4;
-      const gr = g.createRadialGradient(x, y, 0, x, y, r);
-      gr.addColorStop(0, `rgba(255, 70, 60, ${0.32 * flick})`);
-      gr.addColorStop(0.3, `rgba(220, 30, 40, ${0.12 * flick})`);
-      gr.addColorStop(1, 'rgba(200, 20, 30, 0)');
-      g.fillStyle = gr;
-      g.fillRect(x - r, y - r, r * 2, r * 2);
-    }
-    g.globalCompositeOperation = 'source-over';
+    // (The lamps burn crimson in the night's light map: CityRenderer's drawNight.)
     // The moon in the fountain: its picture in the water, rippling.
     const moon = hArt('blood-moon');
     if (moon)

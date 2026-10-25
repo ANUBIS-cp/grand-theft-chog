@@ -89,6 +89,8 @@ export interface WalkState {
   lastTrail: number;
   /** How high off the ground they're drawn right now (CSS px), for the name tag above. */
   lift: number;
+  /** How the piece was last drawn (lean, squash, turn), so the city's night can light exactly its shape. */
+  pose?: { rot: number; sx: number; sy: number; spin: number; alpha: number };
 }
 
 export function newWalk(x: number, y: number, face: -1 | 1): WalkState {
@@ -253,6 +255,7 @@ export function drawWalker(
   if (opts.emoted !== undefined && opts.emoted < 700)
     rot += Math.sin(opts.emoted / 45) * 0.12 * (1 - opts.emoted / 700);
   w.lift = lift;
+  w.pose = { rot, sx, sy, spin, alpha: opts.alpha ?? 1 };
 
   // Shadow: stays on the ground, smaller the higher they are.
   const air = Math.min(1, lift / (H * 0.45));

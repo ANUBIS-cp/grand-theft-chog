@@ -11,7 +11,7 @@ import {
   type Prop,
 } from '@chog-city/game/city';
 import { chogImage } from '@/lib/images';
-import { makePiece, type Piece } from '../chog/piece';
+import { drawLayers, makePiece, type Piece } from '../chog/piece';
 import {
   TRAIL_OF,
   WALK_OF,
@@ -119,6 +119,46 @@ function shade(hex: string, f: number) {
   const n = parseInt(hex.slice(1), 16);
   const ch = (v: number) => Math.max(0, Math.min(255, Math.round(f < 0 ? v * (1 + f) : v + (255 - v) * f)));
   return `rgb(${ch(n >> 16)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
+}
+
+type RGB = readonly [number, number, number];
+/** A light for the night (screen px): its colour is what it adds to the night's blue, `k` how strongly. */
+export interface Glow {
+  x: number;
+  y: number;
+  r: number;
+  rgb?: RGB;
+  k?: number;
+}
+/**
+ * The light map is kept at half scale and the city is doubled after it's multiplied in ("overbright"), so a
+ * light can make the ground brighter than its painted colour: the city's art is already painted at night, and
+ * light that could only bring it back to that was too faint to see. Half scale: 128 means "as painted".
+ */
+const AS_PAINTED = 'rgb(128,128,128)';
+/** The night where no light reaches: about 45% of the painted colours, a little blue. */
+const NIGHT = 'rgb(58,55,74)';
+/** Each light's colour, as added to the night in the light map (half scale, so 128 is the painted colour). */
+const LIGHT = {
+  lamp: [150, 128, 90],
+  moonLamp: [150, 70, 70],
+  eerieLamp: [120, 140, 110],
+  warm: [150, 118, 70],
+  window: [140, 118, 80],
+  water: [80, 110, 120],
+  screen: [90, 115, 120],
+  flood: [130, 128, 112],
+  sirenRed: [150, 30, 40],
+  sirenBlue: [30, 70, 150],
+  alarm: [160, 30, 40],
+} satisfies Record<string, RGB>;
+/** (1 - (d/r)^2)^2 at a few points: a smooth fade with no visible edge. */
+const FALLOFF = [0, 0.25, 0.5, 0.75, 1].map((at) => [at, (1 - at * at) ** 2] as const);
+/** A door's light: warm white with the gang's colour in it. */
+function doorLight(hex: string): RGB {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (v: number, w: number) => Math.round(v * 0.45 + w * 0.3);
+  return [mix(n >> 16, 140), mix((n >> 8) & 255, 118), mix(n & 255, 80)];
 }
 
 /** How big a prop's drawn art is, in tiles: by width where that's set, else by height. */
@@ -1352,27 +1392,6 @@ export class CityRenderer {
     g.restore();
   }
 
-  /** Red and blue light thrown on the street by each car's sirens, over the night. */
-  private drawSirenGlow(now: number, inView: (x: number, y: number, m: number) => boolean) {
-    const { g, t } = this;
-    for (const c of this.sirens) {
-      if (!inView(c.x, c.y, 4)) continue;
-      const lit = this.siren(c, now);
-      if (lit === 'off') continue;
-      const x = this.sx(c.x);
-      const y = this.sy(c.y) - t * 0.6;
-      const r = t * 2.8;
-      const gr = g.createRadialGradient(x, y, 0, x, y, r);
-      gr.addColorStop(0, lit === 'red' ? 'rgba(255,50,80,0.32)' : 'rgba(60,130,255,0.34)');
-      gr.addColorStop(1, 'rgba(0,0,0,0)');
-      g.save();
-      g.globalCompositeOperation = 'lighter';
-      g.fillStyle = gr;
-      g.fillRect(x - r, y - r, r * 2, r * 2);
-      g.restore();
-    }
-  }
-
   /** A food stall: a cart with a striped canopy. */
   private drawStall(x: number, y: number, n: number, now: number) {
     const { g, t } = this;
@@ -1612,12 +1631,12 @@ export class CityRenderer {
       // The light on the cap: red and blue, flashing.
       const top = y - piece.top - w.lift;
       const red = Math.floor(now / 160) % 2 === 0;
-      const glow = g.createRadialGradient(x, top, 0, x, top, this.t * 0.9);
+      const glow = g.createRadialGradient(x, top, 0, x, top, this.t * 0.45);
       glow.addColorStop(0, red ? 'rgba(255,45,85,0.75)' : 'rgba(60,130,255,0.75)');
       glow.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = glow;
       g.beginPath();
-      g.arc(x, top, this.t * 0.9, 0, Math.PI * 2);
+      g.arc(x, top, this.t * 0.45, 0, Math.PI * 2);
       g.fill();
       g.fillStyle = red ? '#ff2d55' : '#3c82ff';
       g.strokeStyle = INK;
@@ -2001,19 +2020,11 @@ export class CityRenderer {
     for (const th of things) th.draw();
     this.drawDust(now);
 
-    // Every Chog stays lit so its picture reads at night.
-    const lit: { x: number; y: number; r: number }[] = [];
-    for (const p of [...opts.jailed, ...people]) {
-      if (!inView(p.x, p.y, 2)) continue;
-      const pc = this.piece(p);
-      lit.push({ x: this.sx(p.x), y: this.sy(p.y) + t * 0.12 - pc.top * 0.5, r: pc.top * 0.95 });
-    }
-    for (const c of this.sirens)
-      if (inView(c.x, c.y, 3)) lit.push({ x: this.sx(c.x), y: this.sy(c.y), r: t * 1.6 });
+    const lit: Glow[] = [];
     if (haunt && hv) lit.push(...haunt.lights(hv, now));
     lit.push(...this.hunts.lights(hview));
-    this.drawNight(x0, y0, x1, y1, now, lit);
-    this.drawSirenGlow(now, inView);
+    const tint = this.hunts.moon ? 'moon' : haunt ? 'halloween' : null;
+    this.drawNight(x0, y0, x1, y1, now, lit, [...opts.jailed, ...people], tint);
     if (haunt && hv) {
       haunt.glow(g, hv, now);
       haunt.sky(g, hv);
@@ -2177,71 +2188,62 @@ export class CityRenderer {
     g.stroke();
   }
 
-  /** Night: a dark layer with pools of light cut out under lamps, at shop windows, and around you. */
+  /**
+   * Night, lit the way 2D games light a scene (a light map): a layer starts at the night's dim blue, each light
+   * adds its colour into it with a soft falloff, and the layer is multiplied over the city. So a light only
+   * brightens and tints what's under it (in proportion to its colour, so dark stays dark-ish): nothing glows in
+   * the air, and there are no discs of light painted over things. Every Chog's piece is kept at its painted
+   * colours in its own shape (as drawn this frame), so its picture reads at night without a circle round it.
+   */
   private drawNight(
     x0: number,
     y0: number,
     x1: number,
     y1: number,
     now: number,
-    lit: { x: number; y: number; r: number }[],
+    lights: Glow[],
+    people: Person[],
+    tint: 'moon' | 'halloween' | null,
   ) {
     const { t, dpr } = this;
     const d = this.dark.getContext('2d')!;
     d.setTransform(dpr, 0, 0, dpr, 0, 0);
     d.globalCompositeOperation = 'source-over';
-    d.clearRect(0, 0, this.view.w, this.view.h);
-    d.fillStyle = 'rgba(10,6,28,0.58)';
+    d.globalAlpha = 1;
+    d.fillStyle = NIGHT;
     d.fillRect(0, 0, this.view.w, this.view.h);
-    d.globalCompositeOperation = 'destination-out';
-    const hole = (x: number, y: number, r: number, a = 1) => {
+    d.globalCompositeOperation = 'lighter';
+    const add = (x: number, y: number, r: number, [cr, cg, cb]: RGB, k = 1) => {
+      if (r <= 0 || k <= 0) return;
       const gr = d.createRadialGradient(x, y, 0, x, y, r);
-      gr.addColorStop(0, `rgba(0,0,0,${a})`);
-      gr.addColorStop(0.55, `rgba(0,0,0,${a * 0.6})`);
-      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      // Smooth falloff, (1 - (d/r)^2)^2: bright in the middle, fading to nothing at its edge with no rim.
+      for (const [at, f] of FALLOFF) gr.addColorStop(at, `rgba(${cr},${cg},${cb},${f * k})`);
       d.fillStyle = gr;
       d.fillRect(x - r, y - r, r * 2, r * 2);
     };
     const vis = (x: number, y: number, m: number) => x >= x0 - m && x <= x1 + m && y >= y0 - m && y <= y1 + m;
+    const lamp = tint === 'moon' ? LIGHT.moonLamp : LIGHT.lamp;
     for (const p of CITY.props) {
       if (!vis(p.x, p.y, 4)) continue;
-      if (p.kind === 'lamp') hole(this.sx(p.x), this.sy(p.y) - t * 0.3, t * 2.6, 0.95);
-      if (p.kind === 'fountain') hole(this.sx(p.x), this.sy(p.y), t * 2.2, 0.6);
-      if (p.kind === 'screen') hole(this.sx(p.x), this.sy(p.y) - t, t * 3.6, 0.85);
+      if (p.kind === 'lamp') {
+        const eerie = tint === 'halloween' && Math.round(p.x * 7 + p.y * 3) % 2 === 0;
+        add(this.sx(p.x), this.sy(p.y) - t * 0.3, t * 2.6, eerie ? LIGHT.eerieLamp : lamp);
+      }
+      if (p.kind === 'fountain') add(this.sx(p.x), this.sy(p.y), t * 2.2, LIGHT.water, 0.7);
+      if (p.kind === 'screen') add(this.sx(p.x), this.sy(p.y) - t, t * 3.6, LIGHT.screen, 0.85);
     }
-    for (const l of lit) {
-      const gr = d.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r);
-      gr.addColorStop(0, 'rgba(0,0,0,1)');
-      gr.addColorStop(0.6, 'rgba(0,0,0,0.95)');
-      gr.addColorStop(1, 'rgba(0,0,0,0)');
-      d.fillStyle = gr;
-      d.fillRect(l.x - l.r, l.y - l.r, l.r * 2, l.r * 2);
+    for (const l of lights) add(l.x, l.y, l.r, l.rgb ?? LIGHT.warm, l.k ?? 1);
+    for (const c of this.sirens) {
+      if (!vis(c.x, c.y, 4)) continue;
+      const lit = this.siren(c, now);
+      if (lit !== 'off') add(this.sx(c.x), this.sy(c.y) - t * 0.6, t * 2.8, lit === 'red' ? LIGHT.sirenRed : LIGHT.sirenBlue);
     }
     for (const p of CITY.places) {
       if (!vis(p.x + p.w / 2, p.y + p.h, p.w)) continue;
       const fy = this.sy(p.y + p.h) - t * 0.4;
-      hole(this.sx(p.x + 2), fy, t * 2.4, 0.9);
-      hole(this.sx(p.x + p.w - 2), fy, t * 2.4, 0.9);
-      hole(this.sx(p.x + p.w / 2), this.sy(p.y + p.h - CityRenderer.WALL) + t * 0.4, t * 3, 0.8);
-      // Floodlights on the gang's landmark so it reads from across the city.
-      if (p.kind === 'gang') hole(this.sx(p.x + p.w / 2), this.sy(p.y) - t * 0.2, t * 3.6, 0.85);
-      if (p.kind === 'jail') {
-        // The searchlight sweeping the yard.
-        const a = Math.sin(now / 1300) * 0.9;
-        hole(this.sx(p.x + p.w / 2 + Math.sin(a) * 4), this.sy(p.y + p.h + 1.5), t * 1.6, 0.9);
-      }
-    }
-    d.globalCompositeOperation = 'source-over';
-    this.g.setTransform(1, 0, 0, 1, 0, 0);
-    this.g.drawImage(this.dark, 0, 0);
-    this.g.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    // Coloured glow from the signs, added on top.
-    const g = this.g;
-    g.save();
-    g.globalCompositeOperation = 'lighter';
-    for (const p of CITY.places) {
-      if (!vis(p.x + p.w / 2, p.y + p.h, p.w)) continue;
+      add(this.sx(p.x + 2), fy, t * 2.4, LIGHT.window, 0.9);
+      add(this.sx(p.x + p.w - 2), fy, t * 2.4, LIGHT.window, 0.9);
+      // The door, lit in the gang's colour.
       const look = this.places[p.id];
       const color =
         p.kind === 'jail'
@@ -2251,25 +2253,45 @@ export class CityRenderer {
             : look?.color === '#141414'
               ? '#e8b931'
               : (look?.color ?? '#888888');
-      const x = this.sx(p.x + p.w / 2);
-      const y = this.sy(p.y + p.h - CityRenderer.WALL) + t * 0.4;
-      const r = t * 3.2;
-      const gr = g.createRadialGradient(x, y, 0, x, y, r);
-      gr.addColorStop(0, color);
-      gr.addColorStop(1, 'rgba(0,0,0,0)');
-      g.globalAlpha = 0.16;
-      g.fillStyle = gr;
-      g.fillRect(x - r, y - r, r * 2, r * 2);
-      if (look?.alarm && Math.floor(now / 250) % 2 === 0) {
-        const ar = t * 5;
-        const ag = g.createRadialGradient(x, y - t, 0, x, y - t, ar);
-        ag.addColorStop(0, '#ff2d55');
-        ag.addColorStop(1, 'rgba(0,0,0,0)');
-        g.globalAlpha = 0.35;
-        g.fillStyle = ag;
-        g.fillRect(x - ar, y - t - ar, ar * 2, ar * 2);
+      const dx = this.sx(p.x + p.w / 2);
+      const dy = this.sy(p.y + p.h - CityRenderer.WALL) + t * 0.4;
+      add(dx, dy, t * 3, doorLight(color), 0.85);
+      // A robbery: the door flashes red.
+      if (look?.alarm && Math.floor(now / 250) % 2 === 0) add(dx, dy - t, t * 4.5, LIGHT.alarm);
+      // Floodlights on the gang's landmark so it reads from across the city.
+      if (p.kind === 'gang') add(this.sx(p.x + p.w / 2), this.sy(p.y) - t * 0.2, t * 3.6, LIGHT.flood, 0.85);
+      if (p.kind === 'jail') {
+        // The searchlight sweeping the yard.
+        const a = Math.sin(now / 1300) * 0.9;
+        add(this.sx(p.x + p.w / 2 + Math.sin(a) * 4), this.sy(p.y + p.h + 1.5), t * 1.6, LIGHT.flood);
       }
     }
+    // Every Chog in its own shape, at full daylight.
+    d.globalCompositeOperation = 'destination-out';
+    for (const p of people) {
+      const w = this.walks.get(p.key);
+      if (!w?.pose || !vis(p.x, p.y, 2)) continue;
+      const piece = this.piece(p);
+      d.save();
+      d.globalAlpha = w.pose.alpha;
+      d.translate(this.sx(p.x), this.sy(p.y) + t * 0.12 - w.lift);
+      d.rotate(w.pose.rot);
+      drawLayers(d, piece, w.pose.sx, w.pose.sy, w.pose.spin);
+      d.restore();
+    }
+    // ...and filled with "as painted", so after the doubling below they're exactly their own colours.
+    d.globalCompositeOperation = 'destination-over';
+    d.fillStyle = AS_PAINTED;
+    d.fillRect(0, 0, this.view.w, this.view.h);
+    d.globalCompositeOperation = 'source-over';
+    const g = this.g;
+    g.save();
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'multiply';
+    g.drawImage(this.dark, 0, 0);
+    // Overbright: double what's there (the light map is at half scale).
+    g.globalCompositeOperation = 'lighter';
+    g.drawImage(this.cv, 0, 0);
     g.restore();
   }
 }

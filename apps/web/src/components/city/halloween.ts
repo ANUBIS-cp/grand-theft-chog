@@ -1,4 +1,5 @@
 import { CITY, placeOf, type Place } from '@chog-city/game/city';
+import type { Glow } from './city-render';
 
 // Halloween week in the city (packages/server/src/events.ts has the dates). Everything here is drawn by
 // CityRenderer at a few points in its frame and lit against its night:
@@ -366,15 +367,19 @@ export class Halloween {
     if (c && onScreen(c.x, c.y)) push(c.y + 0.21, () => this.drawBrew(v, c, now));
   }
 
-  /** Light that cuts through the night: candlelight round each lantern, a little round every wisp. */
-  lights(v: HauntView, now: number): { x: number; y: number; r: number }[] {
+  /**
+   * Light for the night's light map: candlelight round each lantern (brighter as you pass), and a little in each
+   * wisp's colour round it. Lights only brighten what's under them; nothing is painted over the scene.
+   */
+  lights(v: HauntView, now: number): Glow[] {
     const t = v.t;
-    const out: { x: number; y: number; r: number }[] = [];
+    const out: Glow[] = [];
     for (const l of this.lanterns) {
       const f = 0.97 + 0.03 * Math.sin(now / 1700 + l.x);
-      out.push({ x: v.sx(l.x), y: v.sy(l.y) - t * 0.2, r: t * (1.25 + l.flare * 0.7) * f });
+      out.push({ x: v.sx(l.x), y: v.sy(l.y) - t * 0.2, r: t * (1.5 + l.flare * 0.6) * f, rgb: [150, 92, 35] });
     }
-    for (const w of this.wisps) out.push({ x: v.sx(w.x), y: v.sy(w.y), r: t * 0.4 });
+    for (const w of this.wisps)
+      out.push({ x: v.sx(w.x), y: v.sy(w.y), r: t * 0.9, rgb: w.hue === 150 ? [40, 120, 80] : [90, 50, 130] });
     return out;
   }
 
@@ -383,20 +388,7 @@ export class Halloween {
     const t = v.t;
     g.save();
     g.globalCompositeOperation = 'lighter';
-    // Candlelight.
-    for (const l of this.lanterns) {
-      const x = v.sx(l.x);
-      const y = v.sy(l.y) - t * 0.25;
-      if (x < -t * 3 || x > v.view.w + t * 3 || y < -t * 3 || y > v.view.h + t * 3) continue;
-      // Steady candlelight: a slow breath, never a flicker.
-      const f = 0.95 + 0.05 * Math.sin(now / 1700 + l.x * 3);
-      // Candlelight spilling on the ground round it; brighter when it flares at you.
-      g.globalAlpha = 0.38 * f;
-      g.drawImage(this.glowSprite('lantern', 255, 140, 30), x - t * 2, y + t * 0.1 - t * 1.2, t * 4, t * 2.4);
-      g.globalAlpha = (0.12 + l.flare * 0.45) * f;
-      g.drawImage(this.glowSprite('lantern', 255, 140, 30), x - t * 1.3, y - t * 1.3, t * 2.6, t * 2.6);
-      g.globalAlpha = 1;
-    }
+    // (Candlelight on the ground is in the night's light map: lights().)
     // Wisps and their sparkle trails.
     for (const w of this.wisps) {
       const [r, gg, b] = w.hue === 150 ? [90, 255, 170] : [190, 120, 255];
@@ -408,7 +400,8 @@ export class Halloween {
         g.drawImage(sprite, v.sx(p.x) - s, v.sy(p.y) - s, s * 2, s * 2);
       });
       const pulse = 1 + 0.06 * Math.sin(now / 1100 + w.x * 4);
-      const s = t * 0.38 * pulse;
+      // The wisp itself: a small ball of light (its light on the street is in the light map).
+      const s = t * 0.24 * pulse;
       g.globalAlpha = 1;
       g.drawImage(sprite, v.sx(w.x) - s, v.sy(w.y) - s, s * 2, s * 2);
       g.fillStyle = 'rgba(255,255,255,0.9)';
@@ -437,24 +430,7 @@ export class Halloween {
     if (this.cauldron) this.drawBrewGlow(g, v, this.cauldron, now);
     // Ghost-fire on the Skulls' roof.
     if (this.skulls) this.drawGhostFire(g, v, this.skulls, now);
-    // The street lamps burn a little eerie: purple and green, steady.
-    for (const p of CITY.props) {
-      if (p.kind !== 'lamp') continue;
-      const x = v.sx(p.x);
-      const y = v.sy(p.y) - t * 1.6;
-      if (x < -t * 2 || x > v.view.w + t * 2 || y < -t * 2 || y > v.view.h + t * 2) continue;
-      const green = Math.round(p.x * 7 + p.y * 3) % 2 === 0;
-      // Just a tint on the lamp's own light.
-      const flick = 0.3 + 0.03 * Math.sin(now / 2000 + p.x);
-      g.globalAlpha = Math.max(0, flick);
-      g.drawImage(
-        this.glowSprite(green ? 'lg' : 'lp', green ? 80 : 170, green ? 255 : 90, green ? 140 : 255),
-        x - t * 0.8,
-        y - t * 0.8,
-        t * 1.6,
-        t * 1.6,
-      );
-    }
+    // (Some street lamps burn a ghostly green in the night's light map: CityRenderer's drawNight.)
     g.restore();
   }
 
@@ -634,7 +610,8 @@ export class Halloween {
     // Light pouring out of the cuts.
     g.save();
     g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = (0.18 + near * 0.4) * flick;
+    // Only when it laughs at you (you're close): light spills out of the cuts.
+    g.globalAlpha = near * 0.35 * flick;
     g.drawImage(this.glowSprite('faceglow', 255, 170, 50), cx - W * 0.6, cy - H * 0.55, W * 1.2, H * 1.2);
     g.restore();
     // Glints in its eyes, turned to look at you.
