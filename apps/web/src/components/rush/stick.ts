@@ -89,6 +89,23 @@ function openingAhead(m: RushMap, s: RushState, go: Dir, turn: Dir, max: number)
   return false;
 }
 
+/** With something to carry out, the way into the exit when it's in the corridor beside you (within 2 tiles). */
+function exitWay(m: RushMap, s: RushState): Dir | -1 {
+  if (s.carried <= 0 && !s.safe?.open) return -1;
+  const tx = Math.floor(s.me.x);
+  const ty = Math.floor(s.me.y);
+  const { x: ex, y: ey } = m.exit;
+  if (Math.abs(tx - ex) <= 2) {
+    if (ty === ey - 1) return 2;
+    if (ty === ey + 1) return 0;
+  }
+  if (Math.abs(ty - ey) <= 2) {
+    if (tx === ex - 1) return 1;
+    if (tx === ex + 1) return 3;
+  }
+  return -1;
+}
+
 /** Can you keep going `d` (not yet at the middle of this tile, or the next tile is open)? */
 function canGo(m: RushMap, s: RushState, d: Dir) {
   const [dx, dy] = DIRS[d];
@@ -105,9 +122,12 @@ function canGo(m: RushMap, s: RushState, d: Dir) {
  */
 export function stickPick(m: RushMap, s: RushState, held: Dir[]): Dir | -1 {
   if (!held.length) return -1;
-  const main = held[0]!;
+  let main = held[0]!;
   if (held.length === 1) return main;
-  const help = held[1]!;
+  let help = held[1]!;
+  // Ready to leave with the way out right beside you: any push towards it counts as the main way, so a thumb
+  // pulling down-and-sideways along the bottom corridor takes the exit instead of sliding past it.
+  if (help === exitWay(m, s)) [main, help] = [help, main];
   const me = s.me;
   if (me.dir === -1) return canTurn(m, s, main) ? main : help;
   if (me.dir === main) return canGo(m, s, main) || !canTurn(m, s, help) ? main : help;

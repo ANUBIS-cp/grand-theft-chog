@@ -77,6 +77,30 @@ describe('steering the vault with it', () => {
     run(s, () => thumb(l, 60), 60);
     expect(s.phase).toBe('escaped');
   });
+  it('a mostly-sideways push with a little down still takes the exit', () => {
+    for (const [x, deg] of [
+      [13.5, 150],
+      [5.5, 30],
+      [11.5, 145],
+      [7.5, 35],
+    ] as const) {
+      const s = fresh(x);
+      const l = ring();
+      run(s, () => thumb(l, deg), 60);
+      expect({ x, deg, phase: s.phase }).toEqual({ x, deg, phase: 'escaped' });
+    }
+  });
+  it('with nothing to carry out, the same push stays in the corridor', () => {
+    const s = fresh(13.5);
+    s.carried = 0;
+    // No coins on the way either.
+    s.coins = s.coins.map(() => true);
+    s.stacks = s.stacks.map(() => true);
+    const l = ring();
+    run(s, () => thumb(l, 150), 30);
+    expect(s.phase).toBe('play');
+    expect(s.me.y).toBe(14.5);
+  });
   it('straight down early, like Pac-Man: keeps going and turns at the opening', () => {
     const s = fresh(13.5);
     const l = ring();

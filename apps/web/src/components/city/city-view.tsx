@@ -765,8 +765,10 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
   }, [hauntKey]);
 
   // Pointer: a tap walks you there (or to a building's door); press and drag steers like a joystick.
-  // On a touch screen the stick shows: a ring where your thumb landed and a knob under it. Past the rim the ring
-  // follows your thumb, so turning round is always a short move.
+  // On a touch screen the stick shows: a ring where your thumb landed and a knob under it. The ring stays where
+  // your thumb landed until you lift it, the way Roblox's phone stick does: a ring that followed the thumb crept
+  // across the screen over a long walk (to the edge, where the thumb slid off and you stopped, or up the middle
+  // under your hand). Full speed comes a short push out, so the thumb hardly travels.
   const press = useRef<{ x: number; y: number; id: number; dragged: boolean; touch: boolean } | null>(null);
   const [joy, setJoy] = useState<{ bx: number; by: number; kx: number; ky: number } | null>(null);
   const [walked, setWalked] = useState(true);
@@ -777,7 +779,10 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       /* no storage */
     }
   }, []);
-  const RIM = 52;
+  /** Full speed this far from where the thumb landed (px); the knob stops here too. */
+  const RIM = 32;
+  /** A thumb resting this close to where it landed doesn't move you. */
+  const DEAD = 6;
   // A phone gets its own full-screen map.
   const [phone, setPhone] = useState(false);
   useEffect(() => {
@@ -803,16 +808,9 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
   function onMove(e: React.PointerEvent) {
     const p = press.current;
     if (!p || p.id !== e.pointerId) return;
-    let dx = e.clientX - p.x;
-    let dy = e.clientY - p.y;
-    let d = Math.hypot(dx, dy);
-    if (d > RIM) {
-      p.x += (dx / d) * (d - RIM);
-      p.y += (dy / d) * (d - RIM);
-      dx = e.clientX - p.x;
-      dy = e.clientY - p.y;
-      d = RIM;
-    }
+    const dx = e.clientX - p.x;
+    const dy = e.clientY - p.y;
+    const d = Math.hypot(dx, dy);
     if (d > 12 || p.dragged) {
       if (!p.dragged && !walked) {
         setWalked(true);
@@ -825,10 +823,13 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       p.dragged = true;
       state.current.path = [];
       state.current.target = null;
-      state.current.stick = d > 6 ? { x: dx / RIM, y: dy / RIM } : null;
+      // Speed rises from nothing at the dead zone to full at the rim; past the rim it stays full, any distance.
+      const speed = Math.min(1, (d - DEAD) / (RIM - DEAD));
+      state.current.stick = d > DEAD ? { x: (dx / d) * speed, y: (dy / d) * speed } : null;
       if (p.touch) {
         const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        setJoy({ bx: p.x - box.left, by: p.y - box.top, kx: dx, ky: dy });
+        const k = Math.min(1, RIM / Math.max(d, 1e-6));
+        setJoy({ bx: p.x - box.left, by: p.y - box.top, kx: dx * k, ky: dy * k });
       }
     }
   }
@@ -886,9 +887,9 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       />
       {joy && (
         <div className="pointer-events-none absolute z-10" style={{ left: joy.bx, top: joy.by }}>
-          <div className="absolute -left-[60px] -top-[60px] h-[120px] w-[120px] rounded-full bg-white/[0.07] shadow-[inset_0_0_0_1.5px_rgba(255,255,255,0.22),0_10px_30px_rgba(0,0,0,0.3)]" />
+          <div className="absolute -left-[56px] -top-[56px] h-[112px] w-[112px] rounded-full bg-white/[0.07] shadow-[inset_0_0_0_1.5px_rgba(255,255,255,0.22),0_10px_30px_rgba(0,0,0,0.3)]" />
           <div
-            className="absolute -left-[26px] -top-[26px] h-[52px] w-[52px] rounded-full bg-[linear-gradient(180deg,#ffffff,#d9d7e4)] shadow-[inset_0_1px_0_#fff,0_6px_16px_rgba(0,0,0,0.45)]"
+            className="absolute -left-[24px] -top-[24px] h-[48px] w-[48px] rounded-full bg-[linear-gradient(180deg,#ffffff,#d9d7e4)] shadow-[inset_0_1px_0_#fff,0_6px_16px_rgba(0,0,0,0.45)]"
             style={{ transform: `translate(${joy.kx}px, ${joy.ky}px)` }}
           />
         </div>
