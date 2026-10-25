@@ -113,6 +113,16 @@ describe('most wanted', () => {
     expect(await refused(tagWanted(db, { day: DAY, chog: lazoorChog, by: mcgaChog, now: NOW }))).toBe('no-run');
   });
 
+  it('your own Chog in another gang can’t claim your bounty', async () => {
+    const alt = born('mcga')[1]!.id;
+    await setOwners(db, [{ tokenId: alt, owner: A, block: 2 }]);
+    await setGang(db, A, alt, 'mcga');
+    await robbed('r1aaaaaaaa', lazoorChog, 'lazoor', 20_000);
+    await wantedToday(db, NOW);
+    expect(await refused(tagWanted(db, { day: DAY, chog: lazoorChog, by: alt, now: NOW }))).toBe('not-yours');
+    expect((await vaultCash(db)).lazoor).toBe(START_CASH);
+  });
+
   it('pays only what the vault has, and only on its own day', async () => {
     await robbed('r1aaaaaaaa', lazoorChog, 'lazoor', 40_000);
     await wantedToday(db, NOW);

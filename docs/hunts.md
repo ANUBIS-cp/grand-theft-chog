@@ -20,7 +20,7 @@ Pumpkins full of cash on the street; the first Chog of a gang to reach one carri
 - Each game day the Chog that carried the most home the day before (at least $2,000) is Most Wanted. Bounty: 15% of what it stole, $1,000-$6,000, paid by its own gang. Worked out once and kept (`most_wanted` table).
 - While the bounty stands, its hauls pay 25% more (so it's worth playing, not hiding).
 - In the city a red target turns under it and a MOST WANTED plate with the bounty floats over it; rivals get an edge arrow to it.
-- A Chog of any other gang that touches it claims the bounty (up to what the vault has): the cash moves gang to gang, the tagger gets a catch, and it goes to jail for 30 minutes. Safe within 4 tiles of its own gang's door, for 8 s after walking into the city, and while carrying a bag home. Once a day.
+- A Chog of any other gang that touches it claims the bounty (up to what the vault has): the cash moves gang to gang, the tagger gets a catch, and it goes to jail for 30 minutes. Safe within 4 tiles of its own gang's door, on any gang's doorstep (2.5 tiles: robbers stand there while breaking in and inside a vault), for 8 s after walking into the city, and while carrying a bag home. A Chog with the same owner can't claim it. Once a day.
 
 ## Telegram
 

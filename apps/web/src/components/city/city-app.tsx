@@ -689,6 +689,10 @@ export function CityApp() {
   const moonUp = !!moon && now >= moon.from && now < moon.to;
   const pumpkinTime = moonUp || isHalloweenWeek(now);
   const previewing = !!moonPreview && moonUp;
+  // The preview's hour is over: back to the real calendar.
+  useEffect(() => {
+    if (moonPreview && now >= moonPreview + 3_600_000) setMoonPreview(0);
+  }, [moonPreview, now]);
   // Pumpkins you've grabbed today, kept in this browser for the task list.
   const pumpkinKey = `cw-pk-${dayOf(now)}`;
   useEffect(() => {

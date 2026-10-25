@@ -4,6 +4,7 @@ import { JAIL_MS } from '@chog-city/game/heist';
 import { and, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { gangVaults, heistChogs, heistRuns, mostWanted, pumpkins, type Db } from './db/index.ts';
 import { HeistRefused } from './heists.ts';
+import { sameOwner } from './ownership.ts';
 
 // The city's two live hunts (the live server, apps/live/src/hunts.ts, is the referee and reports here, signed).
 //
@@ -136,6 +137,8 @@ export async function tagWanted(
       .from(heistChogs)
       .where(eq(heistChogs.id, t.by));
     if (!tagger?.gang || tagger.gang === row.gang) throw new HeistRefused('own-gang');
+    // Your own other Chog can't claim it: that would move the gang's shared cash to another gang of yours.
+    if (await sameOwner(tx as unknown as Db, t.by, t.chog)) throw new HeistRefused('not-yours');
     const pair = [row.gang, tagger.gang].sort();
     const vaults = await tx
       .select()

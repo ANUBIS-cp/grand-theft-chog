@@ -1,5 +1,5 @@
 import { bloodMoon, isHalloweenWeek } from '@chog-city/game';
-import { PUMPKIN_GRAB, hopAway, placeOf, pumpkinSpots } from '@chog-city/game/city';
+import { CITY, PUMPKIN_GRAB, hopAway, placeOf, pumpkinSpots } from '@chog-city/game/city';
 import { signInternal } from '@chog-city/server/ticket';
 import { runningFor } from './getaway.ts';
 
@@ -20,6 +20,7 @@ const TAG = 0.8;
 /** Most Wanted: safe this close to their own gang's door, and for this long after walking into the city. */
 const HOME_SAFE = 4;
 const ARRIVE_SAFE_MS = 8000;
+const DOOR_SAFE = 2.5;
 
 export interface Hunter {
   id: number;
@@ -187,6 +188,8 @@ export function stepWanted(
   if (!prey || jailedNow(prey, now) || now - prey.joined < ARRIVE_SAFE_MS || runningFor(w.chog)) return;
   const home = placeOf(w.gang);
   if (home && Math.hypot(prey.x - home.door.x, prey.y - home.door.y) < HOME_SAFE) return;
+  // Every doorstep is safe too: a robber breaking in, or inside a vault, stands at that gang's door.
+  if (CITY.places.some((p) => Math.hypot(prey.x - p.door.x, prey.y - p.door.y) < DOOR_SAFE)) return;
   const by = list.find(
     (h) =>
       h.id !== prey.id &&

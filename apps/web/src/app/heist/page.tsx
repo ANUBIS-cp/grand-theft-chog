@@ -69,7 +69,13 @@ export default async function HeistPage({
       <div className="min-h-0 w-full flex-1">
         <RushGame
           mapId={mapId}
-          rules={rushRules(level, false, false, undefined, haunted === '1')}
+          rules={rushRules(
+            level,
+            false,
+            false,
+            undefined,
+            haunted === '1' && process.env.NODE_ENV !== 'production',
+          )}
           coach
           player={{
             id: chog.id,
