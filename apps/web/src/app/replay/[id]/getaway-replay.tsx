@@ -9,9 +9,11 @@ import {
   type GetawayTrack,
 } from '@chog-city/game/city';
 import type { GangId } from '@chog-city/data';
+import { bloodMoon, halloweenCity } from '@chog-city/game';
 import { ArrowClockwise } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { CityRenderer, type Person, type PlaceLook } from '@/components/city/city-render';
+import { Halloween } from '@/components/city/halloween';
 import { Sound } from '@/components/heist/sound';
 import { chogImage } from '@/lib/images';
 import { cn } from '@/lib/cn';
@@ -19,7 +21,8 @@ import { frameGate } from '@/lib/frames';
 import { useNoPageScroll } from '@/lib/no-page-scroll';
 
 // Stage 3 of a replay: the run home through the city, as the live server recorded it (five frames a second,
-// smoothed between). Drawn with the city's own renderer, the camera on the robber.
+// smoothed between). Drawn with the city's own renderer, the camera on the robber, under the sky it really had:
+// a run home during the Blood Moon plays red and haunted, and if the moon set on the way it sets in the replay too.
 
 export interface GetawayReplayProps {
   track: GetawayTrack;
@@ -29,6 +32,9 @@ export interface GetawayReplayProps {
   places: Record<string, PlaceLook>;
   /** Who made the catch, when the robbed gang did. */
   catcher?: { id: number; name: string } | null;
+  /** When the run home began (ms), and the ghosts of the haunting (Skulls' and Radioactive's guards). */
+  at: number;
+  ghosts: number[];
   onVault: () => void;
 }
 
@@ -68,6 +74,16 @@ export function GetawayReplay(props: GetawayReplayProps) {
     const rnd = seeded(7);
     const start = trackAt(track, 0).me;
     r.sirens = [spawnPatrol(start, rnd), spawnPatrol(start, rnd)];
+    // The sky at the start, set at once (no fading in as the replay opens); after that it turns as it did.
+    const sky = (ms: number) => {
+      const when = propsRef.current.at + ms;
+      r.hunts.moon = bloodMoon(when) !== null;
+      const haunted = halloweenCity(when) && propsRef.current.ghosts.length > 0;
+      if (haunted && !r.haunt) r.haunt = new Halloween(propsRef.current.ghosts);
+      r.hauntOn = haunted;
+    };
+    sky(0);
+    r.settle();
     setOver(false);
     // The run home sounds like the real one: the robber's footsteps, the sirens closing in, and how it ended.
     const sound = new Sound();
@@ -96,6 +112,7 @@ export function GetawayReplay(props: GetawayReplayProps) {
       const p = propsRef.current;
       const ms = Math.min(len, now - t0);
       const at = trackAt(track, ms);
+      sky(ms);
       const person = (key: string, x: number, y: number, extra: Partial<Person>): Person => {
         const prev = was.get(key);
         const dx = prev ? x - prev.x : 0;

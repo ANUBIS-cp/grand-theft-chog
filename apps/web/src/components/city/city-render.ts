@@ -1943,6 +1943,12 @@ export class CityRenderer {
   }
   private moonLin = 0;
   private hauntLin = 0;
+  /** Jump straight to the sky that's set (a replay opening mid-moon), with no fade. */
+  settle() {
+    this.moonLin = this.hunts.moon ? 1 : 0;
+    this.hauntLin = this.haunt && this.hauntOn ? 1 : 0;
+    this.lastFrame = 0;
+  }
   /** The city is still turning (so it should keep drawing at full speed). */
   get turning() {
     return (this.moonLin > 0 && this.moonLin < 1) || (this.hauntLin > 0 && this.hauntLin < 1);

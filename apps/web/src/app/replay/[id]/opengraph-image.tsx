@@ -1,4 +1,5 @@
 import { GANGS, displayName, getChog } from '@chog-city/data';
+import { bloodMoon } from '@chog-city/game';
 import { runForReplay } from '@chog-city/server';
 import { ImageResponse } from 'next/og';
 import { T, chogPng, ogFonts } from '@/lib/og';
@@ -27,6 +28,8 @@ export default async function Image({ params }: { params: Promise<{ id: string }
   const escaped = run.result === 'escaped';
   const robber = GANG_COLOR[run.gang];
   const target = GANG_COLOR[run.target];
+  // Robbed under the Blood Moon: the card wears its red sky and the moon in the corner, as the game did.
+  const moon = bloodMoon(run.startedAt) !== null || bloodMoon(run.at) !== null;
 
   return new ImageResponse(
     <div
@@ -34,12 +37,30 @@ export default async function Image({ params }: { params: Promise<{ id: string }
         width: '100%',
         height: '100%',
         display: 'flex',
+        position: 'relative',
         background: '#0b0918',
+        backgroundImage: moon
+          ? 'radial-gradient(circle at 92% 8%, rgba(220,30,45,0.55), rgba(90,6,20,0.35) 38%, rgba(11,9,24,0) 70%)'
+          : undefined,
         padding: 56,
         fontFamily: 'Koulen',
         color: '#ffffff',
       }}
     >
+      {moon && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 34,
+            right: 40,
+            width: 120,
+            height: 120,
+            borderRadius: 999,
+            backgroundImage: 'radial-gradient(circle at 38% 34%, #ff6a5a, #c0141f 55%, #6e0610)',
+            boxShadow: '0 0 60px 18px rgba(255,40,50,0.45)',
+          }}
+        />
+      )}
       <img
         src={art}
         width={470}
@@ -47,8 +68,9 @@ export default async function Image({ params }: { params: Promise<{ id: string }
         style={{ border: '6px solid #111', borderRadius: 18, boxShadow: '10px 10px 0 #111' }}
       />
       <div style={{ display: 'flex', flexDirection: 'column', marginLeft: 56, flex: 1 }}>
-        <div style={{ fontSize: 34, letterSpacing: 2, color: '#a59fc9' }}>
+        <div style={{ display: 'flex', fontSize: 34, letterSpacing: 2, color: moon ? '#ff8a8a' : '#a59fc9' }}>
           {run.prisoner ? 'WATCH THE JAIL BREAK' : 'WATCH THE ROBBERY'}
+          {moon ? ' · UNDER THE BLOOD MOON' : ''}
         </div>
         <T text={name.toUpperCase()} style={{ fontSize: 96, lineHeight: 0.9, marginTop: 8 }} />
         <div style={{ display: 'flex', marginTop: 18, gap: 14, alignItems: 'center', fontSize: 34 }}>

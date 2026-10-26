@@ -54,6 +54,9 @@ export default async function ReplayPage({ params }: Props) {
         home: run.gang,
         bag: run.getawayTrack.bag ?? run.moved,
         catcher: run.getawayTrack.by ? { id: run.getawayTrack.by, name: name(run.getawayTrack.by) } : null,
+        // When the run home began (out of the vault), so it plays under the sky it had: the Blood Moon or not.
+        at: run.at,
+        ghosts: board.filter((v) => v.gang === 'skulls' || v.gang === 'radioactive').flatMap((v) => v.guards),
         places: Object.fromEntries(
           [...board]
             .sort((a, b) => b.cash - a.cash)
