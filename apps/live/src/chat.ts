@@ -1,7 +1,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+import { isSticker, STICKERS } from '@chog-city/data';
 
 // The city's chat: one room for everyone and one per gang. Only players with a Chog can talk (who you are
-// comes from the signed ticket); visitors without a wallet can read the city room. Messages are plain text:
+// comes from the signed ticket); visitors without a wallet can read the city room. Messages are plain text or
+// one of the Chog stickers (by number, so nobody can post their own picture):
 // links are taken out (a crypto crowd gets scam links), and floods are cut off. The last messages of each
 // room are kept, and saved to a small file so a restart doesn't wipe the conversation.
 
@@ -16,7 +18,10 @@ export interface ChatMsg {
   name: string;
   /** The sender's gang, for the colour of their name. */
   from: string | null;
+  /** The words, or a sticker's emoji. */
   text: string;
+  /** A sticker from the Chog pack, if this message is one. */
+  sticker?: number;
   at: number;
 }
 
@@ -62,16 +67,15 @@ if (FILE)
   }, 10_000).unref();
 
 /** Control characters, zero-width and direction-flipping characters. */
-const INVISIBLE = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u206f\\ufeff]', 'g');
+const INVISIBLE = new RegExp(
+  '[\\u0000-\\u001f\\u007f-\\u009f\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u206f\\ufeff]',
+  'g',
+);
 
 /** Plain text only: no control or invisible characters, no links, one line, not too long. */
 export function cleanText(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
-  let t = raw
-    .normalize('NFKC')
-    .replace(INVISIBLE, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  let t = raw.normalize('NFKC').replace(INVISIBLE, ' ').replace(/\s+/g, ' ').trim();
   // Links and web addresses become a plain marker, so nobody can post a phishing link.
   t = t.replace(/\b(?:https?:\/\/|www\.)\S+/gi, '[link]');
   t = t.replace(
@@ -88,11 +92,13 @@ export function say(
   room: unknown,
   raw: unknown,
   now: number,
+  sticker?: unknown,
 ): ChatMsg | 'guest' | 'no-gang' | 'empty' | 'slow' {
   if (p.chog === null) return 'guest';
   const r: Room = room === 'gang' ? 'gang' : 'city';
   if (r === 'gang' && !p.gang) return 'no-gang';
-  const text = cleanText(raw);
+  const stk = isSticker(sticker) ? sticker : undefined;
+  const text = stk !== undefined ? STICKERS[stk] : cleanText(raw);
   if (!text) return 'empty';
   const times = (recent.get(p.chog) ?? []).filter((t) => now - t < 8000);
   if (times.length >= 5 || (times.length && now - times.at(-1)! < 900)) return 'slow';
@@ -106,6 +112,7 @@ export function say(
     name: p.name,
     from: p.gang,
     text,
+    ...(stk !== undefined && { sticker: stk }),
     at: now,
   };
   keep(m);

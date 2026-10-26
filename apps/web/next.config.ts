@@ -10,6 +10,16 @@ const config: NextConfig = {
   agentRules: false,
   reactStrictMode: true,
   devIndicators: false,
+  // Stickers never change under the same name (their links carry a version), so phones keep them instead of
+  // asking again every time the picker opens.
+  async headers() {
+    return [
+      {
+        source: '/art/stickers/:file*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      },
+    ];
+  },
   // Images live on the server; in local development, fetch them from there.
   async rewrites() {
     return process.env.NODE_ENV === 'development'

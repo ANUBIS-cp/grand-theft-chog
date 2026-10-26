@@ -1704,7 +1704,7 @@ export function CityApp() {
             msgs={chat}
             me={{ chog: chog?.id ?? null, gang: chog?.gang ?? null }}
             refused={chatRefused}
-            onSend={(room, text) => view.current?.say(room, text)}
+            onSend={(room, text, sticker) => view.current?.say(room, text, sticker)}
             onConnect={() => setSheet('connect')}
             onPerson={(w) => setPeek({ ...w, player: true })}
           />

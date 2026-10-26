@@ -115,7 +115,10 @@ export interface ChatMsg {
   chog: number;
   name: string;
   from: GangId | null;
+  /** The words, or a sticker's emoji. */
   text: string;
+  /** A Chog sticker's number, if this message is one. */
+  sticker?: number;
   at: number;
 }
 
@@ -427,9 +430,10 @@ export class LiveCity {
       this.ws.send(JSON.stringify({ t: 'run', pass }));
   }
 
-  /** Says something in the city room or your gang's. */
-  say(room: 'city' | 'gang', text: string) {
-    if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'say', room, text }));
+  /** Says something, or sends a sticker, in the city room or your gang's. */
+  say(room: 'city' | 'gang', text: string, sticker?: number) {
+    if (this.ws?.readyState === WebSocket.OPEN)
+      this.ws.send(JSON.stringify({ t: 'say', room, text, sticker }));
   }
 
   emote(kind: Emote) {

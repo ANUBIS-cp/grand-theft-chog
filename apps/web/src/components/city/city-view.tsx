@@ -86,7 +86,7 @@ export interface CityHandle {
   walkTo(placeId: string): void;
   emote(kind: Emote): void;
   /** Say something in the city room or your gang's. */
-  say(room: 'city' | 'gang', text: string): void;
+  say(room: 'city' | 'gang', text: string, sticker?: number): void;
   /** Put your Chog at a place's door (coming back from a heist). */
   appearAt(placeId: string): void;
   /** Out of a vault with a bag: start the getaway home. */
@@ -274,8 +274,8 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       state.current.emote = { kind, at: performance.now() };
       state.current.net?.emote(kind);
     },
-    say(room, text) {
-      state.current.net?.say(room, text);
+    say(room, text, sticker) {
+      state.current.net?.say(room, text, sticker);
     },
     appearAt(id) {
       const p = placeOf(id);

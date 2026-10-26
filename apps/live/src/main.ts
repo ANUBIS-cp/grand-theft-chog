@@ -254,7 +254,7 @@ wss.on('connection', (ws, req) => {
       }
     } else if (msg.t === 'say') {
       // Chat: the city room goes to everyone, a gang room only to that gang.
-      const m = say(me, msg.room, msg.text, now);
+      const m = say(me, msg.room, msg.text, now, msg.sticker);
       if (typeof m === 'string') send(ws, { t: 'say-no', why: m });
       else {
         const out = JSON.stringify({ t: 'msg', m, by: me.id });

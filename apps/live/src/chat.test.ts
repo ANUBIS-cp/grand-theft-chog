@@ -24,4 +24,13 @@ describe('chat', () => {
     expect(chatHistory('lazoor').some((x) => x.room === 'gang')).toBe(true);
     expect(chatHistory('mcga').some((x) => x.room === 'gang')).toBe(false);
   });
+
+  it('sends Chog stickers by number only', () => {
+    const me = { chog: 8, name: 'Chog #8', gang: null };
+    const m = say(me, 'city', 'ignored', 50_000, 16);
+    expect(typeof m === 'object' && [m.sticker, m.text]).toEqual([16, '😵']);
+    expect(say(me, 'city', '', 60_000, 119)).toBe('empty');
+    expect(say(me, 'city', '', 70_000, '../x.png')).toBe('empty');
+    expect(say(me, 'city', 'hi', 80_000, 2.5)).toMatchObject({ text: 'hi' });
+  });
 });

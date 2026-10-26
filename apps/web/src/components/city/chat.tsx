@@ -1,6 +1,6 @@
 'use client';
-import { GANGS, type GangId } from '@chog-city/data';
-import { ArrowUp, ChatCircleDots, X } from '@phosphor-icons/react';
+import { GANGS, STICKERS, stickerSrc, stickerStill, type GangId } from '@chog-city/data';
+import { ArrowUp, ChatCircleDots, Sticker, X } from '@phosphor-icons/react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 import { chogImage } from '@/lib/images';
@@ -9,7 +9,9 @@ import type { ChatMsg } from './live-city';
 
 // The city chat, built like a messages app: a City room and your gang's room, bubbles grouped by who's
 // talking with their Chog beside them, yours in pink on the right. Closed, the latest few city messages float
-// over the bottom of the city for a moment, so you see the talk without opening anything.
+// over the bottom of the city for a moment, so you see the talk without opening anything. The sticker button
+// opens the Chog pack in place of the keyboard; a tap sends one straight away, and it shows big, without a bubble,
+// as messaging apps show stickers.
 
 type Room = 'city' | 'gang';
 
@@ -33,12 +35,18 @@ export function ChatPanel(props: {
   /** Your Chog (null for a guest) and gang. */
   me: { chog: number | null; gang: GangId | null };
   refused: string | null;
-  onSend: (room: Room, text: string) => void;
+  onSend: (room: Room, text: string, sticker?: number) => void;
   onConnect: () => void;
   onPerson: (who: { chog: number; name: string; gang: GangId | null }) => void;
 }) {
   const [room, setRoom] = useState<Room>('city');
   const [text, setText] = useState('');
+  const [tray, setTray] = useState(false);
+  // Built on the first open and then kept, hidden, so opening it again is instant.
+  const [trayMade, setTrayMade] = useState(false);
+  useEffect(() => {
+    if (tray) setTrayMade(true);
+  }, [tray]);
   const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const shown = useMemo(
@@ -67,9 +75,13 @@ export function ChatPanel(props: {
   useLayoutEffect(() => {
     const el = list.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [shown.length, props.open, room]);
+  }, [shown.length, props.open, room, tray]);
   useEffect(() => {
     if (props.open) requestAnimationFrame(() => input.current?.focus());
+    else {
+      setTray(false);
+      setTrayMade(false);
+    }
   }, [props.open]);
 
   const send = () => {
@@ -77,6 +89,17 @@ export function ChatPanel(props: {
     if (!t || props.me.chog === null) return;
     props.onSend(room, t);
     setText('');
+  };
+  const sticker = (n: number) => {
+    if (props.me.chog === null) return;
+    props.onSend(room, '', n);
+    setTray(false);
+  };
+  // The pack takes the keyboard's place on a phone, and the keyboard comes back when it closes.
+  const toggleTray = () => {
+    if (tray) requestAnimationFrame(() => input.current?.focus());
+    else input.current?.blur();
+    setTray(!tray);
   };
 
   if (!props.open) return <ChatPeek msgs={props.msgs} me={props.me.chog} onOpen={props.onOpen} />;
@@ -174,7 +197,8 @@ export function ChatPanel(props: {
                 className={cn(
                   'flex items-end gap-2',
                   mine ? 'justify-end' : 'justify-start',
-                  first ? 'mt-2' : 'mt-[3px]',
+                  // Stickers get air between them: two pictures that close read as one mess.
+                  first || m.sticker !== undefined ? 'mt-2' : 'mt-[3px]',
                 )}
               >
                 {!mine && (
@@ -192,20 +216,24 @@ export function ChatPanel(props: {
                       {m.name}
                     </span>
                   )}
-                  <span
-                    className={cn(
-                      'animate-[pop-in_260ms_cubic-bezier(.2,.9,.3,1.2)] whitespace-pre-wrap break-words px-3 py-[7px] text-[15px] leading-[1.32] tracking-[-0.01em]',
-                      mine
-                        ? 'bg-[linear-gradient(180deg,#ff5c86,#ff2d6a)] text-white'
-                        : 'bg-white/[0.11] text-white',
-                      // Rounded all round, with a tighter corner where the group continues.
-                      mine
-                        ? cn('rounded-[19px]', !first && 'rounded-tr-[6px]', !last && 'rounded-br-[6px]')
-                        : cn('rounded-[19px]', !first && 'rounded-tl-[6px]', !last && 'rounded-bl-[6px]'),
-                    )}
-                  >
-                    {m.text}
-                  </span>
+                  {m.sticker !== undefined ? (
+                    <StickerMsg n={m.sticker} emoji={m.text} />
+                  ) : (
+                    <span
+                      className={cn(
+                        'animate-[pop-in_260ms_cubic-bezier(.2,.9,.3,1.2)] whitespace-pre-wrap break-words px-3 py-[7px] text-[15px] leading-[1.32] tracking-[-0.01em]',
+                        mine
+                          ? 'bg-[linear-gradient(180deg,#ff5c86,#ff2d6a)] text-white'
+                          : 'bg-white/[0.11] text-white',
+                        // Rounded all round, with a tighter corner where the group continues.
+                        mine
+                          ? cn('rounded-[19px]', !first && 'rounded-tr-[6px]', !last && 'rounded-br-[6px]')
+                          : cn('rounded-[19px]', !first && 'rounded-tl-[6px]', !last && 'rounded-bl-[6px]'),
+                      )}
+                    >
+                      {m.text}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -215,6 +243,7 @@ export function ChatPanel(props: {
 
       {/* Writing */}
       <div className="border-t border-sep px-3 pb-3 pt-2.5">
+        {trayMade && props.me.chog !== null && <StickerTray shown={tray} onPick={sticker} />}
         {props.refused && REFUSED[props.refused] && (
           <p className="mb-1.5 px-1 text-[12px] text-sys-orange">{REFUSED[props.refused]}</p>
         )}
@@ -237,8 +266,21 @@ export function ChatPanel(props: {
               placeholder={placeholder}
               enterKeyHint="send"
               maxLength={240}
+              onFocus={() => setTray(false)}
               className="h-8 min-w-0 flex-1 bg-transparent text-[16px] text-white outline-none placeholder:text-label-3"
             />
+            <button
+              type="button"
+              onClick={toggleTray}
+              aria-label={tray ? 'Close stickers' : 'Stickers'}
+              aria-pressed={tray}
+              className={cn(
+                'press grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors',
+                tray ? 'bg-white/[0.16] text-white' : 'text-label-2 hover:text-white',
+              )}
+            >
+              <Sticker size={19} weight={tray ? 'fill' : 'regular'} />
+            </button>
             {text.length > 200 && (
               <span className="text-[11px] tabular-nums text-label-3">{240 - text.length}</span>
             )}
@@ -288,5 +330,83 @@ function ChatPeek({ msgs, me, onOpen }: { msgs: ChatMsg[]; me: number | null; on
         </span>
       ))}
     </button>
+  );
+}
+
+/**
+ * A sticker in the conversation: big, with no bubble. It only animates while it's on screen; scrolled away it
+ * shows its still, so a long history of stickers isn't all playing at once.
+ */
+function StickerMsg({ n, emoji }: { n: number; emoji: string }) {
+  const ref = useRef<HTMLImageElement>(null);
+  const [seen, setSeen] = useState(false);
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return setSeen(true);
+    const io = new IntersectionObserver(([e]) => setSeen(!!e?.isIntersecting), { rootMargin: '60px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  // A missing picture shows its emoji, not a broken-image icon.
+  if (gone) return <span className="px-1 text-[44px] leading-none">{emoji}</span>;
+  return (
+    <img
+      ref={ref}
+      src={seen ? stickerSrc(n) : stickerStill(n)}
+      alt={emoji}
+      draggable={false}
+      decoding="async"
+      onError={() => setGone(true)}
+      className="h-[112px] w-[112px] animate-[pop-in_260ms_cubic-bezier(.2,.9,.3,1.2)] rounded-[14px] object-contain"
+    />
+  );
+}
+
+/**
+ * The Chog pack, five across. Each preview is a small still, and it's only fetched when its row scrolls near
+ * the tray: the browser's own lazy loading looks a page ahead, which for a tray this short is every sticker.
+ */
+function StickerTray({ shown, onPick }: { shown: boolean; onPick: (n: number) => void }) {
+  const grid = useRef<HTMLDivElement>(null);
+  const [near, setNear] = useState<ReadonlySet<number>>(() => new Set());
+  useEffect(() => {
+    const root = grid.current;
+    if (!root || !shown) return;
+    if (typeof IntersectionObserver === 'undefined') return setNear(new Set(STICKERS.map((_, n) => n)));
+    const io = new IntersectionObserver(
+      (es) => {
+        const add = es
+          .filter((e) => e.isIntersecting)
+          .map((e) => Number((e.target as HTMLElement).dataset.n));
+        if (add.length) setNear((s) => new Set([...s, ...add]));
+      },
+      { root, rootMargin: '70px 0px' },
+    );
+    for (const b of root.children) io.observe(b);
+    return () => io.disconnect();
+  }, [shown]);
+  return (
+    <div
+      ref={grid}
+      className={cn(
+        'mb-2.5 grid max-h-[min(232px,32dvh)] animate-[glass-in_260ms_cubic-bezier(.2,.9,.3,1)] grid-cols-5 gap-1 overflow-y-auto overscroll-contain',
+        !shown && 'hidden',
+      )}
+    >
+      {STICKERS.map((emoji, n) => (
+        <button
+          key={n}
+          data-n={n}
+          onClick={() => onPick(n)}
+          aria-label={`Send sticker ${emoji}`}
+          className="press grid aspect-square place-items-center rounded-[14px] p-1 hover:bg-white/[0.08]"
+        >
+          {near.has(n) && (
+            <img src={stickerStill(n)} alt="" draggable={false} className="h-full w-full object-contain" />
+          )}
+        </button>
+      ))}
+    </div>
   );
 }

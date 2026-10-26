@@ -5,3 +5,4 @@ export * from './districts.ts';
 export * from './chogs.ts';
 export * from './derive.ts';
 export * from './copy.ts';
+export * from './stickers.ts';
