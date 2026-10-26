@@ -19,14 +19,22 @@ type G = CanvasRenderingContext2D;
 const INK = '#0d0b1a';
 
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
+/** How long a pumpkin takes to sink back into the street when it goes ungrabbed (ms). */
+const SINK_MS = 650;
 
 export class CityHunts {
   pumpkins: Pumpkin[] = [];
   /** The Blood Moon is up. */
   moon = false;
+  /** How far the city has turned to the Blood Moon (0-1), eased by the renderer so it comes and goes softly. */
+  mix = 0;
   /** Pumpkin art from the Halloween set (its sprites, drawn at this size). */
   private art = new Halloween([]);
   private born = new Map<string, number>();
+  /** Pumpkins as last drawn, and ones that went without being grabbed (the moon set, or their time ran out): they
+   * sink back into the street instead of blinking out. */
+  private seen = new Map<string, Pumpkin>();
+  private leaving: { p: Pumpkin; at: number }[] = [];
   private pops: (PumpkinGot & { at: number })[] = [];
   private gold = new Map<string, HTMLCanvasElement>();
 
@@ -48,6 +56,13 @@ export class CityHunts {
       if (!this.born.has(p.id)) this.born.set(p.id, now);
       if (inView(p.x, p.y)) push(p.y, () => this.drawPumpkin(v, p, now));
     }
+    const ids = new Set(this.pumpkins.map((p) => p.id));
+    for (const [id, p] of this.seen)
+      if (!ids.has(id) && !this.pops.some((e) => e.id === id)) this.leaving.push({ p, at: now });
+    this.seen = new Map(this.pumpkins.map((p) => [p.id, p]));
+    this.leaving = this.leaving.filter((l) => now - l.at < SINK_MS);
+    for (const l of this.leaving)
+      if (inView(l.p.x, l.p.y)) push(l.p.y, () => this.drawPumpkin(v, l.p, now, (now - l.at) / SINK_MS));
     if (this.born.size > 60)
       for (const id of this.born.keys()) if (!this.pumpkins.some((p) => p.id === id)) this.born.delete(id);
   }
@@ -94,7 +109,8 @@ export class CityHunts {
     };
   }
 
-  private drawPumpkin(v: HauntView, p: Pumpkin, now: number) {
+  /** `gone`: how far it has sunk away (0-1), for one that went without being grabbed. */
+  private drawPumpkin(v: HauntView, p: Pumpkin, now: number, gone = 0) {
     const g = v.g;
     const t = v.t * 0.95;
     const W = t * 1.5;
@@ -103,10 +119,11 @@ export class CityHunts {
     const x = v.sx(at.x);
     const y = v.sy(at.y);
     const seed = p.id.length * 3.7 + p.id.charCodeAt(p.id.length - 1);
-    const pop = Math.max(0, this.scaleIn(p, now));
+    // Sinking away: shrinks with an ease-in (slow, then gone) and fades.
+    const pop = Math.max(0, this.scaleIn(p, now)) * (1 - gone * gone);
     const left = p.until - Date.now();
     // Its last 15 seconds: it fades softly in and out, about to go.
-    const fading = left < 15_000 ? 0.7 + 0.3 * Math.cos(now / 220) : 1;
+    const fading = (left < 15_000 && !gone ? 0.7 + 0.3 * Math.cos(now / 220) : 1) * (1 - gone);
     // Hopping away from you: up in an arc, a squash as it lands; standing, a nervous little bounce.
     const idle = at.lift === 0 && at.land === 0;
     const twitch = idle ? Math.abs(Math.sin(now / 260 + seed)) * v.t * 0.06 : 0;
@@ -502,7 +519,8 @@ export class CityHunts {
    * fountain's water. (The moon itself is in the badge under the map.)
    */
   bloodMoon(g: G, v: HauntView, now: number) {
-    if (!this.moon) return;
+    const mix = this.mix;
+    if (mix <= 0) return;
     const W = v.view.w;
     const H = v.view.h;
     const t = v.t;
@@ -518,7 +536,7 @@ export class CityHunts {
       const sz = size * scale;
       const ox = (((v.cam.x * 0.9 + now * speed * t) % sz) + sz) % sz;
       const oy = (((v.cam.y * 0.9 + now * speed * 0.4 * t) % sz) + sz) % sz;
-      g.globalAlpha = alpha;
+      g.globalAlpha = alpha * mix;
       for (let x = -ox; x < W; x += sz) for (let y = -oy; y < H; y += sz) g.drawImage(tile, x, y, sz, sz);
     }
     g.globalAlpha = 1;
@@ -532,7 +550,7 @@ export class CityHunts {
       Math.max(W, H) * 0.75,
     );
     edge.addColorStop(0, 'rgba(120, 8, 24, 0)');
-    edge.addColorStop(1, 'rgba(90, 6, 20, 0.1)');
+    edge.addColorStop(1, `rgba(90, 6, 20, ${0.1 * mix})`);
     g.fillStyle = edge;
     g.fillRect(0, 0, W, H);
     // (The lamps burn crimson in the night's light map: CityRenderer's drawNight.)
@@ -550,7 +568,7 @@ export class CityHunts {
         g.clip();
         const r = t * 0.5;
         const wob = Math.sin(now / 700) * t * 0.04;
-        g.globalAlpha = 0.45;
+        g.globalAlpha = 0.45 * mix;
         g.drawImage(moon, x + t * 0.25 - r + wob, y - r * 0.55, r * 2, r * 1.1);
         g.restore();
       }

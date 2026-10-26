@@ -1,4 +1,4 @@
-import { bloodMoon, isHalloweenWeek } from '@chog-city/game';
+import { bloodMoon, halloweenCity } from '@chog-city/game';
 import { CITY, PUMPKIN_GRAB, hopAway, placeOf, pumpkinSpots } from '@chog-city/game/city';
 import { signInternal } from '@chog-city/server/ticket';
 import { runningFor } from './getaway.ts';
@@ -6,8 +6,9 @@ import { runningFor } from './getaway.ts';
 // The city's two live hunts. This server is the referee for both and tells the web app the result, signed.
 //
 // Pumpkin Rush (Halloween): pumpkins full of cash appear on the streets. The first Chog to reach one carries it
-// home for its gang: a few at a time all through the Blood Moon hour (18:00 UTC), one now and then the rest of
-// the week. A gold one is rare and worth much more.
+// home for its gang: a few at a time all through the Blood Moon, one now and then the rest of Halloween (during
+// judging Halloween comes and goes with the moon, packages/game/src/season.ts, and at moonset the pumpkins go).
+// A gold one is rare and worth much more.
 //
 // Most Wanted (every day): yesterday's best robber has a bounty on their head, paid by their own gang. While
 // they're in the city, a Chog of any other gang that reaches them claims it, and they go to jail. Their own
@@ -75,7 +76,7 @@ export function stepPumpkins(
   rand: () => number,
 ) {
   const moon = bloodMoon(now) !== null || (ALWAYS && Math.floor(now / 600_000) % 2 === 0);
-  const on = moon || isHalloweenWeek(now) || ALWAYS;
+  const on = moon || halloweenCity(now) || ALWAYS;
   let changed = false;
   for (const p of pumpkins.values())
     if (now > p.until || !on) {

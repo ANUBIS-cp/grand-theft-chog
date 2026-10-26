@@ -379,6 +379,47 @@ canvas {
     filter: blur(6px);
   }
 }
+/* The moonset: the moon sinking away as the city turns back, the dim and the words coming and going with it. */
+@keyframes moonset-down {
+  0%,
+  35% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: saturate(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(38vh) scale(0.7);
+    filter: saturate(0.4) brightness(0.6);
+  }
+}
+@keyframes moonset-dim {
+  0% {
+    opacity: 0;
+  }
+  25%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes moonset-text {
+  0%,
+  15% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  35%,
+  80% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+  }
+}
 @keyframes sky-breathe {
   0%,
   100% {

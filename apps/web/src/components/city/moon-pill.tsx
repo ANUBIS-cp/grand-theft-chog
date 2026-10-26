@@ -1,20 +1,39 @@
+import { isJudging } from '@chog-city/game';
 import { Coins, Crosshair, Ghost, X } from '@phosphor-icons/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 
-// The Blood Moon: the moonrise when it comes up, and in the corner under the map its badge: the moon itself while
-// it's up (with how long is left), or a countdown to the next one, with its card.
+// The Blood Moon: the moonrise when it comes up and the moonset when it goes, and in the corner under the map its
+// badge: the moon itself while it's up (with how long is left), or a countdown to the next one, with its card.
+// During judging it rises every 20 minutes, so after the first moonrise of a visit the rest are quick and don't
+// stop play.
 
 const MOON_SRC = '/art/halloween/blood-moon.webp?v=2';
 
-/** The moonrise lasts this long (ms) before the moon settles in; a tap skips it. */
+/** The moonrise lasts this long (ms) before the moon settles in; a tap skips it. The quick one, and the set. */
 const RISE_MS = 3800;
+const QUICK_MS = 2300;
+const SET_MS = 2600;
+
+const howLong = (minutes: number) => (minutes === 60 ? 'For one hour' : `For ${minutes} minutes`);
 
 /**
  * The moment the Blood Moon rises: the city dims, the moon rises big into the middle with its name, then it
  * flies into its badge under the map, so you know where it lives while it's up.
  */
-export function Moonrise({ preview, onDone }: { preview: boolean; onDone: () => void }) {
+export function Moonrise({
+  preview,
+  quick,
+  minutes,
+  onDone,
+}: {
+  preview: boolean;
+  /** The quick one: a lighter dim, a smaller moon and no stopping play. */
+  quick?: boolean;
+  /** How long it's up. */
+  minutes: number;
+  onDone: () => void;
+}) {
   const [leaving, setLeaving] = useState(false);
   /** Where the moon flies to (its badge), from where it is now, and how much it shrinks. */
   const [to, setTo] = useState<{ x: number; y: number; k: number } | null>(null);
@@ -36,18 +55,24 @@ export function Moonrise({ preview, onDone }: { preview: boolean; onDone: () => 
     setTimeout(() => done.current(), 950);
   };
   useEffect(() => {
-    const t = setTimeout(() => leave.current(), RISE_MS);
+    const t = setTimeout(() => leave.current(), quick ? QUICK_MS : RISE_MS);
     return () => clearTimeout(t);
-  }, []);
+  }, [quick]);
   return (
     <div
-      className="pointer-events-auto fixed inset-0 z-[60] overflow-hidden"
+      className={cn(
+        'fixed inset-0 z-[60] overflow-hidden',
+        quick ? 'pointer-events-none' : 'pointer-events-auto',
+      )}
       onPointerDown={() => leave.current()}
       role="presentation"
     >
       <div
         className={cn(
-          'absolute inset-0 animate-[fade-in_700ms_ease-out] bg-[radial-gradient(circle_at_50%_40%,rgba(46,3,12,0.88),rgba(4,2,7,0.96)_70%)] backdrop-blur-[3px] transition-opacity duration-[900ms]',
+          'absolute inset-0 animate-[fade-in_700ms_ease-out] transition-opacity duration-[900ms]',
+          quick
+            ? 'bg-[radial-gradient(circle_at_50%_40%,rgba(46,3,12,0.5),rgba(4,2,7,0.62)_75%)]'
+            : 'bg-[radial-gradient(circle_at_50%_40%,rgba(46,3,12,0.88),rgba(4,2,7,0.96)_70%)] backdrop-blur-[3px]',
           leaving && 'opacity-0',
         )}
       />
@@ -55,7 +80,8 @@ export function Moonrise({ preview, onDone }: { preview: boolean; onDone: () => 
         <div
           ref={moonEl}
           className={cn(
-            'relative aspect-square w-[clamp(210px,60vw,360px)] transition-[translate,scale,opacity] duration-[900ms] ease-[cubic-bezier(.55,0,.2,1)]',
+            'relative aspect-square transition-[translate,scale,opacity] duration-[900ms] ease-[cubic-bezier(.55,0,.2,1)]',
+            quick ? 'w-[clamp(140px,38vw,220px)]' : 'w-[clamp(210px,60vw,360px)]',
             leaving && !to && '-translate-y-[55vh] scale-[0.55] opacity-0',
           )}
           style={leaving && to ? { translate: `${to.x}px ${to.y}px`, scale: String(to.k) } : undefined}
@@ -75,22 +101,93 @@ export function Moonrise({ preview, onDone }: { preview: boolean; onDone: () => 
             />
           </div>
         </div>
-        <div
-          className={cn(
-            'text-center transition-opacity duration-500',
-            leaving && 'opacity-0',
-          )}
-        >
-          <p className="animate-[moonrise-title_1300ms_cubic-bezier(.2,.8,.2,1)_900ms_both] font-display text-[clamp(23px,6.6vw,42px)] uppercase leading-none tracking-[0.16em] text-[#ffc2c2] [text-shadow:0_0_24px_rgba(255,40,60,0.75),0_2px_0_rgba(80,0,10,0.6)]">
+        <div className={cn('text-center transition-opacity duration-500', leaving && 'opacity-0')}>
+          <p
+            className={cn(
+              'font-display uppercase leading-none tracking-[0.16em] text-[#ffc2c2] [text-shadow:0_0_24px_rgba(255,40,60,0.75),0_2px_0_rgba(80,0,10,0.6)]',
+              quick
+                ? 'animate-[moonrise-title_1000ms_cubic-bezier(.2,.8,.2,1)_500ms_both] text-[clamp(19px,5.2vw,30px)]'
+                : 'animate-[moonrise-title_1300ms_cubic-bezier(.2,.8,.2,1)_900ms_both] text-[clamp(23px,6.6vw,42px)]',
+            )}
+          >
             The Blood Moon
             <br />
             has risen
           </p>
-          <p className="mx-auto mt-3 max-w-[340px] animate-[fade-in_900ms_ease-out_1600ms_both] text-[15px] font-medium leading-snug text-white/75 [text-wrap:balance]">
+          <p
+            className={cn(
+              'mx-auto mt-3 max-w-[340px] font-medium leading-snug text-white/75 [text-wrap:balance]',
+              quick
+                ? 'animate-[fade-in_700ms_ease-out_900ms_both] text-[14px]'
+                : 'animate-[fade-in_900ms_ease-out_1600ms_both] text-[15px]',
+            )}
+          >
             {preview
               ? 'Preview: only you can see it, and nothing real is paid.'
-              : 'For one hour: pumpkins in the streets, haunted vaults and +50% on every haul.'}
+              : `${howLong(minutes)}: pumpkins in the streets, haunted vaults and +50% on every haul.`}
           </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The moment the Blood Moon goes down: it rises out of its badge, then sinks away as the city turns back, with
+ * when it comes up again. It doesn't stop play.
+ */
+export function Moonset({ next, now, onDone }: { next: number; now: number; onDone: () => void }) {
+  const [from, setFrom] = useState<{ x: number; y: number; k: number } | null>(null);
+  const [going, setGoing] = useState(false);
+  const moonEl = useRef<HTMLDivElement>(null);
+  const done = useRef(onDone);
+  done.current = onDone;
+  // Before the first paint (so it never shows in the middle first): start where the badge is, so the moon is
+  // seen leaving it.
+  useLayoutEffect(() => {
+    const m = moonEl.current?.getBoundingClientRect();
+    const b = document.querySelector('[data-moon-pill]')?.getBoundingClientRect();
+    if (m && b?.width)
+      setFrom({
+        x: b.left + b.width / 2 - (m.left + m.width / 2),
+        y: b.top + b.height / 2 - (m.top + m.height / 2),
+        k: b.width / m.width,
+      });
+    const a = requestAnimationFrame(() => requestAnimationFrame(() => setGoing(true)));
+    const t = setTimeout(() => done.current(), SET_MS);
+    return () => {
+      cancelAnimationFrame(a);
+      clearTimeout(t);
+    };
+  }, []);
+  const left = next ? next - now : 0;
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden" role="presentation">
+      <div className="absolute inset-0 animate-[moonset-dim_2600ms_ease-in-out_both] bg-[radial-gradient(circle_at_50%_40%,rgba(30,4,12,0.5),rgba(4,2,7,0.6)_75%)]" />
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-[clamp(16px,3vh,28px)] px-6 pb-[6vh]">
+        <div
+          ref={moonEl}
+          className="relative aspect-square w-[clamp(140px,38vw,220px)] animate-[fade-in_450ms_ease-out_both] transition-[translate,scale] duration-[1100ms] ease-[cubic-bezier(.3,0,.2,1)]"
+          style={from && !going ? { translate: `${from.x}px ${from.y}px`, scale: String(from.k) } : undefined}
+        >
+          <img
+            src={MOON_SRC}
+            alt=""
+            draggable={false}
+            className="h-full w-full animate-[moonset-down_2600ms_cubic-bezier(.5,0,.75,0)_both] select-none object-contain drop-shadow-[0_0_30px_rgba(255,40,50,0.45)]"
+          />
+        </div>
+        <div className="animate-[moonset-text_2600ms_ease-in-out_both] text-center">
+          <p className="font-display text-[clamp(19px,5.2vw,30px)] uppercase leading-none tracking-[0.16em] text-white/90 [text-shadow:0_2px_12px_rgba(0,0,0,0.7)]">
+            The Blood Moon
+            <br />
+            has set
+          </p>
+          {left > 0 && (
+            <p className="mt-3 text-[14px] font-medium text-white/70">
+              It rises again in <span className="tabular-nums">{clock(left)}</span>
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -160,7 +257,11 @@ export function MoonPill(props: {
           {up ? (props.preview ? 'PREVIEW' : 'BLOOD MOON') : 'Blood Moon in'}
         </span>
         <span className="mt-0.5 block text-[14px] font-semibold tabular-nums max-sm:text-[13px]">
-          {up ? `${clock(moon.to - now)} left` : until(moon.from - now)}
+          {up
+            ? `${clock(moon.to - now)} left`
+            : moon.from - now < 3_600_000
+              ? clock(moon.from - now)
+              : until(moon.from - now)}
         </span>
       </span>
     </button>
@@ -242,7 +343,9 @@ export function MoonCard(props: {
                 ? 'Preview: practice only, nothing real is paid'
                 : up
                   ? `Up now · ${clock(moon.to - now)} left`
-                  : `Every night 27-31 Oct · 18:00-19:00 UTC · next in ${until(moon.from - now)}`}
+                  : isJudging(moon.from)
+                    ? `Every 20 minutes, for 10 · next in ${clock(moon.from - now)}`
+                    : `Every night 27-31 Oct · 18:00-19:00 UTC · next in ${until(moon.from - now)}`}
             </p>
           </div>
           <button

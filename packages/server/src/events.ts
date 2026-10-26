@@ -19,8 +19,8 @@ import { wantedBonus } from './hunts.ts';
 // worth 20% more.
 //
 // Halloween week (27-31 Oct): the undead and the toxic, Skulls and Radioactive, take 25% more; on Halloween
-// itself (31 Oct) every haul counts double. Every night at 18:00 the Blood Moon rises for an hour: hauls take
-// half as much again (the dates are in packages/game/src/season.ts, shared with the live server).
+// itself (31 Oct) every haul counts double. While the Blood Moon is up (every 20 minutes during judging) hauls
+// take half as much again (the calendar is in packages/game/src/season.ts, shared with the live server).
 
 export const ELECTION = { from: Date.UTC(2026, 9, 24), to: Date.UTC(2026, 9, 27) };
 export const WINNERS_UNTIL = Date.UTC(2026, 9, 30);
@@ -124,7 +124,7 @@ export interface EventsNow {
   /** The election, or its winners' days after it. */
   side: EventNow;
   halloween: { until: number; night: boolean } | null;
-  /** The Blood Moon up now, or the next one (Halloween week only). */
+  /** The Blood Moon up now, or the next one. */
   moon: { from: number; to: number; up: boolean } | null;
 }
 
@@ -148,12 +148,13 @@ export function eventText(e: EventsNow): { key: string; screen: string; title: s
       line: `${s.side} Chogs take ${WINNERS_BONUS}% more on every haul until 30 Oct.`,
     });
   }
+  // Its banner once a day (the moonrise itself shows every time), so the key doesn't change with each moon.
   if (e.moon?.up)
     out.push({
-      key: `blood-moon-${e.moon.from}`,
+      key: 'blood-moon',
       screen: `BLOOD MOON · +${BLOOD_MOON_BONUS}% HAULS · PUMPKINS OUT`,
       title: 'The Blood Moon is up',
-      line: `For one hour every vault is haunted, hauls pay ${BLOOD_MOON_BONUS}% more, and pumpkins full of cash are all over the city. First Chog to one keeps it.`,
+      line: `Until it sets every vault is haunted, hauls pay ${BLOOD_MOON_BONUS}% more, and pumpkins full of cash are all over the city. First Chog to one keeps it.`,
     });
   if (e.halloween)
     out.push(

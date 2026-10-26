@@ -1,5 +1,5 @@
 import { GANGS, displayName, getChog } from '@chog-city/data';
-import { BLOOD_MOON_BONUS, dayStart, nextBloodMoon } from '@chog-city/game';
+import { BLOOD_MOON_BONUS, dayStart, isJudging, nextBloodMoon } from '@chog-city/game';
 import { pumpkinTally, wantedToday } from '@chog-city/server';
 import { heistChogs, mostWanted } from '@chog-city/server/db';
 import { eq } from 'drizzle-orm';
@@ -23,20 +23,22 @@ export async function GET() {
   const base = `https://${(process.env.PUBLIC_HOST ?? 'grandtheftchog.duckdns.org').split(',')[0]!.trim()}`;
   const out: { id: string; text: string }[] = [];
 
-  // The Blood Moon: the one coming, the one up, or the one that just set.
+  // The Blood Moon: the one coming, the one up, or the one that just set. Not during judging, when it rises every
+  // 20 minutes: that would be some 200 posts a day.
   const moon = nextBloodMoon(now) ?? null;
   const last = nextBloodMoon(now - 40 * MIN);
-  if (moon && now >= moon.from - 15 * MIN && now < moon.from)
+  const quiet = (m: { from: number } | null) => (m && isJudging(m.from) ? null : m);
+  if (quiet(moon) && moon && now >= moon.from - 15 * MIN && now < moon.from)
     out.push({
       id: `moon-soon-${moon.from}`,
       text: `🌕 The Blood Moon rises in ${Math.ceil((moon.from - now) / MIN)} minutes.\n\nFor one hour every vault is haunted, hauls pay ${BLOOD_MOON_BONUS}% more, and pumpkins full of cash pop up all over the city. First Chog to one keeps it.\n\n${base}`,
     });
-  if (moon && now >= moon.from && now < moon.from + 10 * MIN)
+  if (quiet(moon) && moon && now >= moon.from && now < moon.from + 10 * MIN)
     out.push({
       id: `moon-up-${moon.from}`,
       text: `🩸 The Blood Moon is up. One hour: haunted vaults, +${BLOOD_MOON_BONUS}% hauls, and the pumpkins are out.\n\n${base}`,
     });
-  if (last && now >= last.to && now < last.to + 30 * MIN) {
+  if (quiet(last) && last && now >= last.to && now < last.to + 30 * MIN) {
     const t = await pumpkinTally(d, last.from, last.to);
     if (t.count) {
       const lines = [

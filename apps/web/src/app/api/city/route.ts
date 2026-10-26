@@ -32,8 +32,10 @@ export async function GET() {
     },
     // Judging-week events on now (packages/server/src/events.ts): a line for the big screen, a banner.
     events: eventText(events),
-    // The Blood Moon up now, or the next one (Halloween week): the countdown under the map.
+    // The Blood Moon up now, or the next one: the countdown under the map. (The page works out the ones after
+    // from the shared calendar, on this clock.)
     moon: events.moon,
+    now,
     practice: { id: PRACTICE, name: name(PRACTICE), powers: powersFor(chogInfo(PRACTICE).skills) },
   });
 }

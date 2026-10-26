@@ -147,6 +147,11 @@ export interface Glow {
  * light that could only bring it back to that was too faint to see. Half scale: 128 means "as painted".
  */
 const AS_PAINTED = 'rgb(128,128,128)';
+/** How long the city takes to turn to the Blood Moon and back (ms). */
+const TURN_MS = 3000;
+const smooth = (k: number) => k * k * (3 - 2 * k);
+const mixRGB = (a: RGB, b: RGB, k: number): RGB =>
+  k <= 0 ? a : k >= 1 ? b : [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 /** The night where no light reaches: about 45% of the painted colours, a little blue. */
 const NIGHT = 'rgb(58,55,74)';
 /** Each light's colour, as added to the night in the light map (half scale, so 128 is the painted colour). */
@@ -211,8 +216,11 @@ export class CityRenderer {
   board: Board = { lines: [] };
   /** Police cars on a getaway (packages/game/src/city/patrol.ts): drawn with their sirens going. */
   sirens: PatrolCar[] = [];
-  /** Halloween week's haunting (halloween.ts), or null the rest of the year. */
+  /** Halloween's haunting (halloween.ts), or null the rest of the year. */
   haunt: Halloween | null = null;
+  /** The haunting should be showing: it fades in, and on going off fades out before it's dropped. */
+  hauntOn = false;
+  private lastFrame = 0;
   /** Pumpkin Rush, Most Wanted and the Blood Moon (hunts.ts). */
   readonly hunts = new CityHunts();
   private hauntView(): HauntView {
@@ -1917,6 +1925,29 @@ export class CityRenderer {
 
   // ---------- frame ----------
 
+  /**
+   * The city turning to and from the Blood Moon: the lamps, the mist and the haunting blend across over a few
+   * seconds (smoothstep, so it starts and ends gently), and a haunting that's gone off is dropped once faded.
+   */
+  private ease(now: number) {
+    const dt = Math.min(100, Math.max(0, now - (this.lastFrame || now)));
+    this.lastFrame = now;
+    const step = (v: number, on: boolean) => Math.min(1, Math.max(0, v + (on ? 1 : -1) * (dt / TURN_MS)));
+    this.moonLin = step(this.moonLin, this.hunts.moon);
+    this.hunts.mix = smooth(this.moonLin);
+    if (this.haunt) {
+      this.hauntLin = step(this.hauntLin, this.hauntOn);
+      this.haunt.fade = smooth(this.hauntLin);
+      if (!this.hauntOn && this.hauntLin === 0) this.haunt = null;
+    } else this.hauntLin = 0;
+  }
+  private moonLin = 0;
+  private hauntLin = 0;
+  /** The city is still turning (so it should keep drawing at full speed). */
+  get turning() {
+    return (this.moonLin > 0 && this.moonLin < 1) || (this.hauntLin > 0 && this.hauntLin < 1);
+  }
+
   draw(
     people: Person[],
     now: number,
@@ -1929,6 +1960,7 @@ export class CityRenderer {
     },
   ) {
     const { g, t, dpr, view } = this;
+    this.ease(now);
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = '#07060d';
     g.fillRect(0, 0, view.w, view.h);
@@ -1966,13 +1998,25 @@ export class CityRenderer {
     if (haunt && hv) {
       const mine = people.find((p) => p.me);
       haunt.step(hv, now, mine ? { x: mine.x, y: mine.y } : null);
+      g.globalAlpha = haunt.fade;
       haunt.ground(g, hv, now);
+      g.globalAlpha = 1;
     }
 
     // Everything that stands up, drawn back to front.
     type Thing = { y: number; draw: () => void };
     const things: Thing[] = [];
-    if (haunt && hv) haunt.things(hv, now, (y, draw) => things.push({ y, draw }));
+    if (haunt && hv)
+      haunt.things(hv, now, (y, draw) =>
+        things.push({
+          y,
+          draw: () => {
+            g.globalAlpha = haunt.fade;
+            draw();
+            g.globalAlpha = 1;
+          },
+        }),
+      );
     const inView = (x: number, y: number, m: number) =>
       x >= x0 - m && x <= x1 + m && y >= y0 - m && y <= y1 + m;
     this.hunts.things(
@@ -2032,13 +2076,17 @@ export class CityRenderer {
     this.drawDust(now);
 
     const lit: Glow[] = [];
-    if (haunt && hv) lit.push(...haunt.lights(hv, now));
+    if (haunt && hv) lit.push(...haunt.lights(hv, now).map((l) => ({ ...l, k: (l.k ?? 1) * haunt.fade })));
     lit.push(...this.hunts.lights(hview));
-    const tint = this.hunts.moon ? 'moon' : haunt ? 'halloween' : null;
-    this.drawNight(x0, y0, x1, y1, now, lit, [...opts.jailed, ...people], tint);
+    this.drawNight(x0, y0, x1, y1, now, lit, [...opts.jailed, ...people], {
+      moon: this.hunts.mix,
+      eerie: haunt ? haunt.fade : 0,
+    });
     if (haunt && hv) {
+      g.globalAlpha = haunt.fade;
       haunt.glow(g, hv, now);
       haunt.sky(g, hv);
+      g.globalAlpha = 1;
     }
     this.hunts.bloodMoon(g, hview, now);
     this.hunts.glow(g, hview, now);
@@ -2214,7 +2262,8 @@ export class CityRenderer {
     now: number,
     lights: Glow[],
     people: Person[],
-    tint: 'moon' | 'halloween' | null,
+    /** How far the lamps have turned crimson under the Blood Moon, and ghostly green with the haunting (0-1). */
+    tint: { moon: number; eerie: number },
   ) {
     const { t, dpr } = this;
     const d = this.dark.getContext('2d')!;
@@ -2233,12 +2282,13 @@ export class CityRenderer {
       d.fillRect(x - r, y - r, r * 2, r * 2);
     };
     const vis = (x: number, y: number, m: number) => x >= x0 - m && x <= x1 + m && y >= y0 - m && y <= y1 + m;
-    const lamp = tint === 'moon' ? LIGHT.moonLamp : LIGHT.lamp;
+    const lamp = mixRGB(LIGHT.lamp, LIGHT.moonLamp, tint.moon);
+    const eerieLamp = mixRGB(lamp, LIGHT.eerieLamp, tint.eerie * (1 - tint.moon));
     for (const p of CITY.props) {
       if (!vis(p.x, p.y, 4)) continue;
       if (p.kind === 'lamp') {
-        const eerie = tint === 'halloween' && Math.round(p.x * 7 + p.y * 3) % 2 === 0;
-        add(this.sx(p.x), this.sy(p.y) - t * 0.3, t * 2.6, eerie ? LIGHT.eerieLamp : lamp);
+        const eerie = Math.round(p.x * 7 + p.y * 3) % 2 === 0;
+        add(this.sx(p.x), this.sy(p.y) - t * 0.3, t * 2.6, eerie ? eerieLamp : lamp);
       }
       if (p.kind === 'fountain') add(this.sx(p.x), this.sy(p.y), t * 2.2, LIGHT.water, 0.7);
       if (p.kind === 'screen') add(this.sx(p.x), this.sy(p.y) - t, t * 3.6, LIGHT.screen, 0.85);
@@ -2247,7 +2297,8 @@ export class CityRenderer {
     for (const c of this.sirens) {
       if (!vis(c.x, c.y, 4)) continue;
       const lit = this.siren(c, now);
-      if (lit !== 'off') add(this.sx(c.x), this.sy(c.y) - t * 0.6, t * 2.8, lit === 'red' ? LIGHT.sirenRed : LIGHT.sirenBlue);
+      if (lit !== 'off')
+        add(this.sx(c.x), this.sy(c.y) - t * 0.6, t * 2.8, lit === 'red' ? LIGHT.sirenRed : LIGHT.sirenBlue);
     }
     for (const p of CITY.places) {
       if (!vis(p.x + p.w / 2, p.y + p.h, p.w)) continue;

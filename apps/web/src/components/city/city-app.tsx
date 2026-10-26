@@ -1,6 +1,6 @@
 'use client';
 import { GANGS, GANG_IDS, metadataIdFor, type GangId } from '@chog-city/data';
-import { dayOf, hauntedVault, isHalloweenWeek } from '@chog-city/game';
+import { dayOf, halloweenCity, hauntedVault, isJudging, nextBloodMoon } from '@chog-city/game';
 import { CITY, EMOTES, HEAD_START, getawayTime, placeOf, type Emote, type Place } from '@chog-city/game/city';
 import { encodeLock, lockFor, type LockKind } from '@chog-city/game/lock';
 import { RUSH_BANK, rushRules, rushSeed } from '@chog-city/game/rush';
@@ -68,7 +68,7 @@ import {
   RoundButton,
 } from './hud';
 import type { Chase, ChaseEnd, ChatMsg, LiveStatus, PumpkinGot, Wanted, WantedGot } from './live-city';
-import { MoonCard, MoonPill, Moonrise } from './moon-pill';
+import { MoonCard, MoonPill, Moonrise, Moonset } from './moon-pill';
 import { useNoPageScroll } from '@/lib/no-page-scroll';
 import { ViewportProbe } from './viewport-probe';
 
@@ -147,6 +147,8 @@ interface CityData {
   burns: Burns;
   events?: { key: string; screen: string; title: string; line: string }[];
   moon?: { from: number; to: number; up: boolean } | null;
+  /** The server's clock when it answered. */
+  now?: number;
 }
 
 const POWER_ICON: Record<PowerId, Parameters<typeof SkillIcon>[0]['skill']> = {
@@ -262,8 +264,12 @@ export function CityApp() {
   // The owner's Blood Moon preview (when it started), and the Blood Moon card.
   const [moonPreview, setMoonPreview] = useState(0);
   const [moonCard, setMoonCard] = useState(false);
-  // The moonrise playing now.
-  const [rising, setRising] = useState(false);
+  // The moonrise playing now: the whole show the first time in a visit, a quick one after (during judging it
+  // rises every 20 minutes); and the moonset.
+  const [rising, setRising] = useState<'full' | 'quick' | null>(null);
+  const [setting, setSetting] = useState<number | null>(null);
+  /** The server's clock minus this one's, so everyone's Blood Moon starts on the same second. */
+  const skew = useRef(0);
   // Walking as your Chog from its wallet address alone (read from Monad, nothing signed): practice only until
   // the wallet is proved. Remembered in this browser.
   const [pass, setPassState] = useState<Pass | null>(null);
@@ -509,8 +515,12 @@ export function CityApp() {
     if (r.ok) setMe(await r.json());
   }, []);
   const loadCity = useCallback(async () => {
+    const sent = Date.now();
     const r = await fetch('/api/city', { cache: 'no-store' });
-    if (r.ok) setCity(await r.json());
+    if (!r.ok) return;
+    const data = (await r.json()) as CityData;
+    if (typeof data.now === 'number') skew.current = data.now - (sent + Date.now()) / 2;
+    setCity(data);
   }, []);
   /** A $CHOG burn went through: fresh posters, banners and jail time. */
   const burned = useCallback(() => {
@@ -682,7 +692,18 @@ export function CityApp() {
     });
     return out;
   }, [board, chog?.gang, alarms, now, city?.burns]);
-  // Halloween week, or ?halloween=1 to see it early: the ghosts are the Skulls' and Radioactive's own faces.
+  // The Blood Moon up now or the next, worked out here from the shared calendar (on the server's clock) so the
+  // countdown is never stale between refreshes; the server says whether there are moons at all (events on).
+  const sNow = now + skew.current;
+  const moon = moonPreview
+    ? { from: moonPreview, to: moonPreview + 3_600_000 }
+    : city?.moon
+      ? nextBloodMoon(sNow)
+      : null;
+  const moonUp = !!moon && sNow >= moon.from && sNow < moon.to;
+  const pumpkinTime = moonUp || halloweenCity(sNow) || (!!city?.moon && isJudging(sNow));
+  // Halloween week (during judging, while the Blood Moon is up), or ?halloween=1 to see it early: the ghosts are
+  // the Skulls' and Radioactive's own faces.
   const haunt = useMemo(() => {
     let preview = false;
     try {
@@ -691,34 +712,39 @@ export function CityApp() {
       /* not in a browser */
     }
     const on =
-      preview || hauntDemo || !!moonPreview || !!city?.events?.some((e) => e.key.startsWith('halloween'));
+      preview ||
+      hauntDemo ||
+      !!moonPreview ||
+      moonUp ||
+      (!isJudging(sNow) && !!city?.events?.some((e) => e.key.startsWith('halloween')));
     if (!on) return null;
     const ids = (board?.board ?? [])
       .filter((v) => v.gang === 'skulls' || v.gang === 'radioactive')
       .flatMap((v) => v.guards);
     return ids.length ? ids : null;
-  }, [city?.events, board, hauntDemo, moonPreview]);
+    // sNow changes every second; what matters is whether the moon is up and whether it's judging.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [city?.events, board, hauntDemo, moonPreview, moonUp, isJudging(sNow)]);
   // The Blood Moon: the one up now or the next, from the server. ?bloodmoon=1 shows one on a local copy.
   // The owner's preview of the Blood Moon (testing before the week): only in this browser, nothing real is paid.
   // On a local copy ?bloodmoon=1 starts one too.
   useEffect(() => {
-    if (location.hostname === 'localhost' && new URLSearchParams(location.search).get('bloodmoon') === '1')
-    {
-      setMoonPreview(Date.now() - 1000);
-      setRising(true);
+    if (location.hostname === 'localhost' && new URLSearchParams(location.search).get('bloodmoon') === '1') {
+      setMoonPreview(Date.now() + skew.current - 1000);
+      setRising('full');
     }
   }, []);
   const startPreview = () => {
     // Starts at once: the page's clock only ticks each second, so bring it up to now as well.
     const at = Date.now();
-    setMoonPreview(at - 1000);
+    setMoonPreview(at + skew.current - 1000);
     setNow(at);
     setMoonCard(false);
-    setRising(true);
+    setRising('full');
   };
   /** The moonrise is over: in a preview, what there is to try. */
   const risen = () => {
-    setRising(false);
+    setRising(null);
     if (moonPreview)
       setBanner({
         id: `preview${Date.now()}`,
@@ -728,28 +754,41 @@ export function CityApp() {
         long: true,
       });
   };
-  const moon = moonPreview ? { from: moonPreview, to: moonPreview + 3_600_000 } : (city?.moon ?? null);
-  const moonUp = !!moon && now >= moon.from && now < moon.to;
-  const pumpkinTime = moonUp || isHalloweenWeek(now);
   const previewing = !!moonPreview && moonUp;
   // The moonrise: when the Blood Moon comes up while you're here, or once if you arrive while it's up (a preview
   // plays its own when it starts).
   const risingFor = moonUp && !moonPreview ? moon.from : 0;
   useEffect(() => {
     if (!risingFor) return;
+    let seenOne = false;
     try {
       const key = `cw-moonrise-${risingFor}`;
       if (localStorage.getItem(key)) return;
       localStorage.setItem(key, '1');
+      seenOne = sessionStorage.getItem('cw-moonrise-seen') === '1';
+      sessionStorage.setItem('cw-moonrise-seen', '1');
     } catch {
       return;
     }
-    setRising(true);
+    setRising(seenOne ? 'quick' : 'full');
   }, [risingFor]);
+  // The moonset: when a Blood Moon you were here for goes down (not a preview), with when the next one rises.
+  const wasUp = useRef<number | null>(null);
+  useEffect(() => {
+    const up = moonUp && !moonPreview ? moon!.from : null;
+    if (wasUp.current !== null && up === null && !moonPreview) {
+      const next = nextBloodMoon(sNow);
+      setRising(null);
+      setSetting(next ? next.from : 0);
+    }
+    wasUp.current = up;
+    // Only on the moon coming up or going down.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moonUp, moonPreview]);
   // The preview's hour is over: back to the real calendar.
   useEffect(() => {
-    if (moonPreview && now >= moonPreview + 3_600_000) setMoonPreview(0);
-  }, [moonPreview, now]);
+    if (moonPreview && sNow >= moonPreview + 3_600_000) setMoonPreview(0);
+  }, [moonPreview, sNow]);
   // Pumpkins you've grabbed today, kept in this browser for the task list.
   const pumpkinKey = `cw-pk-${dayOf(now)}`;
   useEffect(() => {
@@ -1135,7 +1174,11 @@ export function CityApp() {
       duties.push({
         key: 'pumpkin',
         label: pumpkinsToday ? `Grabbed ${plural(pumpkinsToday, 'pumpkin')} today` : 'Grab a pumpkin',
-        sub: moonUp ? 'Blood Moon: they’re all over the city' : 'Follow the column of light',
+        sub: moonUp
+          ? 'Blood Moon: they’re all over the city'
+          : halloweenCity(sNow)
+            ? 'Follow the column of light'
+            : 'They come out with the Blood Moon',
         done: pumpkinsToday > 0,
       });
     const mates = (city?.jailed ?? []).filter((j) => j.gang === gang && j.id !== chog.id && j.until > now);
@@ -1377,6 +1420,12 @@ export function CityApp() {
     }
     return null;
   })();
+  // A moonset (or a quick moonrise) that happened while you were in a vault is old news when you come out.
+  useEffect(() => {
+    if (!heistScreen) return;
+    setSetting(null);
+    setRising((r) => (r === 'quick' ? null : r));
+  }, [heistScreen]);
   // The music follows the scene: the vault (and its lock), the run home, or the city at night.
   const track: Track =
     heistScreen || raidView ? 'vault' : myChase || practiceRun ? 'chase' : haunt ? 'halloween' : 'city';
@@ -1519,7 +1568,17 @@ export function CityApp() {
         }}
       />
 
-      {rising && !heistScreen && <Moonrise preview={!!moonPreview} onDone={risen} />}
+      {rising && !heistScreen && (
+        <Moonrise
+          preview={!!moonPreview}
+          quick={rising === 'quick'}
+          minutes={moon ? Math.round((moon.to - moon.from) / 60_000) : 0}
+          onDone={risen}
+        />
+      )}
+      {setting !== null && !heistScreen && (
+        <Moonset next={setting} now={sNow} onDone={() => setSetting(null)} />
+      )}
 
       {/* Top left: who you are and today's jobs */}
       <div
@@ -1573,14 +1632,14 @@ export function CityApp() {
           <div className="sm:hidden">
             <MusicButton />
           </div>
-          {moon && <MoonPill moon={moon} now={now} preview={previewing} onOpen={() => setMoonCard(true)} />}
+          {moon && <MoonPill moon={moon} now={sNow} preview={previewing} onOpen={() => setMoonCard(true)} />}
         </div>
       </div>
 
       {moonCard && moon && (
         <MoonCard
           moon={moon}
-          now={now}
+          now={sNow}
           preview={previewing}
           onTry={me?.admin ? startPreview : undefined}
           onEnd={() => {

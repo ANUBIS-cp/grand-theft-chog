@@ -471,7 +471,8 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         s.moving ||
         !!s.practice ||
         !!s.after ||
-        (s.net?.chases.size ?? 0) > 0;
+        (s.net?.chases.size ?? 0) > 0 ||
+        r.turning;
       if (busy) activeAt = now;
       if (now - activeAt > IDLE_MS || !document.hasFocus()) {
         idleSkip = !idleSkip;
@@ -810,13 +811,18 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     };
   }, []);
 
-  // Halloween: the haunting goes on (and comes off) with the event.
+  // Halloween: the haunting goes on (and comes off) with the event, or during judging with the Blood Moon. It
+  // fades in and out (the renderer drops it once it's faded out).
   const hauntKey = props.haunt?.join(',') ?? '';
   useEffect(() => {
     const r = state.current.r;
     if (!r) return;
-    // Made again only when the ghosts change (hauntKey), not on every render.
-    r.haunt = props.haunt?.length ? new Halloween(props.haunt) : null;
+    if (props.haunt?.length) {
+      // Made again only when the ghosts change (hauntKey), not on every render. (How far it has faded in is the
+      // renderer's, so a new set of ghosts carries on from there.)
+      r.haunt = new Halloween(props.haunt);
+      r.hauntOn = true;
+    } else r.hauntOn = false;
   }, [hauntKey]);
 
   // Pointer: a tap walks you there (or to a building's door); press and drag steers like a joystick.

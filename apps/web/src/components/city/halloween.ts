@@ -93,6 +93,8 @@ function lanternSpots(): { x: number; y: number; flare: number }[] {
 }
 
 export class Halloween {
+  /** How much of the haunting shows (0-1): it fades in and out with the Blood Moon. Every alpha is times this. */
+  fade = 1;
   private lanterns = lanternSpots();
   private wisps: Wisp[] = [];
   private ghosts: Ghost[] = [];
@@ -376,10 +378,20 @@ export class Halloween {
     const out: Glow[] = [];
     for (const l of this.lanterns) {
       const f = 0.97 + 0.03 * Math.sin(now / 1700 + l.x);
-      out.push({ x: v.sx(l.x), y: v.sy(l.y) - t * 0.2, r: t * (1.5 + l.flare * 0.6) * f, rgb: [150, 92, 35] });
+      out.push({
+        x: v.sx(l.x),
+        y: v.sy(l.y) - t * 0.2,
+        r: t * (1.5 + l.flare * 0.6) * f,
+        rgb: [150, 92, 35],
+      });
     }
     for (const w of this.wisps)
-      out.push({ x: v.sx(w.x), y: v.sy(w.y), r: t * 0.9, rgb: w.hue === 150 ? [40, 120, 80] : [90, 50, 130] });
+      out.push({
+        x: v.sx(w.x),
+        y: v.sy(w.y),
+        r: t * 0.9,
+        rgb: w.hue === 150 ? [40, 120, 80] : [90, 50, 130],
+      });
     return out;
   }
 
@@ -396,13 +408,13 @@ export class Halloween {
       w.trail.forEach((p, i) => {
         const k = 1 - i / w.trail.length;
         const s = t * 0.16 * k;
-        g.globalAlpha = 0.4 * k;
+        g.globalAlpha = this.fade * (0.4 * k);
         g.drawImage(sprite, v.sx(p.x) - s, v.sy(p.y) - s, s * 2, s * 2);
       });
       const pulse = 1 + 0.06 * Math.sin(now / 1100 + w.x * 4);
       // The wisp itself: a small ball of light (its light on the street is in the light map).
       const s = t * 0.24 * pulse;
-      g.globalAlpha = 1;
+      g.globalAlpha = this.fade;
       g.drawImage(sprite, v.sx(w.x) - s, v.sy(w.y) - s, s * 2, s * 2);
       g.fillStyle = 'rgba(255,255,255,0.9)';
       g.beginPath();
@@ -413,7 +425,7 @@ export class Halloween {
     if (this.toxic) {
       const x = v.sx(this.toxic.door.x + 3.4);
       const y = v.sy(this.toxic.door.y + 1.4);
-      g.globalAlpha = 0.4 + 0.12 * Math.sin(now / 500);
+      g.globalAlpha = this.fade * (0.4 + 0.12 * Math.sin(now / 500));
       g.drawImage(this.glowSprite('toxic', 120, 255, 60), x - t * 2.6, y - t * 1.6, t * 5.2, t * 3.2);
       // Green vapour rising off it and fading.
       for (let i = 0; i < 10; i++) {
@@ -421,10 +433,10 @@ export class Halloween {
         const px = x + Math.sin(i * 4.1) * t * 1.1 + Math.sin(now / 700 + i) * t * 0.15;
         const py = y - life * t * 2.4;
         const r = t * (0.12 + life * 0.35);
-        g.globalAlpha = 0.55 * Math.sin(life * Math.PI);
+        g.globalAlpha = this.fade * (0.55 * Math.sin(life * Math.PI));
         g.drawImage(this.glowSprite('toxic', 120, 255, 60), px - r, py - r, r * 2, r * 2);
       }
-      g.globalAlpha = 1;
+      g.globalAlpha = this.fade;
     }
     // The cauldron's column of sparks and smoke.
     if (this.cauldron) this.drawBrewGlow(g, v, this.cauldron, now);
@@ -500,7 +512,7 @@ export class Halloween {
     g.save();
     // Standing in front of your Chog: see-through, like anyone else in front of you.
     const me = this.me;
-    if (me && l.y > me.y && l.y - me.y < 1.4 && Math.abs(l.x - me.x) < 1) g.globalAlpha = 0.35;
+    if (me && l.y > me.y && l.y - me.y < 1.4 && Math.abs(l.x - me.x) < 1) g.globalAlpha = this.fade * 0.35;
     g.translate(x, y - bounce);
     g.rotate(shake);
     const body = this.pumpkinBody(t, v.dpr);
@@ -520,7 +532,7 @@ export class Halloween {
         const ex = x + Math.sin(i * 2.3 + seed) * W * 0.25 * life + Math.sin(now / 200 + i) * 3;
         const ey = y - bounce - H * 0.42 - life * t * 1.4;
         const r = t * 0.07 * (1 - life);
-        g.globalAlpha = near * (1 - life);
+        g.globalAlpha = this.fade * (near * (1 - life));
         g.drawImage(this.glowSprite('ember', 255, 150, 40), ex - r * 4, ey - r * 4, r * 8, r * 8);
         g.fillStyle = '#ffe9a0';
         g.beginPath();
@@ -611,7 +623,7 @@ export class Halloween {
     g.save();
     g.globalCompositeOperation = 'lighter';
     // Only when it laughs at you (you're close): light spills out of the cuts.
-    g.globalAlpha = near * 0.35 * flick;
+    g.globalAlpha = this.fade * (near * 0.35 * flick);
     g.drawImage(this.glowSprite('faceglow', 255, 170, 50), cx - W * 0.6, cy - H * 0.55, W * 1.2, H * 1.2);
     g.restore();
     // Glints in its eyes, turned to look at you.
@@ -652,7 +664,7 @@ export class Halloween {
       g.ellipse(x, v.sy(gh.y) + t * 0.1, W * 0.35, t * 0.1, 0, 0, Math.PI * 2);
       g.fill();
       g.save();
-      g.globalAlpha = alpha;
+      g.globalAlpha = this.fade * alpha;
       // The sheet: round on top, a hem that ripples.
       const path = () => {
         g.beginPath();
@@ -674,7 +686,7 @@ export class Halloween {
         g.save();
         path();
         g.clip();
-        g.globalAlpha = alpha * 0.95;
+        g.globalAlpha = this.fade * (alpha * 0.95);
         g.drawImage(pic, x - W / 2, y - W / 2, W, W);
         // Washed pale and blue, like a ghost.
         g.globalCompositeOperation = 'source-atop';
@@ -685,7 +697,7 @@ export class Halloween {
       g.restore();
       g.save();
       g.globalCompositeOperation = 'lighter';
-      g.globalAlpha = alpha * 0.45;
+      g.globalAlpha = this.fade * (alpha * 0.45);
       g.drawImage(this.glowSprite('ghost', 120, 200, 255), x - W * 0.9, y - W * 0.8, W * 1.8, H * 1.5);
       // Ectoplasm dripping off the hem as it drifts.
       for (let i = 0; i < 5; i++) {
@@ -693,7 +705,7 @@ export class Halloween {
         const px = x + Math.sin(i * 2.7 + gh.phase) * W * 0.35;
         const py = y + H * 0.6 + life * t * 0.6;
         const r = t * 0.09 * (1 - life);
-        g.globalAlpha = alpha * (1 - life);
+        g.globalAlpha = this.fade * (alpha * (1 - life));
         g.drawImage(this.glowSprite('ghost', 120, 200, 255), px - r * 3, py - r * 3, r * 6, r * 6);
       }
       g.restore();
@@ -757,12 +769,12 @@ export class Halloween {
     if (x < -t * 4 || x > v.view.w + t * 4 || y < -t * 6 || y > v.view.h + t * 4) return;
     const k = (Math.sin(now / 2500) + 1) / 2;
     // Glow round the pot, not on it, so the brew keeps its colour.
-    g.globalAlpha = 0.3;
+    g.globalAlpha = this.fade * 0.3;
     g.drawImage(this.glowSprite('brew', 160, 90, 255), x - t * 2.6, y - t * 1.4, t * 5.2, t * 2.8);
-    g.globalAlpha = 0.15 + 0.12 * k;
+    g.globalAlpha = this.fade * (0.15 + 0.12 * k);
     g.drawImage(this.glowSprite('brewG', 90, 255, 140), x - t * 2.2, y - t * 1.2, t * 4.4, t * 2.4);
     // A soft beam of light straight up out of the pot.
-    g.globalAlpha = 0.22 + 0.1 * Math.sin(now / 400);
+    g.globalAlpha = this.fade * (0.22 + 0.1 * Math.sin(now / 400));
     g.drawImage(this.glowSprite('beam', 140, 255, 160), x - t * 0.7, y - t * 4.6, t * 1.4, t * 4.2);
     for (let i = 0; i < 30; i++) {
       const life = (now / 2200 + i / 30) % 1;
@@ -772,7 +784,7 @@ export class Halloween {
       const py = y - life * t * 3.6 + Math.sin(a) * r * 0.3;
       const size = t * 0.3 * (1 - life * 0.6);
       const hue = i % 3;
-      g.globalAlpha = Math.sin(life * Math.PI);
+      g.globalAlpha = this.fade * Math.sin(life * Math.PI);
       g.drawImage(
         this.glowSprite(
           `spark${hue}`,
@@ -789,14 +801,14 @@ export class Halloween {
     // Smoke rings, every couple of seconds.
     for (let i = 0; i < 2; i++) {
       const life = (now / 3000 + i * 0.5) % 1;
-      g.globalAlpha = 0.45 * (1 - life);
+      g.globalAlpha = this.fade * (0.45 * (1 - life));
       g.strokeStyle = i ? 'rgba(170,120,255,1)' : 'rgba(110,255,170,1)';
       g.lineWidth = t * 0.08 * (1 - life) + 1;
       g.beginPath();
       g.ellipse(x, y - life * t * 3, t * (0.4 + life * 0.9), t * (0.15 + life * 0.3), 0, 0, Math.PI * 2);
       g.stroke();
     }
-    g.globalAlpha = 1;
+    g.globalAlpha = this.fade;
   }
 
   /** Blue ghost-fire burning at both ends of the Skulls' roof: tongues of flame round a white-hot core. */
@@ -810,9 +822,9 @@ export class Halloween {
       const fy = v.sy(p.y) + t * 0.95;
       if (fx < -t * 2 || fx > v.view.w + t * 2 || fy < -t * 3 || fy > v.view.h + t * 3) continue;
       // A soft halo first, small.
-      g.globalAlpha = 0.35;
+      g.globalAlpha = this.fade * 0.35;
       g.drawImage(this.glowSprite('gfire', 90, 160, 255), fx - t * 0.7, fy - t * 1.1, t * 1.4, t * 1.4);
-      g.globalAlpha = 1;
+      g.globalAlpha = this.fade;
       // Three tongues of flame, each with its own height and sway; outer blue, then cyan, then white.
       const layers = [
         { w: 0.3, h: 0.95, c: 'rgba(60,110,255,0.75)' },
@@ -846,7 +858,7 @@ export class Halloween {
       // Sparks lifting off it.
       for (let s2 = 0; s2 < 4; s2++) {
         const life = (now / 900 + s2 * 0.25 + i * 0.5) % 1;
-        g.globalAlpha = 1 - life;
+        g.globalAlpha = this.fade * (1 - life);
         g.fillStyle = '#bfe8ff';
         g.beginPath();
         g.arc(
@@ -858,7 +870,7 @@ export class Halloween {
         );
         g.fill();
       }
-      g.globalAlpha = 1;
+      g.globalAlpha = this.fade;
     }
   }
 
@@ -929,7 +941,7 @@ export class Halloween {
     }
     g.save();
     g.imageSmoothingEnabled = true;
-    g.globalAlpha = 0.6;
+    g.globalAlpha = this.fade * 0.6;
     g.drawImage(this.fog, 0, 0, v.view.w, v.view.h);
     g.restore();
   }
