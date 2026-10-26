@@ -47,6 +47,19 @@ export function ChatPanel(props: {
   useEffect(() => {
     if (tray) setTrayMade(true);
   }, [tray]);
+  // A tap anywhere outside the stickers closes them, the typing box included. The sticker button is left out, or its own toggle would
+  // reopen them straight after.
+  const trayBox = useRef<HTMLDivElement>(null);
+  const trayBtn = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!tray) return;
+    const down = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (!trayBox.current?.contains(t) && !trayBtn.current?.contains(t)) setTray(false);
+    };
+    document.addEventListener('pointerdown', down, true);
+    return () => document.removeEventListener('pointerdown', down, true);
+  }, [tray]);
   const list = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const shown = useMemo(
@@ -243,7 +256,11 @@ export function ChatPanel(props: {
 
       {/* Writing */}
       <div className="border-t border-sep px-3 pb-3 pt-2.5">
-        {trayMade && props.me.chog !== null && <StickerTray shown={tray} onPick={sticker} />}
+        {trayMade && props.me.chog !== null && (
+          <div ref={trayBox}>
+            <StickerTray shown={tray} onPick={sticker} />
+          </div>
+        )}
         {props.refused && REFUSED[props.refused] && (
           <p className="mb-1.5 px-1 text-[12px] text-sys-orange">{REFUSED[props.refused]}</p>
         )}
@@ -266,11 +283,11 @@ export function ChatPanel(props: {
               placeholder={placeholder}
               enterKeyHint="send"
               maxLength={240}
-              onFocus={() => setTray(false)}
               className="h-8 min-w-0 flex-1 bg-transparent text-[16px] text-white outline-none placeholder:text-label-3"
             />
             <button
               type="button"
+              ref={trayBtn}
               onClick={toggleTray}
               aria-label={tray ? 'Close stickers' : 'Stickers'}
               aria-pressed={tray}
