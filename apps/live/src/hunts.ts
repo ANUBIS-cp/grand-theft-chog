@@ -1,5 +1,5 @@
 import { bloodMoon, halloweenCity } from '@chog-city/game';
-import { CITY, PUMPKIN_GRAB, hopAway, placeOf, pumpkinSpots } from '@chog-city/game/city';
+import { CITY, HOP, PUMPKIN_GRAB, hopAway, placeOf, pumpkinSpots } from '@chog-city/game/city';
 import { signInternal } from '@chog-city/server/ticket';
 import { runningFor } from './getaway.ts';
 
@@ -43,11 +43,51 @@ export interface Pumpkin {
   until: number;
   /** When it may hop away next (ms; see hopAway). */
   next?: number;
+  /** Where it last hopped from, and when: still catchable there for a moment (see reaches). */
+  was?: { x: number; y: number; at: number };
+}
+
+/**
+ * Lag compensation for the grab, the way Valve's servers judge a hit by what the player saw rather than by the
+ * server's own later view (developer.valvesoftware.com/wiki/Lag_Compensation). Two gaps between your screen and
+ * this server: your position arrives a tick or two late and in steps, so the whole stretch you ran since the last
+ * tick counts, not just where you are now; and a pumpkin that has just hopped is still drawn mid-air near where
+ * it was, so for a moment after a hop reaching that spot counts too.
+ */
+const HOP_GRACE_MS = HOP.air + 200;
+/** A jump longer than this between ticks is a move across the map (out of a vault), not a run. */
+const MAX_STRIDE = 2.5;
+const lastAt = new Map<number, { x: number; y: number }>();
+
+/** How close the line from (ax, ay) to (bx, by) comes to (px, py). */
+export function segmentGap(ax: number, ay: number, bx: number, by: number, px: number, py: number) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  const k = len2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+  return Math.hypot(ax + dx * k - px, ay + dy * k - py);
+}
+
+/** Did this Chog reach the pumpkin this tick (anywhere on its way here, at the pumpkin or where it just hopped from)? */
+export function reaches(
+  from: { x: number; y: number } | undefined,
+  h: { x: number; y: number },
+  p: Pumpkin,
+  now: number,
+): boolean {
+  const a = from && Math.hypot(h.x - from.x, h.y - from.y) <= MAX_STRIDE ? from : h;
+  if (segmentGap(a.x, a.y, h.x, h.y, p.x, p.y) <= PUMPKIN_GRAB) return true;
+  return (
+    !!p.was &&
+    now - p.was.at < HOP_GRACE_MS &&
+    segmentGap(a.x, a.y, h.x, h.y, p.was.x, p.was.y) <= PUMPKIN_GRAB
+  );
 }
 
 const pumpkins = new Map<string, Pumpkin>();
 let nextPumpkin = 0;
-export const pumpkinsNow = () => [...pumpkins.values()];
+/** The pumpkins as players see them (where one hopped from is the referee's business). */
+export const pumpkinsNow = () => [...pumpkins.values()].map(({ was: _was, ...p }) => p);
 
 async function post(path: string, body: string): Promise<Response | null> {
   for (let tryNo = 0; tryNo < 3; tryNo++) {
@@ -110,13 +150,14 @@ export function stepPumpkins(
     const to = hopAway(p, chasers, now, rand);
     if (!to) continue;
     broadcast({ t: 'pk-hop', id: p.id, fx: p.x, fy: p.y, x: to.x, y: to.y });
+    p.was = { x: p.x, y: p.y, at: now };
     p.x = to.x;
     p.y = to.y;
   }
   for (const p of pumpkins.values())
     for (const h of hunters) {
       if (h.chog === null || h.gang === null || jailedNow(h, now)) continue;
-      if (Math.hypot(h.x - p.x, h.y - p.y) > PUMPKIN_GRAB) continue;
+      if (!reaches(lastAt.get(h.id), h, p, now)) continue;
       pumpkins.delete(p.id);
       changed = true;
       broadcast({
@@ -137,6 +178,13 @@ export function stepPumpkins(
       break;
     }
   if (changed) broadcast({ t: 'pk', list: pumpkinsNow() });
+  // Where everyone was this tick, for next tick's stretch (players who left are forgotten).
+  const here = new Set<number>();
+  for (const h of hunters) {
+    lastAt.set(h.id, { x: h.x, y: h.y });
+    here.add(h.id);
+  }
+  for (const id of lastAt.keys()) if (!here.has(id)) lastAt.delete(id);
 }
 
 export interface Wanted {

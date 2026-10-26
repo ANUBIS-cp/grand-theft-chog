@@ -51,10 +51,10 @@ export default async function Image({ params }: { params: Promise<{ id: string }
         <div
           style={{
             position: 'absolute',
-            top: 34,
-            right: 40,
-            width: 120,
-            height: 120,
+            top: 30,
+            right: 34,
+            width: 92,
+            height: 92,
             borderRadius: 999,
             backgroundImage: 'radial-gradient(circle at 38% 34%, #ff6a5a, #c0141f 55%, #6e0610)',
             boxShadow: '0 0 60px 18px rgba(255,40,50,0.45)',
@@ -69,8 +69,13 @@ export default async function Image({ params }: { params: Promise<{ id: string }
       />
       <div style={{ display: 'flex', flexDirection: 'column', marginLeft: 56, flex: 1 }}>
         <div style={{ display: 'flex', fontSize: 34, letterSpacing: 2, color: moon ? '#ff8a8a' : '#a59fc9' }}>
-          {run.prisoner ? 'WATCH THE JAIL BREAK' : 'WATCH THE ROBBERY'}
-          {moon ? ' · UNDER THE BLOOD MOON' : ''}
+          {run.prisoner
+            ? moon
+              ? 'A BLOOD MOON JAIL BREAK'
+              : 'WATCH THE JAIL BREAK'
+            : moon
+              ? 'A BLOOD MOON ROBBERY'
+              : 'WATCH THE ROBBERY'}
         </div>
         <T text={name.toUpperCase()} style={{ fontSize: 96, lineHeight: 0.9, marginTop: 8 }} />
         <div style={{ display: 'flex', marginTop: 18, gap: 14, alignItems: 'center', fontSize: 34 }}>
