@@ -108,6 +108,32 @@ async function post(path: string, body: string): Promise<Response | null> {
 
 const jailedNow = (h: Hunter, now: number) => h.jail !== null && h.jail > now;
 
+/** How many pumpkins are out the moment a Blood Moon rises. */
+export const MOON_OPENING = 3;
+/** The Blood Moon whose opening pumpkins are out (its start). */
+let startedFor = 0;
+
+/** A new pumpkin somewhere new (not on top of another one). False if no free spot turned up. */
+function placePumpkin(now: number, moon: boolean, rand: () => number): boolean {
+  const all = pumpkinSpots();
+  for (let k = 0; k < 12; k++) {
+    const s = all[Math.floor(rand() * all.length)]!;
+    if ([...pumpkins.values()].some((p) => Math.hypot(p.x - s.x, p.y - s.y) < 8)) continue;
+    const gold = rand() < (moon ? 0.12 : 0.05);
+    const p: Pumpkin = {
+      id: `${now.toString(36)}${Math.floor(rand() * 1e6).toString(36)}`,
+      x: s.x,
+      y: s.y,
+      gold,
+      cash: gold ? 1500 : (moon ? 300 : 200) + Math.floor(rand() * 5) * 50,
+      until: now + (moon ? 150_000 : 600_000),
+    };
+    pumpkins.set(p.id, p);
+    return true;
+  }
+  return false;
+}
+
 /** One tick of Pumpkin Rush: pumpkins appear and go, and the first Chog to reach one takes it. */
 export function stepPumpkins(
   now: number,
@@ -123,25 +149,15 @@ export function stepPumpkins(
       pumpkins.delete(p.id);
       changed = true;
     }
+  // Each Blood Moon opens with a few already out, so the streets fill the moment it rises; then one at a time.
+  const up = bloodMoon(now);
+  if (up && startedFor !== up.from) {
+    startedFor = up.from;
+    for (let i = pumpkins.size; i < MOON_OPENING; i++) changed = placePumpkin(now, true, rand) || changed;
+    nextPumpkin = now + 30_000 + rand() * 25_000;
+  }
   if (on && now >= nextPumpkin && pumpkins.size < (moon ? 5 : 1)) {
-    const all = pumpkinSpots();
-    // Somewhere new: not on top of another pumpkin.
-    for (let k = 0; k < 12; k++) {
-      const s = all[Math.floor(rand() * all.length)]!;
-      if ([...pumpkins.values()].some((p) => Math.hypot(p.x - s.x, p.y - s.y) < 8)) continue;
-      const gold = rand() < (moon ? 0.12 : 0.05);
-      const p: Pumpkin = {
-        id: `${now.toString(36)}${Math.floor(rand() * 1e6).toString(36)}`,
-        x: s.x,
-        y: s.y,
-        gold,
-        cash: gold ? 1500 : (moon ? 300 : 200) + Math.floor(rand() * 5) * 50,
-        until: now + (moon ? 150_000 : 600_000),
-      };
-      pumpkins.set(p.id, p);
-      changed = true;
-      break;
-    }
+    changed = placePumpkin(now, moon, rand) || changed;
     nextPumpkin = now + (moon ? 30_000 + rand() * 25_000 : 5 * 60_000 + rand() * 5 * 60_000);
   }
   // Pumpkins hop away from any Chog that comes near: everyone sees the same hop.

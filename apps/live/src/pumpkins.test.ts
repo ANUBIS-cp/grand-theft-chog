@@ -34,3 +34,21 @@ describe('grabbing a pumpkin', () => {
     expect(reaches({ x: 0, y: 5 }, { x: 20, y: 5 }, pk(10, 5), 0)).toBe(false);
   });
 });
+
+describe('the Blood Moon opening', () => {
+  it('puts three pumpkins out the moment the moon rises, then one at a time', async () => {
+    const { MOON_OPENING, pumpkinsNow, stepPumpkins } = await import('./hunts.ts');
+    let seed = 1;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+    const rise = Date.UTC(2026, 9, 28, 9, 10);
+    stepPumpkins(rise - 1000, [], () => {}, rand);
+    expect(pumpkinsNow()).toHaveLength(0);
+    stepPumpkins(rise + 50, [], () => {}, rand);
+    expect(pumpkinsNow()).toHaveLength(MOON_OPENING);
+    // A few seconds on, nothing more yet (the next one is 30-55 s away), and no second opening.
+    stepPumpkins(rise + 5000, [], () => {}, rand);
+    expect(pumpkinsNow()).toHaveLength(MOON_OPENING);
+    stepPumpkins(rise + 60_000, [], () => {}, rand);
+    expect(pumpkinsNow()).toHaveLength(MOON_OPENING + 1);
+  });
+});
