@@ -57,6 +57,8 @@ export interface Person {
   wanted?: boolean;
   /** Today's Most Wanted, not yet caught: the bounty on their head. */
   hunted?: number;
+  /** ...and why they can't be caught right now, if they can't (the plate says so). */
+  huntedSafe?: string | null;
   /** Their gang, for how they walk. */
   gang?: GangId | null;
   /** What they just said in the city chat: a speech bubble over them for a few seconds. */
@@ -120,6 +122,15 @@ function shade(hex: string, f: number) {
   const ch = (v: number) => Math.max(0, Math.min(255, Math.round(f < 0 ? v * (1 + f) : v + (255 - v) * f)));
   return `rgb(${ch(n >> 16)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
 }
+
+/** The Most Wanted plate while they can't be caught (the live server's reason). */
+const SAFE_PLATE: Record<string, string> = {
+  door: 'SAFE · AT A DOOR',
+  home: 'SAFE · HOME',
+  arriving: 'SAFE · JUST ARRIVED',
+  running: 'SAFE · ON A GETAWAY',
+  jail: 'IN JAIL',
+};
 
 type RGB = readonly [number, number, number];
 /** A light for the night (screen px): its colour is what it adds to the night's blue, `k` how strongly. */
@@ -1715,7 +1726,7 @@ export class CityRenderer {
       // Most Wanted: a red plate over the name with the bounty in gold, swinging a little.
       const ps = Math.round(size * 0.92);
       g.font = `900 ${ps}px ${this.font}`;
-      const title = 'MOST WANTED';
+      const title = p.huntedSafe ? (SAFE_PLATE[p.huntedSafe] ?? 'SAFE') : 'MOST WANTED';
       const prize = `$${p.hunted.toLocaleString('en-US')}`;
       const tw = g.measureText(title).width;
       g.font = `900 ${Math.round(ps * 1.05)}px ${this.font}`;
@@ -1726,11 +1737,11 @@ export class CityRenderer {
       g.save();
       g.translate(x, py);
       g.rotate(Math.sin(now / 700) * 0.03);
-      g.shadowColor = 'rgba(255, 30, 50, 0.55)';
+      g.shadowColor = p.huntedSafe ? 'rgba(0, 0, 0, 0.4)' : 'rgba(255, 30, 50, 0.55)';
       g.shadowBlur = 14;
       const plate = g.createLinearGradient(0, -ph / 2, 0, ph / 2);
-      plate.addColorStop(0, '#ff4a5c');
-      plate.addColorStop(1, '#c4121f');
+      plate.addColorStop(0, p.huntedSafe ? '#6b7489' : '#ff4a5c');
+      plate.addColorStop(1, p.huntedSafe ? '#3d4456' : '#c4121f');
       g.fillStyle = plate;
       g.beginPath();
       g.roundRect(-pw / 2, -ph / 2, pw, ph, 6);

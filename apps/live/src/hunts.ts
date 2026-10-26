@@ -171,39 +171,79 @@ export async function pollWanted(broadcast: (msg: unknown) => void) {
   }
 }
 
+/** Why today's Most Wanted can't be caught right now, or null when they can. */
+export type WantedSafe = 'away' | 'jail' | 'arriving' | 'running' | 'home' | 'door';
+let safeNow: WantedSafe | null = null;
+export const wantedSafeNow = () => safeNow;
+/** Hunters told recently why they can't catch them (by player id: until when), so it's said once, not every tick. */
+const told = new Map<number, number>();
+const TELL_MS = 6000;
+
 /**
  * One tick of Most Wanted: a Chog of another gang that reaches today's Most Wanted claims the bounty. The web
- * app moves the cash and jails them; then `jail` moves them to the jail yard here.
+ * app moves the cash and jails them; then `jail` moves them to the jail yard here. Everyone is told when they're
+ * safe and why (their name tag shows it), and a hunter who reaches them while they're safe, or whose catch is
+ * refused, is told why once (`tell`), instead of nothing happening.
  */
 export function stepWanted(
   now: number,
   hunters: Iterable<Hunter>,
   broadcast: (msg: unknown) => void,
   jail: (h: Hunter, until: number) => void,
+  tell: (h: Hunter, msg: unknown) => void,
 ) {
   const w = wanted;
-  if (!w || w.claimed || tagging) return;
+  if (!w || w.claimed) {
+    setSafe(null, broadcast);
+    return;
+  }
+  if (tagging) return;
   const list = [...hunters];
   const prey = list.find((h) => h.chog === w.chog);
-  if (!prey || jailedNow(prey, now) || now - prey.joined < ARRIVE_SAFE_MS || runningFor(w.chog)) return;
   const home = placeOf(w.gang);
-  if (home && Math.hypot(prey.x - home.door.x, prey.y - home.door.y) < HOME_SAFE) return;
-  // Every doorstep is safe too: a robber breaking in, or inside a vault, stands at that gang's door.
-  if (CITY.places.some((p) => Math.hypot(prey.x - p.door.x, prey.y - p.door.y) < DOOR_SAFE)) return;
-  const by = list.find(
-    (h) =>
-      h.id !== prey.id &&
-      h.chog !== null &&
-      h.gang !== null &&
-      h.gang !== w.gang &&
-      !jailedNow(h, now) &&
-      Math.hypot(h.x - prey.x, h.y - prey.y) < TAG,
+  const safe: WantedSafe | null = !prey
+    ? 'away'
+    : jailedNow(prey, now)
+      ? 'jail'
+      : now - prey.joined < ARRIVE_SAFE_MS
+        ? 'arriving'
+        : runningFor(w.chog)
+          ? 'running'
+          : home && Math.hypot(prey.x - home.door.x, prey.y - home.door.y) < HOME_SAFE
+            ? 'home'
+            : // Every doorstep is safe too: a robber breaking in, or inside a vault, stands at that gang's door.
+              CITY.places.some((p) => Math.hypot(prey.x - p.door.x, prey.y - p.door.y) < DOOR_SAFE)
+              ? 'door'
+              : null;
+  setSafe(safe, broadcast);
+  if (!prey) return;
+  for (const [id, until] of told) if (until < now) told.delete(id);
+  const near = list.filter(
+    (h) => h.id !== prey.id && h.chog !== null && Math.hypot(h.x - prey.x, h.y - prey.y) < TAG,
   );
+  const say = (h: Hunter, why: string) => {
+    if (told.has(h.id)) return;
+    told.set(h.id, now + TELL_MS);
+    tell(h, { t: 'wanted-no', why });
+  };
+  for (const h of near) {
+    if (safe) say(h, safe);
+    else if (h.gang === null) say(h, 'no-gang');
+    else if (h.gang === w.gang) say(h, 'own-gang');
+    else if (jailedNow(h, now)) say(h, 'you-jailed');
+  }
+  if (safe) return;
+  const by = near.find((h) => h.gang !== null && h.gang !== w.gang && !jailedNow(h, now) && !told.has(h.id));
   if (!by) return;
   tagging = true;
   void post('/api/city/wanted-tag', JSON.stringify({ day: w.day, chog: w.chog, by: by.chog, at: now }))
     .then(async (res) => {
-      if (!res?.ok) return;
+      if (!res?.ok) {
+        // Refused (their own other Chog, a new day...): say why, and don't ask again for a few seconds.
+        const why = ((await res?.json().catch(() => null)) as { error?: string } | null)?.error ?? 'refused';
+        say(by, why);
+        return;
+      }
       const r = (await res.json()) as { bounty: number; jailedUntil: number };
       w.claimed = true;
       wantedKey = JSON.stringify(w);
@@ -218,9 +258,16 @@ export function stepWanted(
         bounty: r.bounty,
       });
       broadcast({ t: 'wanted', w });
-      jail(prey, r.jailedUntil);
+      setSafe(null, broadcast);
+      jail(prey!, r.jailedUntil);
     })
     .finally(() => {
       tagging = false;
     });
+}
+
+function setSafe(next: WantedSafe | null, broadcast: (msg: unknown) => void) {
+  if (next === safeNow) return;
+  safeNow = next;
+  broadcast({ t: 'wanted-safe', why: next });
 }

@@ -176,6 +176,38 @@ const START_ERRORS: Record<string, string> = {
   'not-in-jail': 'They’re not in jail any more.',
 };
 
+/** Why you couldn't catch the Most Wanted (from the live server, or the city for an unverified Chog). */
+const WANTED_SAFE = new Set(['door', 'home', 'arriving', 'running']);
+function wantedNoLine(why: string, name: string) {
+  switch (why) {
+    case 'home':
+      return `${name} is at their own gang’s door, where they’re safe. Catch them once they walk away from it.`;
+    case 'door':
+      return `${name} is on a doorstep, where they’re safe. Catch them out in the street.`;
+    case 'arriving':
+      return `${name} just walked into the city: safe for a few seconds.`;
+    case 'running':
+      return `${name} is running a bag home. The bounty can’t be claimed during a getaway.`;
+    case 'jail':
+      return `${name} is in jail. Catch them when they’re out.`;
+    case 'own-gang':
+      return `${name} is in your gang. Only a rival gang can claim the bounty.`;
+    case 'no-gang':
+      return 'Pick a gang first: the bounty goes to your gang’s vault.';
+    case 'you-jailed':
+      return 'You’re in jail. Catch them when you’re out.';
+    case 'not-yours':
+      return 'That’s another Chog of yours: you can’t claim a bounty on your own wallet.';
+    case 'verify':
+      return 'Verify your wallet to claim bounties. Practice Chogs can’t.';
+    case 'too-late':
+    case 'no-run':
+      return 'That bounty’s gone: a new day started.';
+    default:
+      return 'The catch didn’t go through. Try again.';
+  }
+}
+
 const DEFENCE = ['Light', 'Guarded', 'Heavy', 'Fortress'];
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
 const LOCK_NAME: Record<LockKind, string> = {
@@ -797,6 +829,17 @@ export function CityApp() {
         tone: chog?.gang === got.byGang ? 'win' : chog?.gang === got.gang ? 'lose' : 'win',
       });
     void loadBoard();
+  };
+  /** You reached the Most Wanted but couldn't catch them: say why, instead of nothing happening. */
+  const wantedNo = (why: string) => {
+    const name = mostWanted?.name ?? 'They';
+    setBanner({
+      id: `wno${why}${Date.now()}`,
+      title: why === 'jail' ? 'In jail' : WANTED_SAFE.has(why) ? 'Safe here' : 'Can’t catch them',
+      line: wantedNoLine(why, name),
+      chog: mostWanted?.chog,
+      tone: 'alarm',
+    });
   };
   // You're today's Most Wanted: told once a day.
   const wantedMe = !!mostWanted && !mostWanted.claimed && !!chog && mostWanted.chog === chog.id;
@@ -1429,6 +1472,7 @@ export function CityApp() {
         practicePumpkins={previewing}
         onPumpkin={pumpkinGot}
         onWanted={wantedNews}
+        onWantedNo={wantedNo}
         board={screen}
         paused={!!heistScreen || !!sheet || !!peek || mapOpen || (!!chog && !chog.gang)}
         onDoor={(p, asked) => {

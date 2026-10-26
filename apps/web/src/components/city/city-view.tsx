@@ -115,6 +115,8 @@ interface Props {
   practicePumpkins?: boolean;
   /** Today's Most Wanted changed, or a rival claimed the bounty. */
   onWanted?: (w: Wanted | null, got?: WantedGot) => void;
+  /** You reached the Most Wanted but couldn't catch them, and why. */
+  onWantedNo?: (why: string) => void;
   /** Covered by a robbery: keep moving and connected, but don't draw. */
   hidden?: boolean;
   board: Board;
@@ -226,6 +228,8 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     target: null as { x: number; y: number } | null,
     keys: new Set<string>(),
     stick: null as { x: number; y: number } | null,
+    /** When a practice Chog was last told why it can't catch the Most Wanted. */
+    toldAt: 0,
     /** Getting up to speed (0..1) and the way you were last going, so starts and stops have weight. */
     ramp: 0,
     dir: { x: 0, y: 0 },
@@ -367,6 +371,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         live.current.onPumpkin?.(e);
       },
       wanted: (w, got) => live.current.onWanted?.(w, got),
+      wantedNo: (why) => live.current.onWantedNo?.(why),
     });
     s.net = net;
     const t = setInterval(() => live.current.onLive(net.status, net.online), 2000);
@@ -704,7 +709,16 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       r.hunts.moon = !!p.moon;
       const most = s.net?.wanted;
       if (most && !most.claimed)
-        for (const x of people) if (x.chog === most.chog && !x.cop && !x.npc) x.hunted = most.bounty;
+        for (const x of people)
+          if (x.chog === most.chog && !x.cop && !x.npc) {
+            x.hunted = most.bounty;
+            x.huntedSafe = s.net?.wantedSafe ?? null;
+            // A practice (unverified) Chog isn't a hunter on the live server: tell it here why nothing happens.
+            if (p.me.unverified && Math.hypot(x.x - s.x, x.y - s.y) < 0.8 && Date.now() - s.toldAt > 6000) {
+              s.toldAt = Date.now();
+              p.onWantedNo?.('verify');
+            }
+          }
       // The practice getaway: step its police, and end it at the goal, on a catch or when time's up.
       const pr = s.practice;
       if (pr) {

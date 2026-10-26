@@ -17,7 +17,7 @@ import {
 import { readTicket } from '@chog-city/server/ticket';
 import { chatHistory, say } from './chat.ts';
 import { chasesNow, copPositions, startChase, stepChases } from './getaway.ts';
-import { pollWanted, pumpkinsNow, stepPumpkins, stepWanted, wantedNow } from './hunts.ts';
+import { pollWanted, pumpkinsNow, stepPumpkins, stepWanted, wantedNow, wantedSafeNow } from './hunts.ts';
 import { raidCount, raidHello, type RaidHandler } from './raids.ts';
 import { createServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -218,6 +218,7 @@ wss.on('connection', (ws, req) => {
       for (const c of chasesNow()) send(ws, { t: 'chase', ...c });
       send(ws, { t: 'pk', list: pumpkinsNow() });
       send(ws, { t: 'wanted', w: wantedNow() });
+      send(ws, { t: 'wanted-safe', why: wantedSafeNow() });
       send(ws, { t: 'chat', msgs: chatHistory(p.gang) });
       if (p.chog !== null) broadcast({ t: 'join', p: info(p) }, p.id);
       // A stroller that is now being played leaves the street.
@@ -312,6 +313,9 @@ setInterval(() => {
     me.jail = until;
     Object.assign(me, spawnFor(me, null, null, Date.now()));
     send(me.ws, { t: 'fix', x: me.x, y: me.y });
+  }, (h, msg) => {
+    const p = players.get(h.id);
+    if (p) send(p.ws, msg);
   });
   if (players.size) broadcast({ t: 's', n: seen().length, d, c: copPositions() });
 }, TICK_MS);

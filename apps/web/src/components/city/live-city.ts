@@ -153,6 +153,8 @@ export class LiveCity {
   chat: ChatMsg[] = [];
   pumpkins: Pumpkin[] = [];
   wanted: Wanted | null = null;
+  /** Why today's Most Wanted can't be caught right now (the live server's call), or null. */
+  wantedSafe: string | null = null;
   /** Your own getaway pass, sent again after a reconnect so the run carries on. */
   private myRun: string | null = null;
   private ws: WebSocket | null = null;
@@ -177,6 +179,8 @@ export class LiveCity {
       pumpkin?: (e: PumpkinGot) => void;
       /** Today's Most Wanted changed, or a rival claimed the bounty. */
       wanted?: (w: Wanted | null, got?: WantedGot) => void;
+      /** You reached the Most Wanted but couldn't catch them, and why. */
+      wantedNo?: (why: string) => void;
     },
   ) {
     queueMicrotask(() => void this.connect());
@@ -362,6 +366,12 @@ export class LiveCity {
       case 'wanted':
         this.wanted = (m.w as Wanted | null) ?? null;
         this.on.wanted?.(this.wanted);
+        break;
+      case 'wanted-safe':
+        this.wantedSafe = (m.why as string | null) ?? null;
+        break;
+      case 'wanted-no':
+        this.on.wantedNo?.(m.why as string);
         break;
       case 'wanted-got':
         if (this.wanted) this.wanted = { ...this.wanted, claimed: true };
