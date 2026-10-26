@@ -1,4 +1,4 @@
-import { isJudging } from '@chog-city/game';
+import { CALM_MS, CYCLE_MS, isJudging } from '@chog-city/game';
 import { Coins, Crosshair, Ghost, X } from '@phosphor-icons/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
@@ -344,7 +344,7 @@ export function MoonCard(props: {
                 : up
                   ? `Up now · ${clock(moon.to - now)} left`
                   : isJudging(moon.from)
-                    ? `Every 20 minutes, for 10 · next in ${clock(moon.from - now)}`
+                    ? `Rises every ${CYCLE_MS / 60_000} minutes · up for ${(CYCLE_MS - CALM_MS) / 60_000} min · next in ${clock(moon.from - now)}`
                     : `Every night 27-31 Oct · 18:00-19:00 UTC · next in ${until(moon.from - now)}`}
             </p>
           </div>
