@@ -1389,7 +1389,7 @@ function StartCard({
             {haunted ? 'Haunted vault · move to start' : 'Move to start'}
           </strong>
           {haunted
-            ? 'The lights are out. Watch for red eyes, follow the glints of cash, and keep away from the phantom: it drifts through walls. A gold glove or a tackle banishes it.'
+            ? 'The lights are out. Watch for the glowing guards, follow the glints of cash, and keep away from the phantom: it drifts through walls. A gold glove or a tackle banishes it.'
             : rescue
               ? `Open ${rescue.name}'s cell at the top, dodge the guards, and get out the green exit.`
               : `Grab cash in long runs for combos, crack the safe (${money(safeValue)}), and get out before the doors lock. Grab a gold glove and the guards run: catch them to knock them out.`}

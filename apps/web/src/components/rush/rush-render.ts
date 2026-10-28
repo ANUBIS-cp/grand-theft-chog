@@ -351,6 +351,12 @@ export class RushRenderer {
       map.flips.forEach((f, i) => {
         if (!s.flips[i]) lights.push({ x: this.X(f.x + 0.5), y: this.Y(f.y + 0.5), r: 0.9, strength: 0.45 });
       });
+      // The ghost guards glow faintly, so you can spot them in the dark; the light moves with them.
+      s.guards.forEach((gd, i) => {
+        if (gd.mode === 'out') return;
+        const p = prev.guards[i] ?? gd;
+        lights.push({ x: this.X(lerp(p.x, gd.x)), y: this.Y(lerp(p.y, gd.y)) - t * 0.2, r: 1.1, strength: 0.4 });
+      });
       // Every candle lights the stone round it: a steady glow.
       v.candles.forEach((c) => {
         lights.push({ x: c.x, y: c.y + t * 0.3, r: 1.7, strength: 0.7, warm: true });
@@ -367,11 +373,6 @@ export class RushRenderer {
           s.stacks[i] ? [] : [{ x: this.X(c.x + 0.5), y: this.Y(c.y + 0.5), big: true }],
         ),
       ]);
-      this.haunt.eyes(d, s, (i) => {
-        const gd = s.guards[i]!;
-        const p = prev.guards[i] ?? gd;
-        return { x: this.X(lerp(p.x, gd.x)), y: this.Y(lerp(p.y, gd.y)) };
-      });
       this.haunt.phantom(d, s, php);
       phantomAt = php;
     }
@@ -637,7 +638,7 @@ export class RushRenderer {
     const scared = gd.mode === 'panic';
     const wob = scared ? Math.sin(now / 40 + i) * t * 0.04 : 0;
     // Haunted: the guards are ghosts of themselves, floating a little off the floor, see-through, a cold
-    // glow round them (their eyes burn red in the dark, haunt-fx.ts).
+    // glow round them (and a light of their own in the dark).
     const ghostly = !!s.phantom && !human && gd.mode !== 'out';
     if (ghostly) {
       const hover = Math.sin(now / 420 + i * 1.3) * t * 0.06;

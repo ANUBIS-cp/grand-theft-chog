@@ -2,8 +2,8 @@ import type { RushState } from '@chog-city/game/rush';
 import { hArt } from '../halloween-art';
 
 // A haunted vault (Halloween): the lights are out. You carry a lantern, a warm circle that breathes a little;
-// past it the vault is dim (the walls and corridors still show, so you can always see your way). What gives itself away in the dark is drawn over the top: guards' eyes,
-// a glint now and then off the cash, the lasers, the exit's green and the safe's gold. And the phantom: a
+// past it the vault is dim (the walls and corridors still show, so you can always see your way). What gives itself away in the dark is drawn over the top (the ghost guards glow,
+// lighting the floor round them): a glint now and then off the cash, the lasers, the exit's green and the safe's gold. And the phantom: a
 // see-through Chog with a wavy hem, drifting through the walls with a trail of mist, rising out of the floor
 // and sinking back into it.
 
@@ -83,39 +83,6 @@ export class HauntFx {
     g.globalCompositeOperation = 'multiply';
     g.drawImage(this.dark, 0, 0);
     g.restore();
-  }
-
-  /** Guards' eyes in the dark: two red points with a glow, blinking now and then. World space. */
-  eyes(d: HauntDraw, s: RushState, at: (i: number) => { x: number; y: number }) {
-    const { g, t, now } = d;
-    s.guards.forEach((gd, i) => {
-      if (gd.mode === 'out') return;
-      const blink = (now / 1000 + i * 1.7) % 4.2 < 0.12;
-      if (blink) return;
-      const p = at(i);
-      const y = p.y - t * 0.42;
-      const dx = t * 0.13;
-      const shift = gd.face * t * 0.04;
-      const scared = gd.mode === 'panic';
-      const col = scared ? '120, 180, 255' : '255, 60, 70';
-      g.save();
-      g.globalCompositeOperation = 'lighter';
-      for (const sx of [-dx, dx]) {
-        const ex = p.x + sx + shift;
-        const gr = g.createRadialGradient(ex, y, 0, ex, y, t * 0.22);
-        gr.addColorStop(0, `rgba(${col}, 0.9)`);
-        gr.addColorStop(1, `rgba(${col}, 0)`);
-        g.fillStyle = gr;
-        g.beginPath();
-        g.arc(ex, y, t * 0.22, 0, Math.PI * 2);
-        g.fill();
-        g.fillStyle = 'rgba(255, 235, 235, 0.95)';
-        g.beginPath();
-        g.ellipse(ex, y, t * 0.045, t * 0.032, 0, 0, Math.PI * 2);
-        g.fill();
-      }
-      g.restore();
-    });
   }
 
   /** A glint off a coin or a stack now and then, so the cash can be found in the dark. World space. */

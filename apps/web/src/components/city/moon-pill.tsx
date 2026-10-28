@@ -289,7 +289,7 @@ const ROWS = [
     icon: <Ghost size={20} weight="fill" className="text-[#9dffd9]" />,
     bg: 'bg-[#0e2a25]',
     title: 'Haunted vaults',
-    line: 'The lights go out. Follow the glints of cash, watch for red eyes, and keep away from the ghost: it drifts through walls.',
+    line: 'The lights go out. Follow the glints of cash, watch for the glowing guards, and keep away from the ghost: it drifts through walls.',
   },
   {
     icon: <PumpkinIcon />,
