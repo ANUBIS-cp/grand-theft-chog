@@ -39,9 +39,11 @@ export default async function Image({ params }: { params: Promise<{ id: string }
         display: 'flex',
         position: 'relative',
         background: '#0b0918',
-        backgroundImage: moon
-          ? 'radial-gradient(circle at 92% 8%, rgba(220,30,45,0.55), rgba(90,6,20,0.35) 38%, rgba(11,9,24,0) 70%)'
-          : undefined,
+        // Only set when there is a moon: the image renderer crashes on an undefined backgroundImage.
+        ...(moon && {
+          backgroundImage:
+            'radial-gradient(circle at 92% 8%, rgba(220,30,45,0.55), rgba(90,6,20,0.35) 38%, rgba(11,9,24,0) 70%)',
+        }),
         padding: 56,
         fontFamily: 'Koulen',
         color: '#ffffff',
