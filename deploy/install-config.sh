@@ -16,6 +16,8 @@ MAIN=${HOSTS%%,*}
     [ "$h" = "$MAIN" ] && continue
     printf '\n%s {\n\tredir https://%s{uri} permanent\n}\n' "$h" "$MAIN"
   done
+  # Other sites on this box (e.g. media-dl) keep their own files here, so this rebuild doesn't drop them.
+  printf '\nimport /etc/caddy/sites.d/*.caddy\n'
 } > /etc/caddy/Caddyfile.new
 caddy validate --config /etc/caddy/Caddyfile.new --adapter caddyfile >/dev/null
 mv /etc/caddy/Caddyfile.new /etc/caddy/Caddyfile
