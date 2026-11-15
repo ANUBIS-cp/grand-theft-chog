@@ -17,6 +17,31 @@ __MAIN__ {
 		file_server
 	}
 
+	# The site's fixed files, straight from disk instead of through the web app, which serves one request at a
+	# time and compressed every file again for every visitor (30 people arriving at once took it to 90% CPU).
+	# Compressed once at deploy (deploy/precompress.sh). Same caching as before: code files keep their name
+	# only as long as their content (a year), stickers carry a version, the rest is checked on each visit.
+	handle_path /_next/static/* {
+		root * /opt/chog-city/current/apps/web/.next/standalone/apps/web/.next/static
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server {
+			precompressed zstd gzip
+		}
+	}
+	handle /art/stickers/* {
+		root * /opt/chog-city/current/apps/web/.next/standalone/apps/web/public
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+	@public path /art/* /emotes/* /fonts/* /music/*
+	handle @public {
+		root * /opt/chog-city/current/apps/web/.next/standalone/apps/web/public
+		header Cache-Control "public, max-age=0"
+		file_server {
+			precompressed zstd gzip
+		}
+	}
+
 	# The live city (WebSocket).
 	handle /ws {
 		reverse_proxy 127.0.0.1:3001

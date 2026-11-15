@@ -28,6 +28,7 @@ git archive --format=tar HEAD | "${SSH[@]}" "sudo install -d -o chogcity -g chog
   OLD=/opt/chog-city/current/apps/web/.next/standalone/apps/web/.next/static
   if [ -d \$OLD ]; then cp -rn \$OLD/. .next/standalone/apps/web/.next/static/; fi
   if [ -d public ]; then cp -r public .next/standalone/apps/web/; fi
+  bash ../../deploy/precompress.sh .next/standalone/apps/web
 '"
 
 if [ "${1:-}" = "--config" ]; then "${SSH[@]}" "sudo bash $REL/deploy/install-config.sh"; fi
