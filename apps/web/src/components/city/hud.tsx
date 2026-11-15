@@ -190,7 +190,8 @@ export function MiniMap(props: { area: string; online: string; dot: string; onOp
       <span className="glass max-w-[170px] truncate rounded-full px-3 py-1 text-[13px] font-semibold text-white max-sm:max-w-[110px] max-sm:px-2.5 max-sm:py-0.5 max-sm:text-[12px]">
         {props.area}
       </span>
-      <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-white/80 [text-shadow:0_1px_6px_rgba(0,0,0,0.8)]">
+      {/* On the same glass as the area name: Chogs walking behind it showed their name tags through the text. */}
+      <span className="glass inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] font-medium text-white/85">
         <span className="relative flex h-2 w-2">
           <span
             className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"

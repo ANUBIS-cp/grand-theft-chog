@@ -15,10 +15,18 @@ const nunito = localFont({
 });
 const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains', display: 'swap' });
 
+const description =
+  'Every gang has a vault full of cash. Sneak your Chog into a rival’s vault, grab what you can, get out.';
+
 export const metadata: Metadata = {
+  // The site's real address, so link previews (X, Telegram, Discord) point their pictures here and not at the
+  // server's own localhost:3000. The same name the app is served under (PUBLIC_HOST, first name).
+  metadataBase: new URL(`https://${(process.env.PUBLIC_HOST ?? 'grandtheftchog.duckdns.org').split(',')[0]!.trim()}`),
   title: 'Grand Theft Chog',
-  description:
-    'Every gang has a vault full of cash. Sneak your Chog into a rival’s vault, grab what you can, get out.',
+  description,
+  // The picture is app/opengraph-image.jpg and twitter-image.jpg (the banner).
+  openGraph: { type: 'website', siteName: 'Grand Theft Chog', title: 'Grand Theft Chog', description },
+  twitter: { card: 'summary_large_image', title: 'Grand Theft Chog', description },
 };
 
 export const viewport: Viewport = {

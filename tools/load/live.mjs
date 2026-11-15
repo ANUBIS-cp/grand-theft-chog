@@ -42,7 +42,8 @@ function bot(i) {
   const guest = i < Math.round(N * GUEST_SHARE);
   const t = guest
     ? { chog: null, name: 'Guest', gang: null, jail: null }
-    : { chog: 9000 + i, name: `Load ${i}`, gang: GANGS[i % GANGS.length], jail: null };
+    : // Real token IDs (1-1969), spread out, so a browser watching the test copy can draw their pictures.
+      { chog: 1 + ((i * 37) % 1969), name: `Load ${i}`, gang: GANGS[i % GANGS.length], jail: null };
   // Each test player looks like its own visitor (the server allows 8 windows per address).
   const ws = new WebSocket(url, { headers: { 'x-forwarded-for': `10.77.${i >> 8}.${i & 255}` } });
   const b = { ws, x: 0, y: 0, dir: Math.random() * Math.PI * 2, last: 0, ready: false, closed: false };
