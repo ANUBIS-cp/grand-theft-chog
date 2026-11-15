@@ -8,11 +8,14 @@ import type { GangId } from '@chog-city/data';
 // - Judging (26 Oct-8 Nov): the city turns every 20 minutes, the same for everyone. Ten minutes of the normal
 //   city, then ten of Halloween under the Blood Moon: the haunting, pumpkins full of cash all over the streets,
 //   every vault haunted and hauls paying more. Anyone who plays for a while sees both, whenever they come.
+// - The encore (15 Nov-1 Dec): the same turning city again, for the players who come after the results.
 // - Outside judging, in Halloween week: the city is haunted all day and the Blood Moon rises 18:00-19:00 UTC.
 
 export const HALLOWEEN_WEEK = { from: Date.UTC(2026, 9, 27), to: Date.UTC(2026, 10, 1) };
 export const HALLOWEEN_NIGHT = { from: Date.UTC(2026, 9, 31), to: Date.UTC(2026, 10, 1) };
 export const JUDGING = { from: Date.UTC(2026, 9, 26), to: Date.UTC(2026, 10, 8) };
+/** The turning city came back after the results. The days between the two keep no moon, so their replays stay as played. */
+export const ENCORE = { from: Date.UTC(2026, 10, 15, 15, 40), to: Date.UTC(2026, 11, 1) };
 /** During judging: one turn of the city, and how long the normal city lasts before the moon rises. */
 export const CYCLE_MS = 20 * 60_000;
 export const CALM_MS = 10 * 60_000;
@@ -24,7 +27,8 @@ export const BLOOD_MOON_BONUS = 50;
 
 const within = (t: number, w: { from: number; to: number }) => t >= w.from && t < w.to;
 export const isHalloweenWeek = (t: number) => within(t, HALLOWEEN_WEEK);
-export const isJudging = (t: number) => within(t, JUDGING);
+/** The city is turning (judging, or the encore). */
+export const isJudging = (t: number) => within(t, JUDGING) || within(t, ENCORE);
 
 type Moon = { from: number; to: number };
 

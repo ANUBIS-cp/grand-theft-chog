@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CALM_MS,
   CYCLE_MS,
+  ENCORE,
   JUDGING,
   bloodMoon,
   halloweenCity,
@@ -45,5 +46,15 @@ describe('the judging cycle', () => {
     expect(bloodMoon(JUDGING.to + 15 * MIN)).toBeNull();
     expect(nextBloodMoon(JUDGING.to)).toBeNull();
     expect(halloweenCity(JUDGING.to + 15 * MIN)).toBe(false);
+  });
+
+  it('comes back for the encore, and leaves the days in between alone', () => {
+    const between = Date.UTC(2026, 10, 12, 9, 15);
+    expect(bloodMoon(between)).toBeNull();
+    expect(halloweenCity(between)).toBe(false);
+    expect(bloodMoon(ENCORE.from + 5 * MIN)).toBeNull();
+    expect(bloodMoon(ENCORE.from + 15 * MIN)).not.toBeNull();
+    expect(hauntedVault('mcga', ENCORE.from + 15 * MIN)).toBe(true);
+    expect(nextBloodMoon(ENCORE.to)).toBeNull();
   });
 });
