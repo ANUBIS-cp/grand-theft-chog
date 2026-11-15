@@ -23,14 +23,17 @@ __MAIN__ {
 	# only as long as their content (a year), stickers carry a version, the rest is checked on each visit.
 	handle_path /_next/static/* {
 		root * /opt/chog-city/current/apps/web/.next/standalone/apps/web/.next/static
-		header Cache-Control "public, max-age=31536000, immutable"
+		# Only for files that exist: a "not found" mid-deploy must not be kept for a year.
+		@hit file
+		header @hit Cache-Control "public, max-age=31536000, immutable"
 		file_server {
 			precompressed zstd gzip
 		}
 	}
 	handle /art/stickers/* {
 		root * /opt/chog-city/current/apps/web/.next/standalone/apps/web/public
-		header Cache-Control "public, max-age=31536000, immutable"
+		@sticker file
+		header @sticker Cache-Control "public, max-age=31536000, immutable"
 		file_server
 	}
 	@public path /art/* /emotes/* /fonts/* /music/*
