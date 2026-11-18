@@ -11,6 +11,8 @@ const Body = z.object({ id: z.string().min(8).max(40), inputs: z.string().max(40
 
 /** The browser sends what was pressed each step; the server replays the fight and settles it. */
 export async function POST(req: Request) {
+  // Fight Night is off the site (see app/fight/page.tsx).
+  if (process.env.NODE_ENV === 'production') return error('closed', 410);
   const address = await currentAddress();
   if (!address) return error('login', 401);
   if (!allow(`fight-finish:${address}`, 20, 0.3)) return error('slow-down', 429);

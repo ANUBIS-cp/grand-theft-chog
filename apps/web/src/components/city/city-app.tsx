@@ -61,7 +61,6 @@ import {
   EmoteButton,
   tap,
   GangsButton,
-  FightButton,
   MapButton,
   MiniMap,
   RoleCard,
@@ -1226,11 +1225,6 @@ export function CityApp() {
           ? { icon: Vault, label: 'Vault', tone: '#ffd666' }
           : { icon: DoorOpen, label: 'Rob', tone: '#ff5a4f' };
   const openDoor = () => door && setDoorOpen(true);
-  // Fight Night, as the Chog you're playing (without one, as the practice Chog). Kept in a ref so the
-  // keyboard shortcut always has the current Chog.
-  const fightHref = useRef('/fight');
-  fightHref.current = chog ? `/fight?chog=${metadataIdFor(chog.id)}` : '/fight';
-  const openFight = () => window.location.assign(fightHref.current);
 
   // Keys: E / Space use a door, G gangs, M map, T emotes, 1-8 an emote, Esc closes things.
   const keyState = useRef({ door, doorOpen, sheet, peek, mapOpen, inHeist: !!run || !!practice });
@@ -1260,7 +1254,6 @@ export function CityApp() {
         return setChatOpen(true);
       }
       if (e.code === 'KeyG') return setSheet('gangs');
-      if (e.code === 'KeyF') return window.location.assign(fightHref.current);
       if (e.code === 'KeyT') return setEmoteOpen((o) => !o);
       const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8'].indexOf(
         e.code,
@@ -1820,7 +1813,6 @@ export function CityApp() {
               onEmote={() => setEmoteOpen((o) => !o)}
               onMap={() => setMapOpen(true)}
               onGangs={() => setSheet('gangs')}
-              onFight={openFight}
             />
           ) : (
             <>
@@ -1835,7 +1827,6 @@ export function CityApp() {
                 <MapButton onClick={() => setMapOpen(true)} />
                 <GangsButton onClick={() => setSheet('gangs')} />
               </div>
-              <FightButton onClick={openFight} />
               <RoundButton big {...useLook} hotkey="E" disabled={!door} lit={!!door} onClick={openDoor} />
             </>
           )}
