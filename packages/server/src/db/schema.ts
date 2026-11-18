@@ -351,3 +351,30 @@ export const mostWanted = pgTable('most_wanted', {
   claimedBy: integer('claimed_by'),
   claimedAt: timestamp('claimed_at', { withTimezone: true }),
 });
+
+// ---------- monthly seasons (packages/server/src/seasons.ts) ----------
+
+/**
+ * A season title written onto a Chog for good: it belongs to the token, so it stays when the Chog is sold.
+ * `kind` is which title; `amount` what won it (vault cash, cash stolen, robbers caught).
+ */
+export const seasonTitles = pgTable(
+  'season_titles',
+  {
+    season: integer('season').notNull(),
+    kind: text('kind').$type<'gang' | 'robber' | 'guard'>().notNull(),
+    chogId: integer('chog_id').notNull(),
+    gang: text('gang').$type<GangId>().notNull(),
+    amount: integer('amount').notNull(),
+    at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.season, t.kind, t.chogId] }), index('season_titles_chog').on(t.chogId)],
+);
+
+/** A season that has ended: its titles are handed out and the vaults started the next one fresh. */
+export const seasonsClosed = pgTable('seasons_closed', {
+  season: integer('season').primaryKey(),
+  closedAt: timestamp('closed_at', { withTimezone: true }).notNull().defaultNow(),
+  /** The final standings, as they were when it closed. */
+  standings: jsonb('standings').notNull(),
+});

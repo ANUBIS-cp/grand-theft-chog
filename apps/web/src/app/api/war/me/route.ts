@@ -1,7 +1,7 @@
 import { GANGS, displayName, gangOptions, getChog, hasTrait } from '@chog-city/data';
 import { chogInfo } from '@chog-city/game';
 import { powersFor } from '@chog-city/game/heist';
-import { chogsFor, hitToday, revengeTargets } from '@chog-city/server';
+import { chogsFor, hitToday, revengeTargets, titlesFor } from '@chog-city/server';
 import { heistChogs } from '@chog-city/server/db';
 import { inArray } from 'drizzle-orm';
 import { isAdmin } from '@/server/admin';
@@ -21,7 +21,7 @@ export async function GET() {
   const ids = mine.map((m) => m.tokenId);
   const records = ids.length ? await d.select().from(heistChogs).where(inArray(heistChogs.id, ids)) : [];
   const byId = new Map(records.map((r) => [r.id, r]));
-  const hit = await hitToday(d, ids, now);
+  const [hit, titles] = await Promise.all([hitToday(d, ids, now), titlesFor(d, ids)]);
   const gangs = [...new Set(records.map((r) => r.gang).filter((g) => g !== null))];
   const revenge = Object.fromEntries(
     await Promise.all(gangs.map(async (g) => [g, await revengeTargets(d, g, now)])),
@@ -59,6 +59,7 @@ export async function GET() {
           catches: r?.catches ?? 0,
           best: r?.best ?? 0,
         },
+        titles: (titles.get(m.tokenId) ?? []).map((t) => ({ season: t.season, name: t.name })),
       };
     }),
   });

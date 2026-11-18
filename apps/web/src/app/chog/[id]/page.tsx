@@ -1,7 +1,7 @@
 import { GANGS, SKILLS, displayName, getChog, skillSources } from '@chog-city/data';
 import { chogInfo } from '@chog-city/game';
 import { POWERS, powersFor } from '@chog-city/game/heist';
-import { chogHits, heistRecord, isChogId, ownerOf } from '@chog-city/server';
+import { chogHits, heistRecord, isChogId, ownerOf, titlesFor } from '@chog-city/server';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PageShell } from '@/components/ui/page-shell';
@@ -24,7 +24,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const c = isChogId(id) ? getChog(id) : undefined;
   if (!c) return { title: 'Chog not found · Grand Theft Chog' };
   const name = displayName(c);
-  return { title: `${name} · Grand Theft Chog`, description: `${name}'s heists, powers and gang in Grand Theft Chog.` };
+  return {
+    title: `${name} · Grand Theft Chog`,
+    description: `${name}'s heists, powers and gang in Grand Theft Chog.`,
+  };
 }
 
 export default async function ChogPage({ params }: Props) {
@@ -34,7 +37,13 @@ export default async function ChogPage({ params }: Props) {
   const name = displayName(chog);
   const now = Date.now();
   const d = await db();
-  const [record, owner, hits] = await Promise.all([heistRecord(d, id), ownerOf(d, id), chogHits(d, id)]);
+  const [record, owner, hits, titleMap] = await Promise.all([
+    heistRecord(d, id),
+    ownerOf(d, id),
+    chogHits(d, id),
+    titlesFor(d, [id]),
+  ]);
+  const titles = titleMap.get(id) ?? [];
   const skills = chogInfo(id).skills;
   const powers = powersFor(skills);
   const gang = record?.gang ?? null;
@@ -76,6 +85,18 @@ export default async function ChogPage({ params }: Props) {
               </span>
             )}
           </div>
+          {titles.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {titles.map((t) => (
+                <span
+                  key={`${t.season}-${t.kind}`}
+                  className="rounded-full bg-[linear-gradient(180deg,#ffe27a,#f2b72c)] px-3 py-1 text-[13px] font-bold text-[#3a2600]"
+                >
+                  Season {t.season} {t.name}
+                </span>
+              ))}
+            </div>
+          )}
           {jailed && (
             <p className="mt-3 inline-block rounded-full bg-sys-red/15 px-3 py-1 text-[13px] font-semibold text-sys-red">
               In jail, out in {formatLeft(jailed - now)}

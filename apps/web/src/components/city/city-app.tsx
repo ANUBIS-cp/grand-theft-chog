@@ -41,6 +41,7 @@ import { RushGame } from '@/components/rush/rush-game';
 import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
 import { RaidAlerts } from './raid-alerts';
+import { SeasonBoard } from './season-board';
 import { possessive } from '@/lib/possessive';
 import { useDragClose } from '@/components/ui/use-drag-close';
 import { chogImage } from '@/lib/images';
@@ -109,6 +110,8 @@ interface MyChog {
   robAgain?: boolean;
   powers: PowerId[];
   record: { stolen: number; escapes: number; busts: number; catches: number; best: number };
+  /** Season titles it carries for good ("Season 1 Top Robber"). */
+  titles?: { season: number; name: string }[];
 }
 interface Run {
   id: string;
@@ -220,8 +223,8 @@ const LOCK_NAME: Record<LockKind, string> = {
   dial: 'Spin the safe dial',
 };
 /** "Clowns are", "MCGA Gang is". */
-/** Who sees raid alerts while the owner tries them (null would mean everyone). */
-const RAID_ALERTS_FOR = new Set(['0xfeabcf41468ba196279fd058ad67e2e49fc4cec2']);
+/** Wallets that see new things (raid alerts, the season tab) while the owner tries them, before everyone does. */
+const PREVIEW_FOR = new Set(['0xfeabcf41468ba196279fd058ad67e2e49fc4cec2']);
 const verb = (g: GangId) => (GANGS[g].name.endsWith('s') ? 'are' : 'is');
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -482,7 +485,7 @@ export function CityApp() {
     else if (chat.length) setChatSeen((s) => (s > last ? 0 : s));
   }, [chatOpen, chat]);
   const [banner, setBanner] = useState<BannerData | null>(null);
-  const [boardTab, setBoardTab] = useState<'gangs' | 'hits'>('gangs');
+  const [boardTab, setBoardTab] = useState<'gangs' | 'hits' | 'season'>('gangs');
   /** Defending your gang's vault, or watching a raid, live. */
   const [raidView, setRaidView] = useState<{
     link: RaidLink;
@@ -672,8 +675,8 @@ export function CityApp() {
   const chog = chogs.find((c) => c.id === picked) ?? chogs[0] ?? null;
   // Once per device, a holder who hasn't turned raid alerts on gets one quiet suggestion, after a while in the city.
   const [alertNudge, setAlertNudge] = useState(false);
-  // Raid alerts are the owner's to try first; everyone gets them once the owner says they work.
-  const alertsOpen = !!me?.address && RAID_ALERTS_FOR.has(me.address.toLowerCase());
+  // New things (raid alerts, the season tab) are the owner's to try first; everyone gets them once the owner says so.
+  const preview = !!me?.address && PREVIEW_FOR.has(me.address.toLowerCase());
   const nudgeSeen = () => {
     try {
       localStorage.setItem('raid-alerts-nudged', '1');
@@ -683,7 +686,7 @@ export function CityApp() {
     setAlertNudge(false);
   };
   useEffect(() => {
-    if (!alertsOpen || !chog?.gang) return;
+    if (!preview || !chog?.gang) return;
     let seen = false;
     try {
       seen = localStorage.getItem('raid-alerts-nudged') === '1';
@@ -693,7 +696,7 @@ export function CityApp() {
     if (seen || !('Notification' in window) || Notification.permission !== 'default') return;
     const t = setTimeout(() => setAlertNudge(true), 20_000);
     return () => clearTimeout(t);
-  }, [alertsOpen, chog?.gang]);
+  }, [preview, chog?.gang]);
   // Arriving from a raid alert on your phone: that robbery's banner (tap it to jump in), or say it's over.
   const raidLink = useRef<string | null>(
     typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('raid'),
@@ -1886,7 +1889,11 @@ export function CityApp() {
             >
               <span>Turn on</span>
             </button>
-            <button onClick={nudgeSeen} aria-label="Not now" className="grid h-8 w-8 place-items-center rounded-full text-white/60 hover:text-white">
+            <button
+              onClick={nudgeSeen}
+              aria-label="Not now"
+              className="grid h-8 w-8 place-items-center rounded-full text-white/60 hover:text-white"
+            >
               ✕
             </button>
           </div>
@@ -2084,7 +2091,7 @@ export function CityApp() {
               onBurned={burned}
             />
           )}
-          {alertsOpen && chog?.gang && <RaidAlerts gang={GANGS[chog.gang].name} />}
+          {preview && chog?.gang && <RaidAlerts gang={GANGS[chog.gang].name} />}
           {me?.address && (
             <button
               className="mt-5 inline-flex items-center gap-1.5 text-[13px] text-white/60 hover:text-white"
@@ -2104,31 +2111,48 @@ export function CityApp() {
         <Board onClose={() => setSheet(null)}>
           <div className="flex flex-wrap items-end justify-between gap-2 pr-12">
             <h2 className="font-display text-[25px] leading-none sm:text-[31px]">Gang board</h2>
-            <div className="relative grid grid-cols-2 rounded-[11px] bg-fill-2 p-[3px]">
+            <div
+              className={cn(
+                'relative grid rounded-[11px] bg-fill-2 p-[3px]',
+                preview ? 'grid-cols-3' : 'grid-cols-2',
+              )}
+            >
               <span
-                className="absolute bottom-[3px] left-[3px] top-[3px] w-[calc(50%-3px)] rounded-[9px] bg-white/[0.16] shadow-[0_3px_8px_rgba(0,0,0,0.25)] transition-transform duration-300 ease-[cubic-bezier(.2,.9,.3,1.1)]"
-                style={{ transform: `translateX(${boardTab === 'hits' ? '100%' : '0'})` }}
+                className="absolute bottom-[3px] left-[3px] top-[3px] rounded-[9px] bg-white/[0.16] shadow-[0_3px_8px_rgba(0,0,0,0.25)] transition-transform duration-300 ease-[cubic-bezier(.2,.9,.3,1.1)]"
+                style={{
+                  width: `calc((100% - 6px) / ${preview ? 3 : 2})`,
+                  transform: `translateX(${boardTab === 'hits' ? '100%' : boardTab === 'season' ? '200%' : '0'})`,
+                }}
               />
-              {(['gangs', 'hits'] as const).map((k) => (
+              {(preview ? (['gangs', 'hits', 'season'] as const) : (['gangs', 'hits'] as const)).map((k) => (
                 <button
                   key={k}
                   onClick={() => setBoardTab(k)}
                   className={cn(
-                    'relative h-8 px-4 text-[14px] font-semibold transition-colors',
+                    'relative h-8 px-3 text-[14px] font-semibold transition-colors sm:px-4',
                     boardTab === k ? 'text-white' : 'text-label-2 hover:text-white',
                   )}
                 >
-                  {k === 'gangs' ? 'Richest' : 'Latest hits'}
+                  {k === 'gangs' ? 'Richest' : k === 'hits' ? 'Latest hits' : 'Season'}
                 </button>
               ))}
             </div>
           </div>
-          {board && (
+          {board && boardTab !== 'season' && (
             <p className="mt-1 text-[13px] text-white/60">
               Hits reset in {formatLeft(board.resetAt - now)}. Tap a gang to walk to its building.
             </p>
           )}
-          {boardTab === 'gangs' ? (
+          {boardTab === 'season' ? (
+            <SeasonBoard
+              now={now}
+              myGang={chog?.gang ?? null}
+              onGang={(g) => {
+                setSheet(null);
+                view.current?.walkTo(g);
+              }}
+            />
+          ) : boardTab === 'gangs' ? (
             <ol className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {(board?.board ?? []).map((v, i) => {
                 const c = GANG_COLOR[v.gang];
@@ -2432,6 +2456,18 @@ function ChogCard(props: {
           )}
         </div>
       </div>
+      {!!chog.titles?.length && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {chog.titles.map((t) => (
+            <span
+              key={`${t.season}-${t.name}`}
+              className="inline-flex items-center gap-1 rounded-full bg-[linear-gradient(180deg,#ffe27a,#f2b72c)] px-2.5 py-0.5 text-[12px] font-bold text-[#3a2600]"
+            >
+              Season {t.season} {t.name}
+            </span>
+          ))}
+        </div>
+      )}
       <p className="mt-3 text-[13px] text-white/75">
         Stole <strong className="text-[#ffd666]">{money(chog.record.stolen)}</strong> ·{' '}
         {plural(chog.record.escapes, 'escape')} · busted {chog.record.busts} · caught{' '}
