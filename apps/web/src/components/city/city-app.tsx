@@ -220,6 +220,8 @@ const LOCK_NAME: Record<LockKind, string> = {
   dial: 'Spin the safe dial',
 };
 /** "Clowns are", "MCGA Gang is". */
+/** Who sees raid alerts while the owner tries them (null would mean everyone). */
+const RAID_ALERTS_FOR = new Set(['0xfeabcf41468ba196279fd058ad67e2e49fc4cec2']);
 const verb = (g: GangId) => (GANGS[g].name.endsWith('s') ? 'are' : 'is');
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -670,6 +672,8 @@ export function CityApp() {
   const chog = chogs.find((c) => c.id === picked) ?? chogs[0] ?? null;
   // Once per device, a holder who hasn't turned raid alerts on gets one quiet suggestion, after a while in the city.
   const [alertNudge, setAlertNudge] = useState(false);
+  // Raid alerts are the owner's to try first; everyone gets them once the owner says they work.
+  const alertsOpen = !!me?.address && RAID_ALERTS_FOR.has(me.address.toLowerCase());
   const nudgeSeen = () => {
     try {
       localStorage.setItem('raid-alerts-nudged', '1');
@@ -679,7 +683,7 @@ export function CityApp() {
     setAlertNudge(false);
   };
   useEffect(() => {
-    if (!me?.address || !chog?.gang) return;
+    if (!alertsOpen || !chog?.gang) return;
     let seen = false;
     try {
       seen = localStorage.getItem('raid-alerts-nudged') === '1';
@@ -689,7 +693,7 @@ export function CityApp() {
     if (seen || !('Notification' in window) || Notification.permission !== 'default') return;
     const t = setTimeout(() => setAlertNudge(true), 20_000);
     return () => clearTimeout(t);
-  }, [me?.address, chog?.gang]);
+  }, [alertsOpen, chog?.gang]);
   // Arriving from a raid alert on your phone: that robbery's banner (tap it to jump in), or say it's over.
   const raidLink = useRef<string | null>(
     typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('raid'),
@@ -2080,7 +2084,7 @@ export function CityApp() {
               onBurned={burned}
             />
           )}
-          {me?.address && chog?.gang && <RaidAlerts gang={GANGS[chog.gang].name} />}
+          {alertsOpen && chog?.gang && <RaidAlerts gang={GANGS[chog.gang].name} />}
           {me?.address && (
             <button
               className="mt-5 inline-flex items-center gap-1.5 text-[13px] text-white/60 hover:text-white"
