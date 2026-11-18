@@ -163,6 +163,7 @@ function Card(props: {
             screen === 'won' ? 'bg-[#1f3a2a] ring-1 ring-[#7dffa8]/40' : 'bg-[#3a1f24] ring-1 ring-[#ff6a6a]/40',
           )}
         >
+          {screen === 'won' && rival.level === 6 && <img src="/art/fight/belt.webp?v=1" alt="" className="mx-auto mb-2 w-32" />}
           <div className="font-brand text-[30px] leading-none">{screen === 'won' ? 'YOU WON' : 'KNOCKED OUT'}</div>
           <div className="mt-1 text-[14px] text-white/75">
             {screen === 'won'
@@ -199,7 +200,11 @@ function Card(props: {
                 c.level === 6 && 'mt-2',
               )}
             >
-              <span className="w-6 text-center font-brand text-[18px] text-white/50">{c.level === 6 ? '👑' : i + 1}</span>
+              {c.level === 6 ? (
+                <img src="/art/fight/belt.webp?v=1" alt="Champion" className="h-auto w-9 shrink-0" />
+              ) : (
+                <span className="w-9 text-center font-brand text-[18px] text-white/50">{i + 1}</span>
+              )}
               <img
                 src={chogImage(c.id, 96)}
                 alt=""

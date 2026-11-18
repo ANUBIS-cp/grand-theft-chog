@@ -7,6 +7,8 @@ import { drawPiece, makePiece, type Piece } from '../chog/piece';
 // is drawn until its pictures (docs/art-season2.md) are in.
 
 const INK = '#0d0b1a';
+/** The ring picture (docs/art-season2.md, prepared by tools/images/fight-art.ts) and where its canvas is. */
+const RING_ART = { src: '/art/fight/ring.webp?v=1', w: 1024, h: 1024, floor: { x0: 129.9, x1: 893.5, y0: 171, y1: 603 } };
 /** Your number goes white → yellow → orange → red as it climbs, as in Smash. */
 export function pctColor(p: number) {
   const stops: [number, [number, number, number]][] = [
@@ -68,6 +70,10 @@ export class FightRender {
   /** Where the ring's middle sits on screen (y), and how big the cards are (in tiles). */
   private cy = 0;
   private cardTiles = 1.18;
+  /** How much the floor's depth is squashed on screen: the ring picture's own angle once it's in. */
+  private depth = 0.82;
+  private ringArt: HTMLImageElement | null = null;
+  private floorArt: CanvasPattern | null = null;
   private pieces: [Piece | null, Piece | null] = [null, null];
   private crowdPieces: Piece[] = [];
   private crowd: { x: number; y: number; seed: number; i: number }[] = [];
@@ -93,6 +99,17 @@ export class FightRender {
   ) {
     this.g = canvas.getContext('2d')!;
     this.body = getComputedStyle(document.body).getPropertyValue('--font-brand').trim() || 'Impact, sans-serif';
+    const art = new Image();
+    art.onload = () => {
+      this.ringArt = art;
+      const f = RING_ART.floor;
+      this.depth = (f.y1 - f.y0) / (f.x1 - f.x0);
+      if (this.w) this.resize(this.w, this.h, this.dpr);
+    };
+    art.src = RING_ART.src;
+    const floor = new Image();
+    floor.onload = () => (this.floorArt = this.g.createPattern(floor, 'repeat'));
+    floor.src = '/art/fight/ring-floor.webp?v=1';
   }
 
   resize(w: number, h: number, dpr: number) {
@@ -107,6 +124,15 @@ export class FightRender {
     this.k = upright ? w / 9.6 : Math.min(w / 11, h / 11.2);
     this.cy = upright ? h * 0.43 : h * 0.53;
     this.cardTiles = upright ? 1.32 : 1.18;
+    if (this.ringArt) {
+      // With the ring picture: the whole platform (apron and wooden front too) fits on a wide screen, and the
+      // picture sits in the middle of the space above the buttons.
+      const f = RING_ART.floor;
+      const fw = f.x1 - f.x0;
+      if (!upright) this.k = Math.min(this.k, (0.9 * h * fw) / (RING_ART.h * 2 * FIGHT.ring));
+      const sc = (2 * FIGHT.ring * this.k) / fw;
+      this.cy = (upright ? h * 0.44 : h * 0.5) - (RING_ART.h / 2 - (f.y0 + f.y1) / 2) * sc;
+    }
     this.rebuild();
   }
 
@@ -134,7 +160,7 @@ export class FightRender {
 
   /** World (tiles, ring centre 0,0) to screen. The floor is seen a bit from above: depth is squashed. */
   private sx = (x: number) => this.w / 2 + x * this.k;
-  private sy = (y: number) => this.cy + y * this.k * 0.82;
+  private sy = (y: number) => this.cy + y * this.k * this.depth;
 
   events(evs: FightEvent[], s: FightState, now: number) {
     for (const e of evs) {
@@ -214,10 +240,21 @@ export class FightRender {
 
   private floor() {
     const { g, k } = this;
+    if (this.floorArt) {
+      // The basement floor, a tile about three of the ring's squares across, centred on the ring.
+      const sc = (3.2 * k) / 512;
+      this.floorArt.setTransform(new DOMMatrix([sc, 0, 0, sc, this.w / 2, this.cy]));
+      g.fillStyle = this.floorArt;
+      g.fillRect(0, 0, this.w, this.h);
+      // It's a dark basement: the floor stays in the shadows so the ring is what you see.
+      g.fillStyle = 'rgba(8,6,16,0.62)';
+      g.fillRect(0, 0, this.w, this.h);
+      return;
+    }
     const R = FIGHT.ring + 2.6;
     g.fillStyle = '#16121f';
     g.beginPath();
-    g.roundRect(this.sx(-R), this.sy(-R), R * 2 * k, R * 2 * k * 0.82, k * 0.6);
+    g.roundRect(this.sx(-R), this.sy(-R), R * 2 * k, R * 2 * k * this.depth, k * 0.6);
     g.fill();
   }
 
@@ -226,29 +263,37 @@ export class FightRender {
     const full = FIGHT.ring;
     const R = s.ring;
     const lip = k * 0.32;
+    if (layer === 'back' && this.ringArt) {
+      const f = RING_ART.floor;
+      const sc = (full * 2 * k) / (f.x1 - f.x0);
+      g.drawImage(this.ringArt, this.sx(-full) - f.x0 * sc, this.sy(-full) - f.y0 * sc, RING_ART.w * sc, RING_ART.h * sc);
+      this.closing(R, now);
+      this.ropes(R, now, 'back');
+      return;
+    }
     if (layer === 'back') {
       // The apron and the canvas.
       const apron = full + 0.55;
       g.fillStyle = '#2a2236';
       g.beginPath();
-      g.roundRect(this.sx(-apron), this.sy(-apron), apron * 2 * k, apron * 2 * k * 0.82 + lip, k * 0.2);
+      g.roundRect(this.sx(-apron), this.sy(-apron), apron * 2 * k, apron * 2 * k * this.depth + lip, k * 0.2);
       g.fill();
       g.fillStyle = '#d9d0bd';
       g.beginPath();
-      g.roundRect(this.sx(-full), this.sy(-full), full * 2 * k, full * 2 * k * 0.82, k * 0.12);
+      g.roundRect(this.sx(-full), this.sy(-full), full * 2 * k, full * 2 * k * this.depth, k * 0.12);
       g.fill();
       // Scuffs and a worn middle, so it doesn't look like a flat sheet.
       const wear = g.createRadialGradient(this.sx(0), this.sy(0), k * 0.5, this.sx(0), this.sy(0), full * k * 1.2);
       wear.addColorStop(0, 'rgba(255,255,255,0.18)');
       wear.addColorStop(1, 'rgba(60,40,30,0.18)');
       g.fillStyle = wear;
-      g.fillRect(this.sx(-full), this.sy(-full), full * 2 * k, full * 2 * k * 0.82);
+      g.fillRect(this.sx(-full), this.sy(-full), full * 2 * k, full * 2 * k * this.depth);
       g.strokeStyle = 'rgba(80,60,50,0.18)';
       g.lineWidth = Math.max(1, k * 0.05);
-      g.strokeRect(this.sx(-full * 0.92), this.sy(-full * 0.92), full * 1.84 * k, full * 1.84 * k * 0.82);
+      g.strokeRect(this.sx(-full * 0.92), this.sy(-full * 0.92), full * 1.84 * k, full * 1.84 * k * this.depth);
       g.save();
       g.beginPath();
-      g.rect(this.sx(-full), this.sy(-full), full * 2 * k, full * 2 * k * 0.82);
+      g.rect(this.sx(-full), this.sy(-full), full * 2 * k, full * 2 * k * this.depth);
       g.clip();
       g.strokeStyle = 'rgba(90,70,50,0.05)';
       g.lineWidth = 1;
@@ -283,17 +328,22 @@ export class FightRender {
       // The front edge of the platform.
       g.fillStyle = '#3b3048';
       g.fillRect(this.sx(-apron), this.sy(apron), apron * 2 * k, lip);
-      // The ropes closing in: the floor outside them turns red.
-      if (R < full - 0.01) {
-        const pulse = 0.22 + 0.12 * Math.sin(now / 160);
-        g.fillStyle = `rgba(230,40,50,${pulse})`;
-        g.beginPath();
-        g.rect(this.sx(-full), this.sy(-full), full * 2 * k, full * 2 * k * 0.82);
-        g.rect(this.sx(R), this.sy(-R), -R * 2 * k, R * 2 * k * 0.82);
-        g.fill('evenodd');
-      }
+      this.closing(R, now);
       this.ropes(R, now, 'back');
     } else this.ropes(R, now, 'front');
+  }
+
+  /** The ropes closing in: the floor outside them turns red. */
+  private closing(R: number, now: number) {
+    const { g, k } = this;
+    const full = FIGHT.ring;
+    if (R >= full - 0.01) return;
+    const pulse = 0.22 + 0.12 * Math.sin(now / 160);
+    g.fillStyle = `rgba(230,40,50,${pulse})`;
+    g.beginPath();
+    g.rect(this.sx(-full), this.sy(-full), full * 2 * k, full * 2 * k * this.depth);
+    g.rect(this.sx(R), this.sy(-R), -R * 2 * k, R * 2 * k * this.depth);
+    g.fill('evenodd');
   }
 
   /** Three ropes on each side and a post at each corner; the back and sides go behind the fighters. */
@@ -434,7 +484,7 @@ export class FightRender {
     g.strokeStyle = `rgba(255,70,70,${0.4 + 0.4 * Math.sin(now / 50)})`;
     g.lineWidth = 2;
     g.beginPath();
-    g.ellipse(this.sx(x), this.sy(y), k * (0.5 + left * 0.4), k * (0.5 + left * 0.4) * 0.82, 0, 0, Math.PI * 2);
+    g.ellipse(this.sx(x), this.sy(y), k * (0.5 + left * 0.4), k * (0.5 + left * 0.4) * this.depth, 0, 0, Math.PI * 2);
     g.stroke();
     this.label('🍾', this.sx(x), this.sy(y) - left * k * 3.2, '#fff', k * 0.5);
   }
