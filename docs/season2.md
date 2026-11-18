@@ -73,17 +73,37 @@ Busted means 1 hour plus 1 hour per star in jail. Now you can break out.
 - **The Fixer:** three jobs a day that send you across the games, for example "take a block from whoever robbed you last", "break out in under 90 seconds" or "knock out a Whale in the ring". Each one pays cash and rank.
 - **Telegram alerts:** link your Telegram once. The bot tells you when your gang's vault is being robbed, your Chog is jailed, a war starts on your gang's block, or someone challenges you to a fight, with a button that drops you right there.
 
+## Promised on the Chogathon site ("keep building", owner, 2026-11)
+
+1. **Monthly seasons.** Gang vaults reset each month. The richest gang, the top robber and the best guard get a title written onto their Chogs for good, and it stays with the Chog when sold. (This replaces the rank idea above: titles plus a career, tied to the token.)
+2. **Crew theft.** 2 to 4 Chogs from one gang rob a vault together: one on the lock, one on the safe, one runs the bag. The biggest vaults open only to crews. (Fits with the Armored Truck.)
+3. **Vault upgrades paid in $CHOG,** each one a burn: more guards, harder locks, faster police.
+4. **Raid alerts on your phone.** An installable app (iPhone and Android) that pings you when your gang's vault is being robbed, so you can jump in and defend. Telegram too.
+5. **Chog records on Monad.** Season titles and careers (cash stolen, escapes, catches) in a contract, so marketplaces, bots and other games can read them.
+6. **Events every month.** Halloween was 27 Oct; a **winter heist in December**; gang-vs-gang events like Left vs Right.
+7. **Community.** The biggest heists and a daily recap on Telegram and Discord, and Discord roles that match your gang.
+
+Plus more games for different tastes: Fight Night (action), Turf War (team), Jailbreak (stealth), street races (cars).
+
 ## Build order
 
-1. **Fight Night.** A whole new game that works alone, uses the cards as they are, and needs only ring art.
-2. **Rank, the Fixer and Telegram alerts.** These tie the games together and bring people back.
-3. **Turf War.**
-4. **Jailbreak** (needs the jail interior art).
-5. **Cars and heat**, then the truck and the street games (needs the car art).
-
-Each one goes live on its own, checked at phone and desktop size, with screenshots before anything ships.
+1. **Fight Night.** Built; live once the owner says.
+2. **Raid alerts:** the installable app with push notifications, and Telegram.
+3. **Monthly seasons and titles on the Chog,** with the career record; Season 1 starts on a date the owner picks.
+4. **Winter heist,** for December.
+5. **Crew theft and the Armored Truck.**
+6. **Vault upgrades in $CHOG.**
+7. **Turf War, then Jailbreak.**
+8. **Cars and heat,** and the street games.
+9. **Chog records on Monad** (a contract deploy: owner's OK and gas first).
+10. **Discord roles by gang.**
 
 ## Ask before building
+
+- Season reset rules and the start date; titles and who counts as "best guard".
+- $CHOG prices for each vault upgrade.
+- The Monad records contract: deploying costs gas and needs signing.
+- What a Fight Night win pays.
 
 - Turf paying gang vaults (economy).
 - Bets in Fight Night: limits and the house cut (economy).
