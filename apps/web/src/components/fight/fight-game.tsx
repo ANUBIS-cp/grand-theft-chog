@@ -174,6 +174,18 @@ function Card(props: {
         </div>
       )}
 
+      <div className="mt-5 grid w-full max-w-md grid-cols-3 gap-2 text-center text-[12px] leading-snug text-white/75">
+        <div className="rounded-xl bg-white/[0.05] px-2 py-2.5">
+          <div className="text-[18px]">👀</div>A punch shows its arc before it lands
+        </div>
+        <div className="rounded-xl bg-white/[0.05] px-2 py-2.5">
+          <div className="text-[18px]">💨</div>The start of a dash can’t be hit: dodge
+        </div>
+        <div className="rounded-xl bg-white/[0.05] px-2 py-2.5">
+          <div className="text-[18px]">🥊</div>Hit them right after they miss
+        </div>
+      </div>
+
       <ol className="mt-6 flex w-full max-w-md flex-col gap-2">
         {card.map((c, i) => {
           const won = i < beaten;

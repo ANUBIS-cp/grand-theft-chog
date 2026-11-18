@@ -1,6 +1,6 @@
 'use client';
 import type { Icon } from '@phosphor-icons/react';
-import { CaretDown, ChatCircleDots, Check, MapTrifold, Smiley, Trophy } from '@phosphor-icons/react';
+import { BoxingGlove, CaretDown, ChatCircleDots, Check, MapTrifold, Smiley, Trophy } from '@phosphor-icons/react';
 import {
   useEffect,
   useState,
@@ -275,6 +275,9 @@ export function MapButton({ onClick }: { onClick: () => void }) {
 export function GangsButton({ onClick }: { onClick: () => void }) {
   return <RoundButton icon={Trophy} label="Gangs" hotkey="G" onClick={onClick} />;
 }
+export function FightButton({ onClick }: { onClick: () => void }) {
+  return <RoundButton icon={BoxingGlove} label="Fight" hotkey="F" onClick={onClick} />;
+}
 export function EmoteButton({ onClick }: { onClick: () => void }) {
   return <RoundButton icon={Smiley} label="Emote" hotkey="T" onClick={onClick} />;
 }
@@ -294,6 +297,7 @@ export function PhoneControls(props: {
   onEmote: () => void;
   onMap: () => void;
   onGangs: () => void;
+  onFight: () => void;
 }) {
   const U = props.use.icon;
   // Round the big button's middle, from its left going up over the top.
@@ -307,6 +311,7 @@ export function PhoneControls(props: {
     { icon: Smiley, label: 'Emote', onClick: props.onEmote, deg: 148 },
     { icon: MapTrifold, label: 'Map', onClick: props.onMap, deg: 116 },
     { icon: Trophy, label: 'Gangs', onClick: props.onGangs, deg: 84 },
+    { icon: BoxingGlove, label: 'Fight', onClick: props.onFight, deg: 52 },
   ];
   return (
     <div className="relative h-[82px] w-[82px]">

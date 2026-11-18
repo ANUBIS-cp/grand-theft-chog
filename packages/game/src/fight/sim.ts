@@ -32,7 +32,7 @@ export const FIGHT = {
   /** Hit: wind-up, active and recovery (steps), reach in front of you, and the hit circle's size. */
   hitWind: 4,
   hitActive: 3,
-  hitRecover: 9,
+  hitRecover: 11,
   hitReach: 0.92,
   hitSize: 0.52,
   hitDamage: 8,
@@ -47,6 +47,8 @@ export const FIGHT = {
   dashSpeed: 9.5,
   dashTime: 6,
   dashCooldown: 1,
+  /** The start of a dash is a dodge: hits pass through you for this many steps. */
+  dodge: 5,
   /** Bumping into someone while dashing is a small hit of its own. */
   bumpDamage: 4,
   /** Steps both fighters freeze on a hit (more on a strong one): makes a hit land. */
@@ -101,6 +103,8 @@ export interface Fighter extends FighterSetup {
   stun: number;
   dash: number;
   dashCd: number;
+  /** Steps left of a dash's dodge (hits pass through). */
+  dodge: number;
   /** The hit you're throwing: steps since it started, or -1. */
   swing: number;
   swingLanded: boolean;
@@ -179,6 +183,7 @@ function fighter(setup: FighterSetup, side: -1 | 1): Fighter {
     stun: 0,
     dash: 0,
     dashCd: 0,
+    dodge: 0,
     swing: -1,
     swingLanded: false,
     tackle: 0,
@@ -224,7 +229,7 @@ const len = (x: number, y: number) => Math.sqrt(x * x + y * y);
 /** Knock `t` away along (dx, dy) with a hit of this size. */
 function knock(s: FightState, who: 0 | 1, dx: number, dy: number, damage: number, kbScale: number) {
   const t = s.f[who];
-  if (t.hide > 0 || t.out) return false;
+  if (t.hide > 0 || t.dodge > 0 || t.out) return false;
   t.pct += damage;
   const d = len(dx, dy) || 1;
   const kb = (FIGHT.kbBase + t.pct * FIGHT.kbGrow) * kbScale;
@@ -335,6 +340,7 @@ function control(s: FightState, i: 0 | 1, input: FightInput, later: Later) {
   }
   if (canAct && input.dash && me.dashCd <= 0 && me.swing < 0 && me.tackle <= 0) {
     me.dash = FIGHT.dashTime;
+    me.dodge = FIGHT.dodge;
     me.dashCd = steps(FIGHT.dashCooldown);
     s.events.push({ k: 'dash', who: i });
   }
@@ -364,6 +370,7 @@ function tickDown(f: Fighter) {
   for (const k of Object.keys(f.cd) as PowerId[]) if (f.cd[k]! > 0) f.cd[k]!--;
   if (f.stun > 0) f.stun--;
   if (f.dashCd > 0) f.dashCd--;
+  if (f.dodge > 0) f.dodge--;
   if (f.sprint > 0) f.sprint--;
   if (f.hide > 0) f.hide--;
   if (f.scared > 0) f.scared--;
@@ -535,6 +542,9 @@ export function stepFight(s: FightState, inputs: [FightInput, FightInput]) {
     s.wait = steps(FIGHT.outPause);
   }
 }
+
+/** How far a punch reaches, centre to centre. */
+export const HIT_RANGE = FIGHT.hitReach + FIGHT.hitSize + FIGHT.body;
 
 /** Every power a Chog brings into the ring, in button order (passive ones last, with no button). */
 export function fightButtons(powers: PowerId[]): PowerId[] {
