@@ -239,6 +239,25 @@ export const fightRuns = pgTable(
   (t) => [index('fight_runs_chog_day').on(t.chogId, t.day), index('fight_runs_finished').on(t.finishedAt)],
 );
 
+/**
+ * Raid alerts: a phone (or browser) that asked to be told when its owner's gang vault is being robbed. Who
+ * gets told is worked out when it happens, from the Chogs the wallet holds or plays, so a Chog changing gang
+ * or hands needs nothing here.
+ */
+export const pushSubs = pgTable(
+  'push_subs',
+  {
+    endpoint: text('endpoint').primaryKey(),
+    address: text('address').notNull(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    createdAt: created(),
+    /** The last alert sent here (at most one every few minutes). */
+    lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
+  },
+  (t) => [index('push_subs_address').on(t.address)],
+);
+
 // ---------- $CHOG ----------
 
 /**

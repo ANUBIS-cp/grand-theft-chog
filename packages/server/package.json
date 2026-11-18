@@ -17,10 +17,12 @@
     "@chog-city/game": "*",
     "drizzle-orm": "0.45.3",
     "postgres": "3.4.9",
-    "viem": "2.57.3"
+    "viem": "2.57.3",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
+    "@types/web-push": "^3.6.4",
     "drizzle-kit": "0.31.11"
   }
 }

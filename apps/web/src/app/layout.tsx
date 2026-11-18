@@ -27,6 +27,8 @@ export const metadata: Metadata = {
   // The picture is app/opengraph-image.jpg and twitter-image.jpg (the banner).
   openGraph: { type: 'website', siteName: 'Grand Theft Chog', title: 'Grand Theft Chog', description },
   twitter: { card: 'summary_large_image', title: 'Grand Theft Chog', description },
+  // Added to an iPhone's home screen it opens like an app (and can show raid alerts).
+  appleWebApp: { capable: true, title: 'Grand Theft Chog', statusBarStyle: 'black-translucent' },
 };
 
 export const viewport: Viewport = {

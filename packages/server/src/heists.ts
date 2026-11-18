@@ -39,6 +39,7 @@ import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from 'driz
 import { randomBytes } from 'node:crypto';
 import { chogBurns, gangVaults, heistChogs, heistRuns, type Db } from './db/index.ts';
 import { eventBonus } from './events.ts';
+import { notifyRaid } from './push.ts';
 import { canControl } from './ownership.ts';
 
 // The gang war on the server: vault balances, who may start a heist, and settling a finished one by
@@ -319,6 +320,15 @@ export async function lockRun(
       sql`select pg_notify('city', ${JSON.stringify({ alarm: run.target, gang: run.gang, chog: run.chogId, run: run.id })})`,
     )
     .catch(() => undefined);
+  // And buzzes the robbed gang's phones (not waited for: the robber shouldn't wait on it).
+  void notifyRaid(db, {
+    target: run.target as GangId,
+    gang: run.gang,
+    chogId: run.chogId,
+    robber: run.player,
+    runId: run.id,
+    now,
+  }).catch(() => undefined);
   return {
     loud,
     chog: run.chogId,

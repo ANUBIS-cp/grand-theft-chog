@@ -40,6 +40,7 @@ import { RaidLink } from '@/components/rush/raid-link';
 import { RushGame } from '@/components/rush/rush-game';
 import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
+import { RaidAlerts } from './raid-alerts';
 import { possessive } from '@/lib/possessive';
 import { useDragClose } from '@/components/ui/use-drag-close';
 import { chogImage } from '@/lib/images';
@@ -667,6 +668,41 @@ export function CityApp() {
 
   const chogs = me?.chogs ?? [];
   const chog = chogs.find((c) => c.id === picked) ?? chogs[0] ?? null;
+  // Once per device, a holder who hasn't turned raid alerts on gets one quiet suggestion, after a while in the city.
+  const [alertNudge, setAlertNudge] = useState(false);
+  const nudgeSeen = () => {
+    try {
+      localStorage.setItem('raid-alerts-nudged', '1');
+    } catch {
+      /* private window */
+    }
+    setAlertNudge(false);
+  };
+  useEffect(() => {
+    if (!me?.address || !chog?.gang) return;
+    let seen = false;
+    try {
+      seen = localStorage.getItem('raid-alerts-nudged') === '1';
+    } catch {
+      seen = true;
+    }
+    if (seen || !('Notification' in window) || Notification.permission !== 'default') return;
+    const t = setTimeout(() => setAlertNudge(true), 20_000);
+    return () => clearTimeout(t);
+  }, [me?.address, chog?.gang]);
+  // Arriving from a raid alert on your phone: that robbery's banner (tap it to jump in), or say it's over.
+  const raidLink = useRef<string | null>(
+    typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('raid'),
+  );
+  useEffect(() => {
+    const id = raidLink.current;
+    if (!id || !board || !chog?.gang) return;
+    raidLink.current = null;
+    window.history.replaceState(null, '', '/play');
+    const r = board.robbing.find((x) => x.run === id && x.target === chog.gang);
+    if (r) setRaid({ ...r, since: Date.now() });
+    else setNotice('That robbery is already over. Next time, tap the alert as soon as it comes in.');
+  }, [board, chog?.gang]);
   chogRef.current = chog;
   const revenge = chog?.gang ? (me?.revenge[chog.gang] ?? []) : [];
   const peekChog =
@@ -1833,6 +1869,26 @@ export function CityApp() {
         </div>
       )}
 
+      {alertNudge && !notice && !sheet && (
+        <div className="pointer-events-none absolute inset-x-0 top-[calc(max(0.75rem,env(safe-area-inset-top))+64px)] z-40 flex justify-center px-4">
+          <div className="glass pointer-events-auto flex items-center gap-3 rounded-full py-1.5 pl-4 pr-1.5 text-[14px] font-semibold">
+            <span>🔔 Get a ping when someone robs your vault</span>
+            <button
+              onClick={() => {
+                nudgeSeen();
+                setSheet('me');
+              }}
+              className="btn btn-gold btn-sm press"
+            >
+              <span>Turn on</span>
+            </button>
+            <button onClick={nudgeSeen} aria-label="Not now" className="grid h-8 w-8 place-items-center rounded-full text-white/60 hover:text-white">
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {notice && (
         <div className="absolute inset-x-0 top-16 z-40 flex justify-center px-4">
           <button
@@ -2024,6 +2080,7 @@ export function CityApp() {
               onBurned={burned}
             />
           )}
+          {me?.address && chog?.gang && <RaidAlerts gang={GANGS[chog.gang].name} />}
           {me?.address && (
             <button
               className="mt-5 inline-flex items-center gap-1.5 text-[13px] text-white/60 hover:text-white"
