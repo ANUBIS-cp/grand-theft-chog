@@ -3,9 +3,13 @@
 import type { SkillId } from '@chog-city/data';
 import {
   FIGHT,
+  FIGHT_NAMES,
+  FIGHT_PAY,
   FIGHT_POWERS,
   FIGHT_TPS,
+  encodeFightInputs,
   fightButtons,
+  roundFightInput,
   startFight,
   stepFight,
   type FightInput,
@@ -92,22 +96,74 @@ interface Hud {
   cdMax: number[];
 }
 
-export function FightGame(props: { me: FightCard; card: FightCard[]; crowd: number[]; day: number }) {
-  const { me, card, crowd, day } = props;
-  const [beaten, setBeaten] = useState(0);
+/** A real fight's start from the server: its id, seed and both sides' powers. */
+interface ServerFight {
+  id: string;
+  seed: number;
+  me: PowerId[];
+  them: PowerId[];
+}
+
+export function FightGame(props: {
+  me: FightCard;
+  card: FightCard[];
+  crowd: number[];
+  day: number;
+  /** Your own Chog, signed in: tonight's progress from the server and your gang's name. Null for practice. */
+  real: { beaten: number; gang: string } | null;
+}) {
+  const { me, card, crowd, day, real } = props;
+  const [beaten, setBeaten] = useState(real?.beaten ?? 0);
   const [screen, setScreen] = useState<'card' | 'fight' | 'won' | 'lost'>('card');
   const [rival, setRival] = useState<FightCard>(card[0]!);
   const [fightNo, setFightNo] = useState(0);
-  useEffect(() => setBeaten(readProgress(day)), [day]);
+  const [server, setServer] = useState<ServerFight | null>(null);
+  const [paid, setPaid] = useState(0);
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => {
+    if (!real) setBeaten(readProgress(day));
+  }, [day, real]);
   const next = card[Math.min(beaten, card.length - 1)]!;
   const allDone = beaten >= card.length;
 
-  const start = (who: FightCard) => {
+  const post = async (path: string, body: unknown) => {
+    const r = await fetch(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => null);
+    return r ? await r.json().catch(() => null) : null;
+  };
+
+  const start = async (who: FightCard) => {
+    setProblem(null);
+    if (real) {
+      const body = await post('/api/fight/start', { chog: me.id });
+      if (!body?.ok) {
+        setProblem(body?.error === 'card-done' ? 'You cleared tonight’s card.' : 'Couldn’t start the fight. Try again.');
+        return;
+      }
+      setServer(body.fight);
+    } else setServer(null);
     setRival(who);
     setFightNo((n) => n + 1);
     setScreen('fight');
   };
-  const done = (won: boolean) => {
+  const done = async (won: boolean, inputs: FightInput[]) => {
+    setPaid(0);
+    if (real && server) {
+      // The server replays what you pressed: that's what counts, not what the browser says.
+      const body = await post('/api/fight/finish', { id: server.id, inputs: encodeFightInputs(inputs) });
+      if (body?.ok) {
+        setBeaten(body.result.beaten);
+        setPaid(body.result.paid);
+        setScreen(body.result.won ? 'won' : 'lost');
+      } else {
+        setProblem('The fight couldn’t be checked, so it didn’t count. Try again.');
+        setScreen('lost');
+      }
+      return;
+    }
     if (won && rival.level === beaten + 1) {
       saveProgress(day, beaten + 1);
       setBeaten(beaten + 1);
@@ -118,7 +174,7 @@ export function FightGame(props: { me: FightCard; card: FightCard[]; crowd: numb
   return (
     <div className="relative h-full w-full select-none text-white">
       {screen === 'fight' ? (
-        <Ring key={fightNo} me={me} rival={rival} crowd={crowd} onDone={done} />
+        <Ring key={fightNo} me={me} rival={rival} crowd={crowd} server={server} onDone={done} />
       ) : (
         <Card
           me={me}
@@ -127,6 +183,9 @@ export function FightGame(props: { me: FightCard; card: FightCard[]; crowd: numb
           screen={screen}
           rival={rival}
           next={allDone ? null : next}
+          real={real}
+          paid={paid}
+          problem={problem}
           onFight={start}
         />
       )}
@@ -142,9 +201,12 @@ function Card(props: {
   screen: 'card' | 'won' | 'lost';
   rival: FightCard;
   next: FightCard | null;
+  real: { beaten: number; gang: string } | null;
+  paid: number;
+  problem: string | null;
   onFight: (c: FightCard) => void;
 }) {
-  const { me, card, beaten, screen, rival, next } = props;
+  const { me, card, beaten, screen, rival, next, real, paid, problem } = props;
   return (
     <div className="flex h-full flex-col items-center overflow-y-auto bg-[radial-gradient(ellipse_at_50%_0%,rgba(255,200,120,0.12),transparent_60%)] px-4 pb-10 pt-[max(1rem,env(safe-area-inset-top))]">
       <div className="flex w-full max-w-md items-center justify-between">
@@ -172,6 +234,9 @@ function Card(props: {
                 : `${rival.name} is out. Next up below.`
               : `${rival.name} got you this time.`}
           </div>
+          {paid > 0 && real && (
+            <div className="mt-2 font-brand text-[22px] text-[#ffd23f]">+${paid} to {real.gang}’s vault</div>
+          )}
         </div>
       )}
 
@@ -186,6 +251,13 @@ function Card(props: {
           <div className="text-[18px]">🥊</div>Hit them right after they miss
         </div>
       </div>
+
+      {problem && <p className="mt-4 text-center text-[14px] font-semibold text-[#ff8a8a]">{problem}</p>}
+      <p className="mt-4 text-center text-[13px] text-white/60">
+        {real
+          ? `Your first win against each fight tonight pays ${real.gang}’s vault, and every win counts toward this season’s best fighter.`
+          : 'Practice. Play as your own Chog, signed in, and your wins pay your gang and count toward the season.'}
+      </p>
 
       <ol className="mt-6 flex w-full max-w-md flex-col gap-2">
         {card.map((c, i) => {
@@ -214,7 +286,8 @@ function Card(props: {
               <div className="min-w-0 flex-1">
                 <div className={cn('truncate text-[15px] font-semibold', won && 'text-white/50 line-through')}>{c.name}</div>
                 <div className="text-[12px] text-white/55">
-                  {c.level === 6 ? 'Champion: the city’s top robber' : ['Warm-up', 'Brawler', 'Tough', 'Dangerous', 'Main event'][i]}
+                  {c.level === 6 ? 'Champion: the city’s top robber' : FIGHT_NAMES[i]}
+                  {real && ` · +$${FIGHT_PAY[i]}`}
                   {' · '}
                   {fightButtons(c.powers).map((p) => POWER_NAME[p]).join(', ')}
                 </div>
@@ -241,8 +314,14 @@ function Card(props: {
 }
 
 /** One fight: the canvas, the controls and the name plates. */
-function Ring(props: { me: FightCard; rival: FightCard; crowd: number[]; onDone: (won: boolean) => void }) {
-  const { me, rival } = props;
+function Ring(props: {
+  me: FightCard;
+  rival: FightCard;
+  crowd: number[];
+  server: ServerFight | null;
+  onDone: (won: boolean, inputs: FightInput[]) => void;
+}) {
+  const { me, rival, server } = props;
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const keys = useRef(new Set<string>());
@@ -298,11 +377,13 @@ function Ring(props: { me: FightCard; rival: FightCard; crowd: number[]; onDone:
         if (--pending % 4 === 0 || pending <= 0) r.rebuild();
       };
 
+    // A real fight uses the server's seed and powers, so its replay of these inputs comes out the same.
     const s: FightState = startFight(
-      { chog: me.id, name: me.name, powers: me.powers },
-      { chog: rival.id, name: rival.name, powers: rival.powers, bot: rival.level },
-      (Date.now() & 0x7fffffff) ^ (rival.id * 2654435761),
+      { chog: me.id, name: me.name, powers: server?.me ?? me.powers },
+      { chog: rival.id, name: rival.name, powers: server?.them ?? rival.powers, bot: rival.level },
+      server?.seed ?? ((Date.now() & 0x7fffffff) ^ (rival.id * 2654435761)),
     );
+    const recorded: FightInput[] = [];
     // Development only: lets the test script see the fight (never on the live site).
     if (process.env.NODE_ENV !== 'production') (window as unknown as { __fight?: FightState }).__fight = s;
     let prev = s.f.map((f) => ({ x: f.x, y: f.y }));
@@ -340,7 +421,9 @@ function Ring(props: { me: FightCard; rival: FightCard; crowd: number[]; onDone:
       while (acc >= STEP_MS) {
         acc -= STEP_MS;
         prev = s.f.map((f) => ({ x: f.x, y: f.y }));
-        stepFight(s, [input(), idle]);
+        const mine = roundFightInput(input());
+        if (s.phase !== 'over') recorded.push(mine);
+        stepFight(s, [mine, idle]);
         r.events(s.events, s, now);
         for (const e of s.events) {
           if (e.k === 'hit') {
@@ -359,7 +442,7 @@ function Ring(props: { me: FightCard; rival: FightCard; crowd: number[]; onDone:
             ended = true;
             if (e.winner === 0) snd.escaped();
             else snd.busted();
-            setTimeout(() => onDone.current(e.winner === 0), 900);
+            setTimeout(() => onDone.current(e.winner === 0, recorded), 900);
           }
         }
       }

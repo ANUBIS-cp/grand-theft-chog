@@ -13,3 +13,4 @@ export * from './recap.ts';
 export * from './events.ts';
 export * from './proofs.ts';
 export * from './hunts.ts';
+export * from './fights.ts';

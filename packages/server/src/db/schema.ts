@@ -212,6 +212,33 @@ export const heistRuns = pgTable(
   ],
 );
 
+/**
+ * Fight Night (packages/game/src/fight): one fight against tonight's card. The server picks the seed when the
+ * fight starts and replays the inputs when it ends, so only a real win counts. A first win against each fight
+ * of the night pays the winner's gang vault and counts toward the season's fighter title.
+ */
+export const fightRuns = pgTable(
+  'fight_runs',
+  {
+    id: text('id').primaryKey(),
+    chogId: integer('chog_id').notNull(),
+    player: text('player').notNull(),
+    gang: text('gang').$type<GangId>().notNull(),
+    day: integer('day').notNull(),
+    /** Which fight of the night (0 = warm-up ... 5 = the champion), the opponent and its level. */
+    slot: integer('slot').notNull(),
+    opponent: integer('opponent').notNull(),
+    seed: integer('seed').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    won: boolean('won'),
+    /** Cash paid to the gang vault (first win of that fight that day only). */
+    paid: integer('paid'),
+    inputs: text('inputs'),
+  },
+  (t) => [index('fight_runs_chog_day').on(t.chogId, t.day), index('fight_runs_finished').on(t.finishedAt)],
+);
+
 // ---------- $CHOG ----------
 
 /**
