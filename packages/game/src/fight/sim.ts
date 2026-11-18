@@ -23,7 +23,7 @@ export const FIGHT = {
   /** Seconds of "3, 2, 1" before a fall, and of slow motion after someone goes out. */
   countdown: 1.5,
   outPause: 1.4,
-  body: 0.42,
+  body: 0.55,
   speed: 3.8,
   accel: 32,
   friction: 14,
@@ -33,7 +33,7 @@ export const FIGHT = {
   hitWind: 4,
   hitActive: 3,
   hitRecover: 9,
-  hitReach: 0.78,
+  hitReach: 0.92,
   hitSize: 0.52,
   hitDamage: 8,
   /** Knock-back speed (tiles/s) = base + % x grow. Hit stun (steps) = base + % x grow. */

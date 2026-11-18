@@ -83,7 +83,7 @@ describe('Fight Night', () => {
     // They swing at you while you're hidden: the hit doesn't land.
     s.f[0].x = 0;
     s.f[0].y = 0;
-    s.f[1].x = 0.9;
+    s.f[1].x = 1.15;
     s.f[1].y = 0;
     s.f[1].fx = -1;
     s.f[1].fy = 0;

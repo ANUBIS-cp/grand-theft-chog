@@ -57,7 +57,7 @@ export function botInput(s: FightState, i: 0 | 1): FightInput {
     const gx = lineUp ? them.x - (them.x / tc) * 0.85 : them.x;
     const gy = lineUp ? them.y - (them.y / tc) * 0.85 : them.y;
     Object.assign(out, toward(gx - me.x, gy - me.y));
-    if (dist < 1.25) {
+    if (dist < 1.5) {
       // Close: face them and swing.
       Object.assign(out, toward(dx, dy, 0.4));
       if (r() < L.swing) out.hit = true;
@@ -75,7 +75,7 @@ export function botInput(s: FightState, i: 0 | 1): FightInput {
     const fits =
       (p === 'zap' && facing && dist < 3.4) ||
       (p === 'tackle' && facing && dist < 3 && them.pct > 40) ||
-      (p === 'hide' && them.swing >= 0 && them.swing <= FIGHT.hitWind && dist < 1.6) ||
+      (p === 'hide' && them.swing >= 0 && them.swing <= FIGHT.hitWind && dist < 1.85) ||
       ((p === 'scare' || p === 'distract') && dist < 2.8) ||
       (p === 'magnet' && dist > 2.4 && myEdge > 1.5) ||
       (p === 'bribe' && dist > 1.8) ||
