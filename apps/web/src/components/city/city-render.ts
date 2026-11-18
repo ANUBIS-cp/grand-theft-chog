@@ -25,6 +25,7 @@ import {
 import { CityArt } from './art';
 import type { Halloween, HauntView } from './halloween';
 import { CityHunts } from './hunts';
+import { CityTruck } from './truck-fx';
 import { FACADE, LANDMARK_RISE, paintLandmark, paintWall, paintYard, treeOf } from './landmarks';
 
 // Draws the city at night in the same 3/4 view as the vaults: ground tiles, buildings (roof at the back, front
@@ -223,6 +224,8 @@ export class CityRenderer {
   private lastFrame = 0;
   /** Pumpkin Rush, Most Wanted and the Blood Moon (hunts.ts). */
   readonly hunts = new CityHunts();
+  /** The winter cash truck and its bags (truck-fx.ts). */
+  readonly truck = new CityTruck();
   private hauntView(): HauntView {
     return {
       g: this.g,
@@ -2031,6 +2034,13 @@ export class CityRenderer {
       (x, y) => inView(x, y, 2),
       (y, draw) => things.push({ y, draw }),
     );
+    this.truck.font = this.font;
+    this.truck.things(
+      hview,
+      now,
+      (x, y) => inView(x, y, 3),
+      (y, draw) => things.push({ y, draw }),
+    );
     // The Most Wanted's target turns on the ground under them.
     for (const p of people)
       if (p.hunted && inView(p.x, p.y, 2))
@@ -2084,6 +2094,7 @@ export class CityRenderer {
     const lit: Glow[] = [];
     if (haunt && hv) lit.push(...haunt.lights(hv, now).map((l) => ({ ...l, k: (l.k ?? 1) * haunt.fade })));
     lit.push(...this.hunts.lights(hview));
+    lit.push(...this.truck.lights(hview));
     this.drawNight(x0, y0, x1, y1, now, lit, [...opts.jailed, ...people], {
       moon: this.hunts.mix,
       eerie: haunt ? haunt.fade : 0,
@@ -2096,6 +2107,7 @@ export class CityRenderer {
     }
     this.hunts.bloodMoon(g, hview, now);
     this.hunts.glow(g, hview, now);
+    this.truck.glow(g, hview, now);
 
     for (const p of CITY.places) {
       const look = this.places[p.id];

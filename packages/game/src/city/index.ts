@@ -5,3 +5,4 @@ export * from './police.ts';
 export * from './track.ts';
 export * from './patrol.ts';
 export * from './pumpkins.ts';
+export * from './truck.ts';

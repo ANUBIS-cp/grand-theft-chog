@@ -85,6 +85,19 @@ Busted means 1 hour plus 1 hour per star in jail. Now you can break out.
 
 Plus more games for different tastes: Fight Night (action), Turf War (team), Jailbreak (stealth), street races (cars).
 
+## The winter heist: the cash truck (preview built 18 Nov)
+
+The December event is the Armored Truck from the owner's picks, on foot for now (no cars yet), dressed for winter.
+
+- **What you do:** a snowy armoured cash truck drives through the city. It's faster than you on a straight road and slows right down at corners, with its blinker on before each turn, so you read where it's going and catch it at a corner. Get behind it and **Jump on**. Standing in front of it gets you shoved aside.
+- **The lock:** a small panel at the bottom while you ride (you still see the city going by): tap when the pin is in the gold band, three pins. Corners make the pin jump. Two misses and you fall off into the snow, and can catch it again.
+- **The bags:** the back doors burst open, the truck brakes hard and twelve cash bags tumble out along the street. Two guards climb out of the cab and come for you. Every bag you carry slows you down: two or three and you outrun the guards, all twelve and you won't.
+- **Home:** run them to your gang's door, with police cars circling like any getaway.
+- **Why this shape:** robbing a moving truck in other games works the same way: stop or catch it, open the back, the cash spills out, then the guards or the wanted level (GTA Online's armored trucks, Red Dead's coach robberies, Payday 2's Armored Transport). Catching it at a corner, the hop on, and the "one more bag?" choice are what's ours.
+- **Preview:** only the owner's wallet sees "Winter preview: the cash truck". It runs in that browser, and nothing is paid.
+- **Before it's real (owner's call):** when it comes (a few set times a day, warned on Telegram and by raid alerts), what a bag pays and where that money comes from (new cash into the gang vaults, or out of every vault), and whether several players can rob the same truck at once (they'd race for the same bags).
+- **Art:** `art-in/season2/truck-topdown.jpeg` and `truck-bag.jpeg` (Gemini), cut by `tools/images/truck-art.ts` into `public/art/truck/`.
+
 ## Build order
 
 1. **Fight Night.** Built; live once the owner says.

@@ -42,6 +42,7 @@ import { SkillIcon } from '@/components/skill-icons';
 import { cn } from '@/lib/cn';
 import { RaidAlerts } from './raid-alerts';
 import { SeasonBoard } from './season-board';
+import { TruckHud, type TruckStage } from './truck-hud';
 import { possessive } from '@/lib/possessive';
 import { useDragClose } from '@/components/ui/use-drag-close';
 import { chogImage } from '@/lib/images';
@@ -675,8 +676,27 @@ export function CityApp() {
   const chog = chogs.find((c) => c.id === picked) ?? chogs[0] ?? null;
   // Once per device, a holder who hasn't turned raid alerts on gets one quiet suggestion, after a while in the city.
   const [alertNudge, setAlertNudge] = useState(false);
+  /** The winter cash truck (a preview for the owner's wallet): where you are in it. */
+  const [truck, setTruck] = useState<TruckStage | null>(null);
   // New things (raid alerts, the season tab) are the owner's to try first; everyone gets them once the owner says so.
-  const preview = !!me?.address && PREVIEW_FOR.has(me.address.toLowerCase());
+  // Local testing sees the previews too (nobody else's wallet can sign in there).
+  const [local, setLocal] = useState(false);
+  useEffect(() => setLocal(location.hostname === 'localhost'), []);
+  const preview = local || (!!me?.address && PREVIEW_FOR.has(me.address.toLowerCase()));
+  /** Starts the cash truck: it drives up near you; the bags go to your gang's door (or the warehouse's). */
+  const startTruck = () => {
+    const home = (chog?.gang && placeOf(chog.gang)?.door) || placeOf('training')!.door;
+    setSheet(null);
+    setTruck({ at: 'chase', near: false });
+    view.current?.cashTruck(home);
+    setBanner({
+      id: `truck${Date.now()}`,
+      title: 'The cash truck is in town!',
+      line: 'Follow the arrow. It’s faster than you on a straight road, so catch it at a corner and jump on the back.',
+      tone: 'alarm',
+      long: true,
+    });
+  };
   const nudgeSeen = () => {
     try {
       localStorage.setItem('raid-alerts-nudged', '1');
@@ -1586,6 +1606,52 @@ export function CityApp() {
           if (fresh && chatOpenRef.current) setChatSeen(fresh.id);
         }}
         guide={practiced || clean ? null : placeOf('training')!.door}
+        onTruck={(e) => {
+          if (e.kind === 'near' || e.kind === 'far') setTruck({ at: 'chase', near: e.kind === 'near' });
+          else if (e.kind === 'on') setTruck({ at: 'riding' });
+          else if (e.kind === 'thrown') {
+            setTruck({ at: 'chase', near: false });
+            siren.current?.thud();
+            setBanner({
+              id: `tt${Date.now()}`,
+              title: 'You fell off!',
+              line: 'Catch it again.',
+              tone: 'lose',
+            });
+          } else if (e.kind === 'bumped')
+            setBanner({
+              id: `tb${Date.now()}`,
+              title: 'Not in front!',
+              line: 'It won’t stop for you. Get behind it and jump on the back.',
+              tone: 'lose',
+            });
+          else if (e.kind === 'open') {
+            setTruck({ at: 'loot', bags: 0 });
+            siren.current?.unlocked();
+            setBanner({
+              id: `to${Date.now()}`,
+              title: 'The doors are open!',
+              line: 'Grab the bags and run them home. Every bag makes you slower.',
+              tone: 'win',
+            });
+          } else if (e.kind === 'guards') {
+            siren.current?.alarmOn();
+            setBanner({
+              id: `tg${Date.now()}`,
+              title: 'Guards!',
+              line: 'They’re out of the truck and coming.',
+              tone: 'alarm',
+            });
+          } else if (e.kind === 'bag') {
+            siren.current?.bag();
+            setTruck({ at: 'loot', bags: e.bags });
+          } else if (e.kind === 'end') {
+            siren.current?.alarmOff();
+            if (e.outcome === 'home') siren.current?.escaped();
+            else if (e.outcome === 'caught') siren.current?.busted();
+            setTruck({ at: 'end', outcome: e.outcome, bags: e.bags });
+          }
+        }}
         onPracticeEnd={(outcome) => {
           setPracticeRun(null);
           // A guest who just got the bag home: now the real thing needs a Chog.
@@ -1876,6 +1942,31 @@ export function CityApp() {
         </div>
       )}
 
+      {preview && !truck && !notice && !sheet && !alertNudge && !heistScreen && (
+        <div className="pointer-events-none absolute inset-x-0 top-[calc(max(0.75rem,env(safe-area-inset-top))+64px)] z-40 flex justify-center px-4">
+          <button
+            onClick={startTruck}
+            className="glass press pointer-events-auto flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-4 text-[14px] font-semibold"
+          >
+            <img src="/art/truck/truck.webp" alt="" className="h-8 w-8 rotate-90 object-contain" />
+            <span>Winter preview: the cash truck</span>
+          </button>
+        </div>
+      )}
+      {truck && (
+        <TruckHud
+          stage={truck}
+          turning={() => view.current?.truckTurning() ?? 0}
+          onJump={() => view.current?.truckJump()}
+          onPicked={() => view.current?.truckOpen()}
+          onThrown={() => view.current?.truckThrown()}
+          onAgain={startTruck}
+          onDone={() => {
+            view.current?.truckStop();
+            setTruck(null);
+          }}
+        />
+      )}
       {alertNudge && !notice && !sheet && (
         <div className="pointer-events-none absolute inset-x-0 top-[calc(max(0.75rem,env(safe-area-inset-top))+64px)] z-40 flex justify-center px-4">
           <div className="glass pointer-events-auto flex items-center gap-3 rounded-full py-1.5 pl-4 pr-1.5 text-[14px] font-semibold">

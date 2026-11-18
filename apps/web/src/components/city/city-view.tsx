@@ -26,9 +26,22 @@ import {
   stepCops,
   stepPatrol,
   stepWalker,
+  BAGS,
+  TRUCK,
+  carrySpeed,
+  dropBag,
+  newTruck,
+  poseAt,
+  previewRoute,
+  rearOf,
+  slam,
+  stepBags,
+  stepTruck,
+  type Bag,
   type Cop,
   type PatrolCar,
   type Place,
+  type Truck,
   type Walker,
 } from '@chog-city/game/city';
 import { X } from '@phosphor-icons/react';
@@ -95,6 +108,41 @@ export interface CityHandle {
   chaseAfter(id: number | null): void;
   /** The practice getaway: out of the training warehouse to `home`, with practice police after you. */
   practiceChase(home: { x: number; y: number }): void;
+  /** The winter cash truck (a preview, only in this browser): it drives up near you; you run the bags to `home`. */
+  cashTruck(home: { x: number; y: number }): void;
+  /** Jump onto the back of the truck (when you're close enough: see onTruck 'near'). */
+  truckJump(): void;
+  /** Picking the lock went wrong, or a corner was too much: you fall off into the snow. */
+  truckThrown(): void;
+  /** The lock is picked: the doors burst open and the bags fall out. */
+  truckOpen(): void;
+  /** How hard the truck is turning right now (-1..1), to shake the lock. */
+  truckTurning(): number;
+  /** Stop the truck run (closing the preview). */
+  truckStop(): void;
+}
+
+/** What happened on the cash truck, for the screen to show. */
+export type TruckEvent =
+  | { kind: 'near' | 'far' | 'on' | 'thrown' | 'open' | 'guards' | 'bumped' }
+  | { kind: 'bag'; bags: number; cash: number }
+  | { kind: 'end'; outcome: 'home' | 'caught' | 'time' | 'gone'; bags: number; cash: number };
+
+interface TruckRun {
+  t: Truck;
+  bags: Bag[];
+  dropped: number;
+  dropWait: number;
+  phase: 'chase' | 'riding' | 'loot';
+  near: boolean;
+  carried: number;
+  rand: () => number;
+  home: { x: number; y: number };
+  guards: Cop[] | null;
+  /** When the guards got out (ms): they give you a moment before they run. */
+  guardsAt: number;
+  until: number;
+  bumpedAt: number;
 }
 
 interface Props {
@@ -138,6 +186,8 @@ interface Props {
   onChat?: (all: ChatMsg[], fresh: ChatMsg | null, refused?: string) => void;
   /** The practice getaway ended (nothing real moves). */
   onPracticeEnd?: (outcome: 'home' | 'caught' | 'time') => void;
+  /** Something happened on the cash truck. */
+  onTruck?: (e: TruckEvent) => void;
   /** First visit: the gold arrow points here (the practice warehouse) until you've tried it. */
   guide?: { x: number; y: number } | null;
 }
@@ -258,6 +308,8 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
     afterAt: 0,
     /** The practice getaway, run here in the browser with the same police as a real one. */
     practice: null as { cops: Cop[]; home: { x: number; y: number }; started: number; until: number } | null,
+    /** The winter cash truck, run here in the browser (a preview: nothing is paid). */
+    cash: null as TruckRun | null,
   });
 
   const jailedNow = props.me.jail !== null && props.me.jail > Date.now();
@@ -303,6 +355,81 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         started: now,
         until: now + getawayTime(from.door, home),
       };
+    },
+    cashTruck(home) {
+      const s = state.current;
+      const rand = seeded(Date.now());
+      const t = newTruck(previewRoute({ x: s.x, y: s.y }, rand));
+      s.cash = {
+        t,
+        bags: [],
+        dropped: 0,
+        dropWait: 0,
+        phase: 'chase',
+        near: false,
+        carried: 0,
+        rand,
+        home,
+        guards: null,
+        guardsAt: 0,
+        until: 0,
+        bumpedAt: 0,
+      };
+      if (s.r) {
+        s.r.truck.reset();
+        s.r.truck.truck = t;
+        s.r.truck.bags = s.cash.bags;
+        s.r.truck.snow = true;
+      }
+    },
+    truckJump() {
+      const c = state.current.cash;
+      if (!c || c.phase !== 'chase' || !c.near) return;
+      c.phase = 'riding';
+      c.near = false;
+      if (state.current.r) state.current.r.truck.riding = true;
+      live.current.onTruck?.({ kind: 'on' });
+    },
+    truckThrown() {
+      const s = state.current;
+      const c = s.cash;
+      if (!c || c.phase !== 'riding') return;
+      c.phase = 'chase';
+      if (s.r) s.r.truck.riding = false;
+      // Off the back and into the snow, a step to the side of the lane.
+      const p = poseAt(c.t.route, c.t.s);
+      const back = rearOf(p);
+      const off = slide(back.x, back.y, -p.hx * 1.2 + -p.hy * 0.8, -p.hy * 1.2 + p.hx * 0.8);
+      s.x = off.x;
+      s.y = off.y;
+      s.ramp = 0;
+      live.current.onTruck?.({ kind: 'thrown' });
+    },
+    truckOpen() {
+      const s = state.current;
+      const c = s.cash;
+      if (!c || c.phase !== 'riding') return;
+      c.phase = 'loot';
+      slam(c.t);
+      if (s.r) {
+        s.r.truck.riding = false;
+        s.r.truck.openAt = performance.now();
+      }
+      const p = poseAt(c.t.route, c.t.s);
+      const back = rearOf(p);
+      const off = slide(back.x, back.y, -p.hx * 0.9, -p.hy * 0.9);
+      s.x = off.x;
+      s.y = off.y;
+      live.current.onTruck?.({ kind: 'open' });
+    },
+    truckTurning() {
+      return state.current.cash?.t.turning ?? 0;
+    },
+    truckStop() {
+      const s = state.current;
+      s.cash = null;
+      s.r?.truck.reset();
+      if (s.r) s.r.truck.snow = false;
     },
   }));
 
@@ -470,6 +597,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         s.path.length > 0 ||
         s.moving ||
         !!s.practice ||
+        !!s.cash ||
         !!s.after ||
         (s.net?.chases.size ?? 0) > 0 ||
         r.turning;
@@ -486,10 +614,17 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       const p = live.current;
       const jailed = p.me.jail !== null && p.me.jail > Date.now();
 
-      // Your Chog.
+      // Your Chog. Carrying the truck's cash bags slows you down, and on the back of the truck you go where it goes.
+      const cp = s.cash;
+      const heavy = cp ? carrySpeed(cp.carried) : 1;
+      const riding = cp?.phase === 'riding';
+      if (riding) {
+        s.path = [];
+        s.target = null;
+      }
       let vx = 0;
       let vy = 0;
-      if (!p.paused) {
+      if (!p.paused && !riding) {
         for (const k of s.keys) {
           vx += KEYS[k]![0];
           vy += KEYS[k]![1];
@@ -504,7 +639,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         // Up to full speed in about a tenth of a second: quick, but you feel the push.
         s.ramp = Math.min(1, s.ramp + dt / 0.12);
         s.dir = { x: vx / len, y: vy / len };
-        const sp = (WALK_SPEED * (0.5 + 0.5 * s.ramp) * dt * Math.min(1, len)) / len;
+        const sp = (WALK_SPEED * heavy * (0.5 + 0.5 * s.ramp) * dt * Math.min(1, len)) / len;
         const n = (jailed ? slideInPen : slide)(s.x, s.y, vx * sp, vy * sp);
         s.moving = n.x !== s.x || n.y !== s.y;
         s.x = n.x;
@@ -513,13 +648,13 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
       } else if (s.ramp > 0 && !s.path.length) {
         // Let go: a short glide to a stop instead of freezing on the spot.
         s.ramp = Math.max(0, s.ramp - dt / 0.09);
-        const sp = WALK_SPEED * 0.55 * s.ramp * dt;
+        const sp = WALK_SPEED * heavy * 0.55 * s.ramp * dt;
         const n = (jailed ? slideInPen : slide)(s.x, s.y, s.dir.x * sp, s.dir.y * sp);
         s.moving = s.ramp > 0.3 && (n.x !== s.x || n.y !== s.y);
         s.x = n.x;
         s.y = n.y;
       } else if (s.path.length && !p.paused) {
-        let left = WALK_SPEED * dt;
+        let left = WALK_SPEED * heavy * dt;
         while (left > 0 && s.path.length) {
           const to = s.path[0]!;
           const dx = to.x - s.x;
@@ -541,7 +676,119 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         if (!s.path.length) s.target = null;
       } else s.moving = false;
 
-      const door = jailed ? null : (doorAt(s.x, s.y) ?? null);
+      // The cash truck: it drives on; you catch it, ride it, then grab the bags and run them home.
+      const truckCops: Person[] = [];
+      let truckGoal: { x: number; y: number } | null = null;
+      if (cp) {
+        const ev = live.current.onTruck;
+        stepTruck(cp.t, dt);
+        const pose = poseAt(cp.t.route, cp.t.s);
+        const back = rearOf(pose);
+        const finish = (outcome: 'home' | 'caught' | 'time' | 'gone') => {
+          s.cash = null;
+          r.truck.reset();
+          r.truck.snow = false;
+          ev?.({ kind: 'end', outcome, bags: cp.carried, cash: cp.carried * BAGS.cash });
+        };
+        if (cp.phase === 'riding') {
+          s.x = back.x;
+          s.y = back.y;
+          s.moving = false;
+          s.face = pose.hx < -0.2 ? -1 : pose.hx > 0.2 ? 1 : s.face;
+          if (cp.t.state === 'gone') finish('gone');
+        } else if (cp.phase === 'chase') {
+          truckGoal = back;
+          const near = Math.hypot(s.x - back.x, s.y - back.y) < TRUCK.grab && cp.t.state !== 'gone';
+          if (near !== cp.near) {
+            cp.near = near;
+            ev?.({ kind: near ? 'near' : 'far' });
+          }
+          // Standing in its way: it shoves you aside (it never stops for you).
+          const fx = s.x - pose.x;
+          const fy = s.y - pose.y;
+          const along = fx * pose.hx + fy * pose.hy;
+          const across = -fx * pose.hy + fy * pose.hx;
+          if (
+            Math.abs(along) < TRUCK.length / 2 + 0.1 &&
+            Math.abs(across) < TRUCK.width / 2 + 0.25 &&
+            along > -TRUCK.length / 2 + 0.2
+          ) {
+            const push = across >= 0 ? 1 : -1;
+            const n = slide(
+              s.x,
+              s.y,
+              -pose.hy * push * 0.9 + pose.hx * 0.4,
+              pose.hx * push * 0.9 + pose.hy * 0.4,
+            );
+            s.x = n.x;
+            s.y = n.y;
+            s.ramp = 0;
+            if (now - cp.bumpedAt > 1500) {
+              cp.bumpedAt = now;
+              ev?.({ kind: 'bumped' });
+            }
+          }
+          if (cp.t.state === 'gone') finish('gone');
+        } else {
+          // The doors are open: bags tumble out while it brakes (and a few more once it's stopped).
+          cp.dropWait -= dt;
+          if (cp.dropped < BAGS.count && cp.dropWait <= 0) {
+            cp.bags.push(dropBag(cp.t, cp.dropped++, cp.rand));
+            cp.dropWait = BAGS.every;
+          }
+          stepBags(cp.bags, dt);
+          for (const b of [...cp.bags])
+            if (b.age > 0.35 && Math.hypot(b.x - s.x, b.y - s.y) < BAGS.grab) {
+              cp.bags.splice(cp.bags.indexOf(b), 1);
+              cp.carried++;
+              r.truck.grabbed(b, `+$${BAGS.cash}`, now);
+              ev?.({ kind: 'bag', bags: cp.carried, cash: cp.carried * BAGS.cash });
+            }
+          // Stopped: the guards jump out of the cab, give you a moment, then come for you.
+          if (cp.t.state === 'stopped' && !cp.guards) {
+            const fake = {
+              id: 'truck',
+              kind: 'plaza',
+              x: pose.x,
+              y: pose.y,
+              w: 1,
+              h: 1,
+              // The cab's door, on the driver's side (the left), so they climb out beside the truck.
+              door: {
+                x: pose.x + pose.hx * 0.7 + pose.hy * (TRUCK.width / 2 + 0.55),
+                y: pose.y + pose.hy * 0.7 - pose.hx * (TRUCK.width / 2 + 0.55),
+              },
+            } as Place;
+            cp.guards = spawnCops(fake, cp.home, 1, cp.rand, -800_000);
+            cp.guardsAt = Date.now();
+            cp.until = Date.now() + getawayTime({ x: s.x, y: s.y }, cp.home) + 8000;
+            ev?.({ kind: 'guards' });
+          }
+          if (cp.guards) {
+            const t = Date.now();
+            if (cp.carried > 0 && Math.hypot(s.x - cp.home.x, s.y - cp.home.y) < 1.4) finish('home');
+            else if (t > cp.until) finish('time');
+            else if (t - cp.guardsAt > 1800 && !p.paused && stepCops(cp.guards, s, cp.home, dt))
+              finish('caught');
+            for (const k of cp.guards)
+              truckCops.push({
+                key: `guard${k.id}`,
+                chog: k.chog,
+                name: 'Guard',
+                color: POLICE.bg,
+                ink: POLICE.fg,
+                x: k.x,
+                y: k.y,
+                face: k.face,
+                moving: k.moving,
+                cop: true,
+              } as Person);
+          }
+          if (cp.carried > 0) truckGoal = cp.home;
+        }
+      }
+
+      const door = jailed || riding ? null : (doorAt(s.x, s.y) ?? null);
       if (door !== s.door) {
         s.door = door;
         p.onDoor(door, !!door && s.intent === door.id);
@@ -650,7 +897,7 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         moving: s.moving,
         me: true,
         gang: p.me.gang,
-        bag: mine?.bag,
+        bag: mine?.bag ?? (s.cash?.carried ? s.cash.carried * BAGS.cash : undefined),
         emote: s.emote ?? undefined,
         said: s.said ?? undefined,
       });
@@ -747,9 +994,10 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
           p.onPracticeEnd?.(end);
         }
       }
+      people.push(...truckCops);
       s.drawn = people;
       // Two police cars come round each bag (four at most) and drive off when it's over.
-      const bagged = people.filter((q) => q.bag || (q.me && pr));
+      const bagged = people.filter((q) => q.bag || (q.me && (pr || s.cash?.guards)));
       const want = Math.min(4, bagged.length * 2);
       while (s.patrol.length > want) s.patrol.pop();
       while (s.patrol.length < want) s.patrol.push(spawnPatrol(bagged[s.patrol.length >> 1]!, s.rand));
@@ -761,7 +1009,11 @@ export const CityView = forwardRef<CityHandle, Props>(function CityView(props, r
         const mineNow = !!mine?.bag || !!pr;
         steps.policeLevel(Math.max(mineNow ? 0.15 : 0, 1 - near / 14));
       } else steps.policeOff();
-      const home = mine ? placeOf(mine.home)?.door : pr ? pr.home : (p.guide ?? undefined);
+      const home = mine
+        ? placeOf(mine.home)?.door
+        : pr
+          ? pr.home
+          : (truckGoal ?? (s.cash ? undefined : (p.guide ?? undefined)));
 
       r.places = p.places;
       r.board = p.board;
