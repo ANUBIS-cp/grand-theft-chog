@@ -42,7 +42,9 @@ if [ "${1:-}" = "--config" ]; then "${SSH[@]}" "sudo bash $REL/deploy/install-co
   curl -fsS -o /dev/null http://127.0.0.1:3000/api/health && echo 'healthy'
   for i in \$(seq 1 10); do curl -fs -o /dev/null http://127.0.0.1:3001/health && break; sleep 1; done
   curl -fsS -o /dev/null http://127.0.0.1:3001/health && echo 'live server up'
-  cd /opt/chog-city/releases && ls -1t | tail -n +6 | xargs -r sudo rm -rf
+  # Keep the live version and the one before it (each is ~1.5 GB; 5 of them filled the disk to 86% on 2026-11-24).
+  # Old page files do not need old versions: the build step above copies them into each new version.
+  cd /opt/chog-city/releases && ls -1t | tail -n +3 | xargs -r sudo rm -rf
 "
 MAIN=$("${SSH[@]}" "sudo grep -m1 ^PUBLIC_HOST= /etc/chog-city/app.env | cut -d= -f2 | cut -d, -f1")
 echo "live: https://$MAIN/"
